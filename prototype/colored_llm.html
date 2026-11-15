@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>模型本体：立体雪花块</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02050b;color:#dcecff;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+#app{position:fixed;inset:0}
+#loading{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#02050b;
+  color:#a7d2f3;text-align:center;line-height:1.7;padding:20px}
+
+#panel{position:fixed;top:14px;left:14px;z-index:10;width:362px;
+  max-height:calc(100vh - 28px);overflow-y:auto;
+  padding:15px 16px;border:1px solid rgba(135,200,255,.28);border-radius:14px;
+  background:rgba(5,14,29,.90);box-shadow:0 10px 45px rgba(0,0,0,.4);backdrop-filter:blur(12px)}
+#panel h1{margin:0 0 6px;font-size:19px}
+.subtitle{margin-bottom:12px;color:#95b2d1;font-size:11px;line-height:1.55}
+
+.buttons{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+button{padding:7px 10px;border:1px solid #315c88;border-radius:8px;background:#102642;
+  color:#d9edff;font-family:inherit;font-size:12px;cursor:pointer}
+button.active{border-color:#80d0ff;background:#216493}
+
+#pick{margin-top:11px;padding:8px 10px;border-radius:9px;
+  background:rgba(20,45,75,.75);border:1px solid rgba(120,190,255,.22);
+  color:#cfe9ff;font-size:11.5px;line-height:1.5;min-height:34px}
+
+#legend{margin-top:12px;padding-top:10px;border-top:1px solid rgba(150,205,255,.15)}
+.legend-group{margin-bottom:9px}
+.legend-title{display:block;margin-bottom:4px;color:#7f9fbe;font-size:10px;letter-spacing:.08em}
+.legend-row{display:flex;align-items:center;gap:7px;margin:2px 0}
+.swatch{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+.legend-name{color:#a8c4de;font-size:10.5px}
+
+#caption{position:fixed;z-index:5;bottom:15px;left:50%;width:min(850px,calc(100vw - 30px));
+  transform:translateX(-50%);padding:8px 13px;border-radius:20px;background:rgba(3,9,18,.75);
+  color:#a7c8e7;text-align:center;font-size:11px;line-height:1.5;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div id="loading">正在加载 Three.js……</div>
+<div id="app"></div>
+
+<div id="panel">
+  <h1>立体雪花块</h1>
+  <div class="subtitle">
+    场景内没有任何文字。颜色就是标注系统，图例在此面板内。
+    指向任意块可读取它的身份。
+  </div>
+
+  <div class="buttons">
+    <button data-model="dense" class="active">Dense</button>
+    <button data-model="moe">MoE</button>
+  </div>
+
+  <div class="buttons">
+    <button data-env="none">无包络</button>
+    <button data-env="wire">仅线框</button>
+    <button data-env="face">仅包络面</button>
+    <button data-env="both" class="active">双包络</button>
+  </div>
+
+  <div class="buttons">
+    <button id="reset">重置视角</button>
+  </div>
+
+  <div id="pick">指向：—</div>
+  <div id="legend"></div>
+</div>
+
+<div id="caption">颜色即标注：每种色相对应一种功能块</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+(function () {
+"use strict";
+
+if (!window.THREE) {
+  document.getElementById("loading").innerHTML = "Three.js 加载失败，请检查网络。";
+  return;
+}
+document.getElementById("loading").remove();
+
+var THREE = window.THREE;
+var app = document.getElementById("app");
+var caption = document.getElementById("caption");
+var pickEl = document.getElementById("pick");
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x02050b);
+
+var camera = new THREE.PerspectiveCamera(46, window.innerWidth/window.innerHeight, 0.1, 3000);
+camera.position.set(0, 3, 44);
+
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+app.appendChild(renderer.domElement);
+
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = .075;
+controls.target.set(0, 0, 0);
+
+var root = new THREE.Group();
+scene.add(root);
+
+/* ------------------------------------------------------------
+   颜色表：唯一的标注系统
+   ------------------------------------------------------------ */
+
+var PALETTE = {
+  tokenizer: {h:196, s:.62, l:.46, name:"Tokenizer"},
+  embedding: {h:196, s:.78, l:.56, name:"Embedding"},
+  lmhead:    {h:203, s:.72, l:.50, name:"LM Head"},
+  nexttoken: {h:156, s:.70, l:.50, name:"Next Token"},
+
+  attention: {h:258, s:.78, l:.56, name:"Attention"},
+  q:         {h:272, s:.70, l:.63, name:"Q proj"},
+  k:         {h:264, s:.70, l:.60, name:"K proj"},
+  v:         {h:255, s:.70, l:.57, name:"V proj"},
+  o:         {h:246, s:.70, l:.54, name:"O proj"},
+
+  mlp:       {h:26,  s:.82, l:.55, name:"MLP"},
+  gate:      {h:34,  s:.82, l:.60, name:"gate_proj"},
+  up:        {h:23,  s:.82, l:.57, name:"up_proj"},
+  down:      {h:13,  s:.82, l:.52, name:"down_proj"},
+  expert:    {h:26,  s:.80, l:.50, name:"Expert"},
+
+  norm:      {h:325, s:.76, l:.58, name:"RMSNorm"},
+  router:    {h:340, s:.76, l:.56, name:"Router"}
+};
+
+var LEGEND_GROUPS = [
+  {label:"词与向量", keys:["tokenizer","embedding","lmhead","nexttoken"]},
+  {label:"上下文混合", keys:["attention","q","k","v","o"]},
+  {label:"变换与记忆", keys:["mlp","gate","up","down","expert"]},
+  {label:"接口与控制", keys:["norm","router"]}
+];
+
+function colorOf(key) {
+  var p = PALETTE[key];
+  return new THREE.Color().setHSL(((p.h % 360) + 360) % 360 / 360, p.s, p.l);
+}
+
+function buildLegend() {
+  var holder = document.getElementById("legend");
+  var html = "";
+
+  LEGEND_GROUPS.forEach(function (group) {
+    html += '<div class="legend-group"><span class="legend-title">' + group.label + "</span>";
+
+    group.keys.forEach(function (key) {
+      var css = colorOf(key).getStyle();
+      html += '<div class="legend-row">' +
+        '<span class="swatch" style="background:' + css + '"></span>' +
+        '<span class="legend-name">' + PALETTE[key].name + "</span>" +
+        "</div>";
+    });
+
+    html += "</div>";
+  });
+
+  holder.innerHTML = html;
+}
+
+/* ------------------------------------------------------------
+   状态
+   ------------------------------------------------------------ */
+
+var currentModel = "dense";
+var currentEnv = "both";
+var proxies = [];
+
+/* ------------------------------------------------------------
+   立体雪花块
+   ------------------------------------------------------------ */
+
+function snowVolume(key, x, y, z, sx, sy, sz, env, note) {
+  var group = new THREE.Group();
+  group.position.set(x, y, z);
+  root.add(group);
+
+  var baseColor = colorOf(key);
+  var darkColor = colorOf(key).clone();
+  darkColor.offsetHSL(0, -0.15, -0.34);
+
+  var volume = sx * sy * sz;
+
+  // 底噪：填满体积，消灭真空
+  var noiseCount = Math.floor(volume * 900);
+  if (noiseCount < 260) noiseCount = 260;
+  if (noiseCount > 5200) noiseCount = 5200;
+
+  // 信号：高权重亮点
+  var signalCount = Math.floor(volume * 180);
+  if (signalCount < 45) signalCount = 45;
+  if (signalCount > 1200) signalCount = 1200;
+
+  function makePoints(count, isSignal) {
+    var positions = new Float32Array(count * 3);
+    var colors = new Float32Array(count * 3);
+    var c = new THREE.Color();
+
+    for (var i = 0; i < count; i++) {
+      positions[i*3]     = (Math.random() - .5) * sx * 0.98;
+      positions[i*3 + 1] = (Math.random() - .5) * sy * 0.98;
+      positions[i*3 + 2] = (Math.random() - .5) * sz * 0.98;
+
+      if (isSignal) {
+        c.copy(baseColor);
+        c.offsetHSL((Math.random() - .5) * .045, 0, Math.random() * .26);
+      } else {
+        c.copy(darkColor);
+        c.offsetHSL(0, 0, Math.random() * .045);
+      }
+
+      colors[i*3]     = c.r;
+      colors[i*3 + 1] = c.g;
+      colors[i*3 + 2] = c.b;
+    }
+
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    var mat = new THREE.PointsMaterial({
+      size: isSignal ? Math.max(0.065, Math.min(sx, sy, sz) * 0.05) : 0.045,
+      vertexColors: true,
+      transparent: true,
+      opacity: isSignal ? .92 : .55,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
+    });
+
+    return new THREE.Points(geo, mat);
+  }
+
+  group.add(makePoints(noiseCount, false));
+  group.add(makePoints(signalCount, true));
+
+  // 包络面
+  if (env === "face" || env === "both") {
+    group.add(new THREE.Mesh(
+      new THREE.BoxGeometry(sx, sy, sz),
+      new THREE.MeshBasicMaterial({
+        color: baseColor,
+        transparent: true,
+        opacity: 0.045,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    ));
+  }
+
+  // 包络框
+  if (env === "wire" || env === "both") {
+    group.add(new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(sx, sy, sz)),
+      new THREE.LineBasicMaterial({
+        color: baseColor,
+        transparent: true,
+        opacity: 0.38
+      })
+    ));
+  }
+
+  // 拾取代理：不可见，但可被射线击中
+  var proxy = new THREE.Mesh(
+    new THREE.BoxGeometry(sx, sy, sz),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  proxy.position.set(x, y, z);
+  proxy.userData.name = PALETTE[key].name;
+  proxy.userData.note = note || "";
+  proxy.userData.dims = sizeText(sx, sy, sz);
+  root.add(proxy);
+  proxies.push(proxy);
+
+  return group;
+}
+
+function sizeText(sx, sy, sz) {
+  return sx.toFixed(2) + " × " + sy.toFixed(2) + " × " + sz.toFixed(2);
+}
+
+function disposeObject(obj) {
+  obj.traverse(function (node) {
+    if (node.geometry) node.geometry.dispose();
+    if (node.material) {
+      if (Array.isArray(node.material)) node.material.forEach(function (m) { m.dispose(); });
+      else node.material.dispose();
+    }
+  });
+}
+
+function clearRoot() {
+  while (root.children.length > 0) disposeObject(root.children.pop());
+  proxies = [];
+  pickEl.textContent = "指向：—";
+}
+
+/* ------------------------------------------------------------
+   构建
+   ------------------------------------------------------------ */
+
+function buildEmbedding(env) {
+  snowVolume("tokenizer", -14.6, 0, 0, 3.2, 2.2, 2.2, env, "字符串 → 编号");
+  snowVolume("embedding", -9.0, 0, 0, 5.2, 4.4, 4.4, env, "编号 → 向量");
+}
+
+function buildDenseLayer(y, env) {
+  snowVolume("norm", -6.35, y, 0, .55, 1.5, 1.1, env, "层入口归一化");
+
+  snowVolume("attention", -3.55, y, 0, 4.0, 2.7, 2.7, env, "上下文混合");
+  snowVolume("q", -4.45, y - .52, 1.45, .90, .34, .45, env, "query 投影");
+  snowVolume("k", -2.60, y - .52, 1.45, .90, .34, .45, env, "key 投影");
+  snowVolume("v", -4.45, y + .20, 1.45, .90, .34, .45, env, "value 投影");
+  snowVolume("o", -2.60, y + .20, 1.45, .90, .34, .45, env, "output 投影");
+
+  snowVolume("mlp", 2.15, y, 0, 5.0, 2.7, 2.7, env, "前馈网络");
+  snowVolume("gate", 1.45, y + .42, 1.48, 2.4, .34, .42, env, "gate 分支");
+  snowVolume("up",   1.45, y - .03, 1.48, 2.4, .34, .42, env, "up 分支");
+  snowVolume("down", 1.45, y - .48, 1.48, 2.4, .34, .42, env, "down 分支");
+
+  snowVolume("norm", 6.25, y, 0, .55, 1.5, 1.1, env, "层出口归一化");
+}
+
+function buildMoELayer(y, env) {
+  snowVolume("norm", -6.35, y, 0, .55, 1.5, 1.1, env, "层入口归一化");
+
+  snowVolume("attention", -3.8, y, 0, 3.8, 2.7, 2.7, env, "上下文混合");
+  snowVolume("q", -4.55, y - .42, 1.55, .88, .34, .42, env, "query 投影");
+  snowVolume("k", -3.05, y - .42, 1.55, .88, .34, .42, env, "key 投影");
+  snowVolume("v", -4.55, y + .32, 1.55, .88, .34, .42, env, "value 投影");
+  snowVolume("o", -3.05, y + .32, 1.55, .88, .34, .42, env, "output 投影");
+
+  snowVolume("router", .15, y, 1.1, .95, 2.0, .7, env, "专家选择");
+
+  for (var e = 0; e < 8; e++) {
+    var ex = 1.25 + (e % 4) * 1.05;
+    var ey = y - .78 + Math.floor(e / 4) * 1.55;
+    snowVolume("expert", ex, ey, 1.0, .78, .72, .6, env, "并列专家之一");
+  }
+
+  snowVolume("norm", 6.25, y, 0, .55, 1.5, 1.1, env, "层出口归一化");
+}
+
+function buildOutput(env) {
+  snowVolume("norm", 6.25, 13.4, 0, .60, 1.5, 1.1, env, "全模型最终归一化");
+  snowVolume("lmhead", 10.0, 13.4, 0, 4.7, 3.7, 3.7, env, "向量 → 词概率");
+  snowVolume("nexttoken", 16.2, 13.4, 0, 2.8, 2.0, 2.0, env, "采样结果");
+}
+
+function renderScene() {
+  clearRoot();
+
+  var ys = [-9.0, -5.4, -1.8, 1.8, 5.4, 9.0];
+  buildEmbedding(currentEnv);
+
+  for (var i = 0; i < ys.length; i++) {
+    if (currentModel === "dense") buildDenseLayer(ys[i], currentEnv);
+    else buildMoELayer(ys[i], currentEnv);
+  }
+
+  buildOutput(currentEnv);
+
+  if (currentEnv === "none") {
+    caption.textContent = "无包络：只有点云本身，块与块之间靠黑暗分隔";
+  } else if (currentEnv === "wire") {
+    caption.textContent = "仅线框：只有骨骼边界，内部完全透明";
+  } else if (currentEnv === "face") {
+    caption.textContent = "仅包络面：极淡实体外壳，雪花被封在体内";
+  } else {
+    caption.textContent = "双包络：线框加淡面，边界最明确";
+  }
+}
+
+/* ------------------------------------------------------------
+   悬停拾取
+   ------------------------------------------------------------ */
+
+var raycaster = new THREE.Raycaster();
+var pointer = new THREE.Vector2(-10, -10);
+var pointerActive = false;
+
+function updatePick() {
+  if (!pointerActive || proxies.length === 0) return;
+
+  raycaster.setFromCamera(pointer, camera);
+  var hits = raycaster.intersectObjects(proxies, false);
+
+  if (hits.length > 0) {
+    var ud = hits[0].object.userData;
+    pickEl.textContent = "指向：" + ud.name +
+      (ud.note ? "　·　" + ud.note : "") +
+      (ud.dims ? "　·　" + ud.dims : "");
+  } else {
+    pickEl.textContent = "指向：—";
+  }
+}
+
+renderer.domElement.addEventListener("pointermove", function (event) {
+  pointerActive = true;
+  pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+});
+
+renderer.domElement.addEventListener("pointerleave", function () {
+  pointerActive = false;
+  pickEl.textContent = "指向：—";
+});
+
+/* ------------------------------------------------------------
+   UI
+   ------------------------------------------------------------ */
+
+document.querySelectorAll("[data-model]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    document.querySelectorAll("[data-model]").forEach(function (b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+    currentModel = btn.dataset.model;
+    renderScene();
+  });
+});
+
+document.querySelectorAll("[data-env]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    document.querySelectorAll("[data-env]").forEach(function (b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+    currentEnv = btn.dataset.env;
+    renderScene();
+  });
+});
+
+document.getElementById("reset").addEventListener("click", function () {
+  camera.position.set(0, 3, 44);
+  controls.target.set(0, 0, 0);
+  controls.update();
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  root.rotation.y += .00028;
+  controls.update();
+  updatePick();
+  renderer.render(scene, camera);
+}
+
+window.addEventListener("resize", function () {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+buildLegend();
+renderScene();
+animate();
+})();
+</script>
+</body>
+</html>

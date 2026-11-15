@@ -1,0 +1,1470 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Qwen 真实架构权重雪花图</title>
+
+<style>
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #eee;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
+
+#loading {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #000;
+  color: #ddd;
+  text-align: center;
+  line-height: 1.8;
+}
+
+#panel {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  width: min(390px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 15px 16px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 16px;
+  background: rgba(10,10,12,.88);
+  box-shadow: 0 12px 42px rgba(0,0,0,.5);
+  backdrop-filter: blur(12px);
+}
+
+h1 {
+  margin: 0 0 5px;
+  font-size: 19px;
+}
+
+.subtitle {
+  margin-bottom: 12px;
+  color: #aaa;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.group-title {
+  margin: 12px 0 6px;
+  color: #777;
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button {
+  padding: 7px 10px;
+  border: 1px solid #444;
+  border-radius: 9px;
+  background: #1a1a1d;
+  color: #ccc;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #29292d;
+}
+
+button.active {
+  border-color: #fff;
+  background: #3a3a3e;
+  color: #fff;
+}
+
+#stats {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.12);
+  color: #aaa;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+#caption {
+  position: fixed;
+  z-index: 10;
+  right: 14px;
+  bottom: 14px;
+  max-width: min(660px, calc(100vw - 28px));
+  padding: 9px 14px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 22px;
+  background: rgba(0,0,0,.72);
+  color: #aaa;
+  text-align: center;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="loading">
+  <div>
+    正在加载 Three.js……<br>
+    <small>依次尝试 cdnjs、jsDelivr、unpkg</small>
+  </div>
+</div>
+
+<div id="app"></div>
+
+<section id="panel">
+  <h1>Qwen 模型本体 · 权重雪花图</h1>
+
+  <div class="subtitle">
+    使用官方 config 的真实层数、隐藏维度、注意力周期、头数和视觉塔配置。
+    每个块内部的雪花目前是随机模拟数据；以后可替换为真实权重降采样结果。
+  </div>
+
+  <div class="group-title">模型</div>
+  <div class="buttons">
+    <button data-model="qwen35" class="active">Qwen3.5-9B</button>
+    <button data-model="qwen38">Qwen3.8-27B</button>
+  </div>
+
+  <div class="group-title">包络</div>
+  <div class="buttons">
+    <button data-env="none">无包络</button>
+    <button data-env="face">只留面</button>
+    <button data-env="wire">只留框</button>
+    <button data-env="both" class="active">双包络</button>
+  </div>
+
+  <div class="group-title">显示</div>
+  <div class="buttons">
+    <button id="visionToggle" class="active">视觉塔</button>
+    <button id="labelsToggle" class="active">标签</button>
+    <button id="autoRotate" class="active">缓慢旋转</button>
+    <button id="reset">重置视角</button>
+  </div>
+
+  <div id="stats"></div>
+</section>
+
+<div id="caption">
+  拖动旋转 · 滚轮或双指缩放 · 每四层出现一次 Full Attention
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const sources = [
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+    "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js",
+    "https://unpkg.com/three@0.128.0/build/three.min.js"
+  ];
+
+  function loadScript(index) {
+    if (index >= sources.length) {
+      document.getElementById("loading").innerHTML =
+        "Three.js 三个 CDN 均加载失败。<br>" +
+        "请检查网络，或把 three.min.js 下载到 HTML 同目录。";
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = sources[index];
+
+    script.onload = function () {
+      if (window.THREE) start();
+      else loadScript(index + 1);
+    };
+
+    script.onerror = function () {
+      loadScript(index + 1);
+    };
+
+    document.head.appendChild(script);
+  }
+
+  loadScript(0);
+
+  function start() {
+    document.getElementById("loading").remove();
+
+    const THREE = window.THREE;
+    const app = document.getElementById("app");
+    const stats = document.getElementById("stats");
+    const caption = document.getElementById("caption");
+
+    /* =========================================================
+       真实 config 摘要
+       ========================================================= */
+
+    const MODELS = {
+      qwen35: {
+        name: "Qwen3.5-9B",
+        architecture: "Qwen3_5ForConditionalGeneration",
+
+        text: {
+          layers: 32,
+          hidden: 4096,
+          intermediate: 12288,
+          vocab: 248320,
+
+          fullAttentionInterval: 4,
+          attentionHeads: 16,
+          kvHeads: 4,
+          headDim: 256,
+
+          linearKeyHeads: 16,
+          linearValueHeads: 32,
+          linearKeyHeadDim: 128,
+          linearValueHeadDim: 128,
+          convKernel: 4,
+
+          mtpLayers: 1
+        },
+
+        vision: {
+          layers: 27,
+          hidden: 1152,
+          intermediate: 4304,
+          heads: 16,
+          patchSize: 16,
+          spatialMerge: 2,
+          temporalPatch: 2,
+          outputHidden: 4096
+        }
+      },
+
+      qwen38: {
+        name: "Qwen3.8-27B",
+        architecture: "Qwen3_5ForConditionalGeneration",
+
+        text: {
+          layers: 64,
+          hidden: 5120,
+          intermediate: 17408,
+          vocab: 248320,
+
+          fullAttentionInterval: 4,
+          attentionHeads: 24,
+          kvHeads: 4,
+          headDim: 256,
+
+          linearKeyHeads: 16,
+          linearValueHeads: 48,
+          linearKeyHeadDim: 128,
+          linearValueHeadDim: 128,
+          convKernel: 4,
+
+          mtpLayers: 1
+        },
+
+        vision: {
+          layers: 27,
+          hidden: 1152,
+          intermediate: 4304,
+          heads: 16,
+          patchSize: 16,
+          spatialMerge: 2,
+          temporalPatch: 2,
+          outputHidden: 5120
+        }
+      }
+    };
+
+    let currentModelKey = "qwen35";
+    let envelopeMode = "both";
+    let showVision = true;
+    let showLabels = true;
+    let rotating = true;
+
+    /* =========================================================
+       Three.js 基础
+       ========================================================= */
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(
+      44,
+      innerWidth / innerHeight,
+      0.05,
+      500
+    );
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    app.appendChild(renderer.domElement);
+
+    const root = new THREE.Group();
+    scene.add(root);
+
+    /*
+      自写轨道控制，避免 OrbitControls CDN 兼容问题。
+    */
+
+    let yaw = 0.56;
+    let pitch = 0.18;
+    let radius = 39;
+    let targetY = 0;
+
+    const pointers = new Map();
+    let pinchDistance = 0;
+
+    function updateCamera() {
+      pitch = Math.max(-1.35, Math.min(1.35, pitch));
+      radius = Math.max(10, Math.min(100, radius));
+
+      camera.position.set(
+        Math.sin(yaw) * Math.cos(pitch) * radius,
+        targetY + Math.sin(pitch) * radius,
+        Math.cos(yaw) * Math.cos(pitch) * radius
+      );
+
+      camera.lookAt(0, targetY, 0);
+    }
+
+    renderer.domElement.addEventListener("pointerdown", function (event) {
+      renderer.domElement.setPointerCapture(event.pointerId);
+      pointers.set(event.pointerId, {
+        x: event.clientX,
+        y: event.clientY
+      });
+      pinchDistance = 0;
+    });
+
+    renderer.domElement.addEventListener("pointermove", function (event) {
+      const previous = pointers.get(event.pointerId);
+      if (!previous) return;
+
+      const current = {
+        x: event.clientX,
+        y: event.clientY
+      };
+
+      if (pointers.size === 1) {
+        yaw -= (current.x - previous.x) * 0.007;
+        pitch -= (current.y - previous.y) * 0.007;
+      }
+
+      if (pointers.size === 2) {
+        const entries = Array.from(pointers.entries());
+        const other =
+          entries[0][0] === event.pointerId
+            ? entries[1][1]
+            : entries[0][1];
+
+        const distance = Math.hypot(
+          current.x - other.x,
+          current.y - other.y
+        );
+
+        if (pinchDistance > 0) {
+          radius *= pinchDistance / distance;
+        }
+
+        pinchDistance = distance;
+      }
+
+      pointers.set(event.pointerId, current);
+      updateCamera();
+    });
+
+    function releasePointer(event) {
+      pointers.delete(event.pointerId);
+      pinchDistance = 0;
+    }
+
+    renderer.domElement.addEventListener("pointerup", releasePointer);
+    renderer.domElement.addEventListener("pointercancel", releasePointer);
+
+    renderer.domElement.addEventListener("wheel", function (event) {
+      event.preventDefault();
+      radius *= event.deltaY > 0 ? 1.08 : 0.92;
+      updateCamera();
+    }, { passive: false });
+
+    /* =========================================================
+       内存释放
+       ========================================================= */
+
+    function disposeMaterial(material) {
+      if (!material) return;
+
+      if (Array.isArray(material)) {
+        material.forEach(disposeMaterial);
+        return;
+      }
+
+      if (material.map) material.map.dispose();
+      material.dispose();
+    }
+
+    function clearRoot() {
+      while (root.children.length) {
+        const child = root.children.pop();
+
+        child.traverse(function (node) {
+          if (node.geometry) node.geometry.dispose();
+          if (node.material) disposeMaterial(node.material);
+        });
+      }
+    }
+
+    /* =========================================================
+       可复现随机数
+       ========================================================= */
+
+    function mulberry32(seed) {
+      return function () {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function hashString(text) {
+      let hash = 2166136261;
+
+      for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+
+      return hash >>> 0;
+    }
+
+    /* =========================================================
+       文字标签
+       ========================================================= */
+
+    function addLabel(text, x, y, z, scale, opacity) {
+      if (!showLabels) return null;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1024;
+      canvas.height = 128;
+
+      const context = canvas.getContext("2d");
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.font = "bold 42px system-ui";
+      context.fillStyle = "rgba(220,220,225," +
+        (opacity == null ? 0.82 : opacity) + ")";
+      context.fillText(text, 14, 78);
+
+      const texture = new THREE.CanvasTexture(canvas);
+
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthTest: false
+        })
+      );
+
+      sprite.position.set(x, y, z);
+      sprite.scale.set(scale || 4.2, 0.56, 1);
+      root.add(sprite);
+
+      return sprite;
+    }
+
+    /* =========================================================
+       三维雪花块
+       ========================================================= */
+
+    function snowBlock(options) {
+      const {
+        name,
+        x, y, z,
+        sx, sy, sz,
+        density = 1,
+        brightness = 1,
+        seed = 1
+      } = options;
+
+      const group = new THREE.Group();
+      group.position.set(x, y, z);
+      group.name = name;
+
+      const random = mulberry32(seed);
+
+      /*
+        点数不是物理爆点数。
+        只是用于网页中模拟“降采样后的权重雪花”。
+      */
+
+      const volume = Math.max(0.02, sx * sy * sz);
+
+      let baseCount = Math.floor(
+        20 + volume * 34 * density
+      );
+
+      let signalCount = Math.floor(
+        8 + volume * 7 * density
+      );
+
+      baseCount = Math.min(620, Math.max(12, baseCount));
+      signalCount = Math.min(150, Math.max(5, signalCount));
+
+      function makePoints(count, signal) {
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+
+        for (let i = 0; i < count; i++) {
+          /*
+            基本均匀分布，加少量中心聚集和带状结构。
+            用于模拟降采样权重中底噪、离群值和统计条纹。
+          */
+
+          let px = (random() - 0.5) * sx * 0.94;
+          let py = (random() - 0.5) * sy * 0.94;
+          let pz = (random() - 0.5) * sz * 0.94;
+
+          if (signal && random() < 0.42) {
+            px *= 0.72;
+            py *= 0.72;
+            pz *= 0.72;
+          }
+
+          if (signal && random() < 0.20) {
+            py =
+              (Math.round((py / sy) * 5) / 5) *
+              sy * 0.85;
+          }
+
+          positions[i * 3] = px;
+          positions[i * 3 + 1] = py;
+          positions[i * 3 + 2] = pz;
+
+          let light;
+
+          if (signal) {
+            light =
+              (0.48 + Math.pow(random(), 0.45) * 0.52) *
+              brightness;
+          } else {
+            light =
+              (0.025 + Math.pow(random(), 2.3) * 0.14) *
+              brightness;
+          }
+
+          light = Math.min(1, light);
+
+          colors[i * 3] = light;
+          colors[i * 3 + 1] = light;
+          colors[i * 3 + 2] = light;
+        }
+
+        const geometry = new THREE.BufferGeometry();
+
+        geometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(positions, 3)
+        );
+
+        geometry.setAttribute(
+          "color",
+          new THREE.BufferAttribute(colors, 3)
+        );
+
+        const minimumSide = Math.min(sx, sy, sz);
+
+        const material = new THREE.PointsMaterial({
+          size: signal
+            ? Math.max(0.025, Math.min(0.075, minimumSide * 0.08))
+            : Math.max(0.015, Math.min(0.038, minimumSide * 0.045)),
+          vertexColors: true,
+          transparent: true,
+          opacity: signal ? 0.92 : 0.48,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          sizeAttenuation: true
+        });
+
+        return new THREE.Points(geometry, material);
+      }
+
+      group.add(makePoints(baseCount, false));
+      group.add(makePoints(signalCount, true));
+
+      if (envelopeMode === "face" || envelopeMode === "both") {
+        const face = new THREE.Mesh(
+          new THREE.BoxGeometry(sx, sy, sz),
+          new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.018,
+            depthWrite: false,
+            side: THREE.DoubleSide
+          })
+        );
+
+        group.add(face);
+      }
+
+      if (envelopeMode === "wire" || envelopeMode === "both") {
+        const wire = new THREE.LineSegments(
+          new THREE.EdgesGeometry(
+            new THREE.BoxGeometry(sx, sy, sz)
+          ),
+          new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.19
+          })
+        );
+
+        group.add(wire);
+      }
+
+      root.add(group);
+      return group;
+    }
+
+    /* =========================================================
+       模型总体布局
+       ========================================================= */
+
+    function buildTextTower(model) {
+      const config = model.text;
+
+      /*
+        在视觉上补偿极端体积比例：
+        - Embedding / LM Head 的真实参数量很大，但不让其淹没主体；
+        - Norm 很小，但放大到能看见；
+        - 32 层和 64 层都压入相近的总体高度。
+      */
+
+      const towerHeight = 22;
+      const layerPitch = towerHeight / config.layers;
+      const layerBodyHeight = layerPitch * 0.76;
+
+      const centralWidth =
+        model.name.indexOf("27B") >= 0 ? 7.6 : 6.8;
+
+      const textX = 0;
+      const bottomY = -towerHeight / 2;
+
+      /*
+        Embedding
+      */
+
+      snowBlock({
+        name: "Token Embedding",
+        x: textX - 1.2,
+        y: bottomY - 2.05,
+        z: 0,
+        sx: centralWidth * 0.78,
+        sy: 2.1,
+        sz: 4.8,
+        density: 1.25,
+        brightness: 1.0,
+        seed: hashString(model.name + "_embedding")
+      });
+
+      addLabel(
+        "Token Embedding · " +
+        config.vocab + " × " + config.hidden,
+        textX - 4.1,
+        bottomY - 3.35,
+        2.65,
+        6.0,
+        0.9
+      );
+
+      /*
+        每个文本层
+      */
+
+      for (let layer = 0; layer < config.layers; layer++) {
+        const layerY =
+          bottomY +
+          layerPitch * layer +
+          layerPitch * 0.5;
+
+        const isFull =
+          (layer + 1) % config.fullAttentionInterval === 0;
+
+        /*
+          两条细 Norm 柱。
+          真实参数量很小，视觉上刻意放大。
+        */
+
+        snowBlock({
+          name: "Layer " + layer + " Input RMSNorm",
+          x: textX - centralWidth / 2 - 0.48,
+          y: layerY,
+          z: 0,
+          sx: 0.22,
+          sy: layerBodyHeight,
+          sz: 1.5,
+          density: 0.42,
+          brightness: 0.55,
+          seed: hashString(model.name + "_norm_in_" + layer)
+        });
+
+        snowBlock({
+          name: "Layer " + layer + " Post RMSNorm",
+          x: textX + centralWidth / 2 + 0.48,
+          y: layerY,
+          z: 0,
+          sx: 0.22,
+          sy: layerBodyHeight,
+          sz: 1.5,
+          density: 0.42,
+          brightness: 0.55,
+          seed: hashString(model.name + "_norm_post_" + layer)
+        });
+
+        if (isFull) {
+          buildFullAttentionLayer(
+            model,
+            layer,
+            layerY,
+            layerBodyHeight,
+            centralWidth
+          );
+        } else {
+          buildLinearAttentionLayer(
+            model,
+            layer,
+            layerY,
+            layerBodyHeight,
+            centralWidth
+          );
+        }
+
+        /*
+          MLP 三个功能张量：
+          gate / up / down。
+        */
+
+        const mlpX = textX + centralWidth * 0.20;
+        const mlpWidth = centralWidth * 0.54;
+        const gap = 0.10;
+        const slab = (mlpWidth - gap * 2) / 3;
+
+        ["gate", "up", "down"].forEach(function (part, index) {
+          snowBlock({
+            name: "Layer " + layer + " MLP " + part,
+            x:
+              mlpX -
+              mlpWidth / 2 +
+              slab / 2 +
+              index * (slab + gap),
+            y: layerY,
+            z: 1.85,
+            sx: slab,
+            sy: layerBodyHeight,
+            sz: 1.48,
+            density:
+              0.90 +
+              config.intermediate / 20000,
+            brightness:
+              part === "down" ? 0.90 : 0.82,
+            seed: hashString(
+              model.name + "_mlp_" + part + "_" + layer
+            )
+          });
+        });
+
+        /*
+          只标关键层，避免标签铺满。
+        */
+
+        const labelInterval =
+          config.layers >= 64 ? 8 : 4;
+
+        if (
+          layer === 0 ||
+          isFull ||
+          layer === config.layers - 1
+        ) {
+          if (layer % labelInterval === 0 || isFull) {
+            addLabel(
+              "L" + layer +
+              (isFull ? " · FULL" : " · LINEAR"),
+              textX - centralWidth / 2 - 2.1,
+              layerY,
+              2.45,
+              3.1,
+              isFull ? 0.85 : 0.45
+            );
+          }
+        }
+      }
+
+      /*
+        Final Norm
+      */
+
+      const topY = bottomY + towerHeight;
+
+      snowBlock({
+        name: "Final RMSNorm",
+        x: textX,
+        y: topY + 0.85,
+        z: 0,
+        sx: centralWidth * 0.34,
+        sy: 0.48,
+        sz: 2.0,
+        density: 0.55,
+        brightness: 0.65,
+        seed: hashString(model.name + "_final_norm")
+      });
+
+      /*
+        LM Head
+      */
+
+      snowBlock({
+        name: "LM Head",
+        x: textX + 1.2,
+        y: topY + 2.65,
+        z: 0,
+        sx: centralWidth * 0.78,
+        sy: 2.1,
+        sz: 4.8,
+        density: 1.25,
+        brightness: 1.0,
+        seed: hashString(model.name + "_lm_head")
+      });
+
+      addLabel(
+        "LM Head · " +
+        config.hidden + " → " + config.vocab,
+        textX - 3.5,
+        topY + 4.0,
+        2.65,
+        5.5,
+        0.9
+      );
+
+      /*
+        Multi-Token Prediction 附加层
+      */
+
+      if (config.mtpLayers > 0) {
+        snowBlock({
+          name: "MTP Head",
+          x: textX + centralWidth / 2 + 2.0,
+          y: topY + 2.65,
+          z: 0,
+          sx: 1.6,
+          sy: 1.35,
+          sz: 2.8,
+          density: 0.75,
+          brightness: 0.72,
+          seed: hashString(model.name + "_mtp")
+        });
+
+        addLabel(
+          "MTP × " + config.mtpLayers,
+          textX + centralWidth / 2 + 1.05,
+          topY + 3.75,
+          1.6,
+          3.2,
+          0.62
+        );
+      }
+
+      return {
+        bottomY,
+        topY,
+        centralWidth
+      };
+    }
+
+    function buildFullAttentionLayer(
+      model,
+      layer,
+      y,
+      height,
+      centralWidth
+    ) {
+      const config = model.text;
+
+      const xCenter = -centralWidth * 0.29;
+      const totalWidth = centralWidth * 0.38;
+
+      /*
+        Q 比 K/V 大，因为 Q heads > KV heads。
+        K/V 宽度按照 kvHeads / attentionHeads 表达。
+      */
+
+      const qRatio = 1;
+      const kvRatio =
+        config.kvHeads / config.attentionHeads;
+
+      const ratios = [
+        qRatio,
+        kvRatio,
+        kvRatio,
+        qRatio
+      ];
+
+      const totalRatio =
+        ratios.reduce((a, b) => a + b, 0);
+
+      const gap = 0.075;
+      const available =
+        totalWidth - gap * 3;
+
+      let cursor =
+        xCenter - totalWidth / 2;
+
+      ["Q", "K", "V", "O"].forEach(function (part, index) {
+        const width =
+          available * ratios[index] / totalRatio;
+
+        snowBlock({
+          name: "Layer " + layer + " Full Attention " + part,
+          x: cursor + width / 2,
+          y,
+          z: 0,
+          sx: width,
+          sy: height,
+          sz: 2.75,
+          density:
+            part === "K" || part === "V"
+              ? 0.72
+              : 1.05,
+          brightness:
+            part === "K" || part === "V"
+              ? 0.72
+              : 0.95,
+          seed: hashString(
+            model.name + "_full_" + part + "_" + layer
+          )
+        });
+
+        cursor += width + gap;
+      });
+    }
+
+    function buildLinearAttentionLayer(
+      model,
+      layer,
+      y,
+      height,
+      centralWidth
+    ) {
+      const config = model.text;
+
+      const xCenter = -centralWidth * 0.29;
+      const totalWidth = centralWidth * 0.38;
+
+      /*
+        Linear Attention 依据 config 中公开的结构字段表达：
+        - Key heads
+        - Value heads
+        - Gate
+        - Conv kernel
+
+        这不是完整权重张量枚举，而是结构级功能分区。
+      */
+
+      const keyWeight =
+        config.linearKeyHeads *
+        config.linearKeyHeadDim;
+
+      const valueWeight =
+        config.linearValueHeads *
+        config.linearValueHeadDim;
+
+      const gateWeight = config.hidden;
+      const convWeight =
+        config.convKernel * config.hidden * 0.38;
+
+      const weights = [
+        keyWeight,
+        valueWeight,
+        gateWeight,
+        convWeight
+      ];
+
+      const totalWeight =
+        weights.reduce((a, b) => a + b, 0);
+
+      const gap = 0.065;
+      const available =
+        totalWidth - gap * 3;
+
+      let cursor =
+        xCenter - totalWidth / 2;
+
+      ["K-state", "V-state", "Gate", "Conv"].forEach(
+        function (part, index) {
+          const width =
+            available *
+            weights[index] /
+            totalWeight;
+
+          snowBlock({
+            name:
+              "Layer " +
+              layer +
+              " Linear Attention " +
+              part,
+            x: cursor + width / 2,
+            y,
+            z: 0,
+            sx: width,
+            sy: height,
+            sz:
+              part === "Conv" ? 1.7 : 2.75,
+            density:
+              part === "V-state"
+                ? 1.10
+                : part === "Conv"
+                ? 0.58
+                : 0.82,
+            brightness:
+              part === "V-state"
+                ? 0.90
+                : part === "Conv"
+                ? 0.55
+                : 0.74,
+            seed: hashString(
+              model.name +
+              "_linear_" +
+              part +
+              "_" +
+              layer
+            )
+          });
+
+          cursor += width + gap;
+        }
+      );
+    }
+
+    /* =========================================================
+       视觉塔
+       ========================================================= */
+
+    function buildVisionTower(model, textLayout) {
+      if (!showVision) return;
+
+      const config = model.vision;
+
+      const towerX = textLayout.centralWidth / 2 + 5.4;
+      const towerHeight = 14.2;
+      const bottomY = -towerHeight / 2 - 1.0;
+      const pitch = towerHeight / config.layers;
+      const bodyHeight = pitch * 0.72;
+
+      /*
+        Patch embedding
+      */
+
+      snowBlock({
+        name: "Vision Patch Embedding",
+        x: towerX,
+        y: bottomY - 1.35,
+        z: 0,
+        sx: 3.4,
+        sy: 1.35,
+        sz: 3.2,
+        density: 0.95,
+        brightness: 0.88,
+        seed: hashString(model.name + "_vision_patch")
+      });
+
+      addLabel(
+        "Vision Patch " +
+        config.patchSize +
+        " · T" +
+        config.temporalPatch,
+        towerX - 2.3,
+        bottomY - 2.35,
+        1.85,
+        4.7,
+        0.72
+      );
+
+      /*
+        27 个视觉层。
+        每层用 Attention + MLP 两块表现。
+      */
+
+      for (let layer = 0; layer < config.layers; layer++) {
+        const y =
+          bottomY +
+          pitch * layer +
+          pitch * 0.5;
+
+        snowBlock({
+          name: "Vision Layer " + layer + " Attention",
+          x: towerX - 0.82,
+          y,
+          z: 0,
+          sx: 1.42,
+          sy: bodyHeight,
+          sz: 2.7,
+          density: 0.72,
+          brightness: 0.72,
+          seed: hashString(
+            model.name + "_vision_attn_" + layer
+          )
+        });
+
+        snowBlock({
+          name: "Vision Layer " + layer + " MLP",
+          x: towerX + 0.82,
+          y,
+          z: 0,
+          sx: 1.42,
+          sy: bodyHeight,
+          sz: 2.7,
+          density:
+            0.72 +
+            config.intermediate / 10000,
+          brightness: 0.82,
+          seed: hashString(
+            model.name + "_vision_mlp_" + layer
+          )
+        });
+
+        if (
+          layer === 0 ||
+          layer === config.layers - 1 ||
+          layer % 6 === 5
+        ) {
+          addLabel(
+            "V" + layer,
+            towerX + 2.0,
+            y,
+            1.55,
+            2.1,
+            0.42
+          );
+        }
+      }
+
+      /*
+        Vision → text projector
+      */
+
+      const topY = bottomY + towerHeight;
+
+      snowBlock({
+        name: "Vision Projector",
+        x: towerX,
+        y: topY + 1.15,
+        z: 0,
+        sx: 3.45,
+        sy: 1.35,
+        sz: 3.3,
+        density: 0.95,
+        brightness: 0.92,
+        seed: hashString(model.name + "_vision_projector")
+      });
+
+      addLabel(
+        "Vision → " + config.outputHidden,
+        towerX - 1.9,
+        topY + 2.15,
+        1.85,
+        4.0,
+        0.72
+      );
+    }
+
+    /* =========================================================
+       模型说明牌
+       ========================================================= */
+
+    function addConfigPlate(model, textLayout) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 500;
+
+      const context = canvas.getContext("2d");
+
+      context.fillStyle = "rgba(8,8,10,.94)";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      context.strokeStyle = "rgba(255,255,255,.34)";
+      context.lineWidth = 4;
+      context.strokeRect(
+        4,
+        4,
+        canvas.width - 8,
+        canvas.height - 8
+      );
+
+      context.font = "bold 33px monospace";
+      context.fillStyle = "#e5e5e5";
+
+      const text = model.text;
+      const vision = model.vision;
+
+      const lines = [
+        model.name,
+        "architecture : " + model.architecture,
+        "text layers  : " + text.layers,
+        "hidden / ffn : " +
+          text.hidden + " / " + text.intermediate,
+        "vocabulary   : " + text.vocab,
+        "attention    : 3 linear + 1 full",
+        "full heads   : Q" +
+          text.attentionHeads +
+          " / KV" +
+          text.kvHeads +
+          " / d" +
+          text.headDim,
+        "linear heads : K" +
+          text.linearKeyHeads +
+          " / V" +
+          text.linearValueHeads +
+          " / conv" +
+          text.convKernel,
+        "vision tower : " +
+          vision.layers +
+          " layers / d" +
+          vision.hidden,
+        "render       : simulated downsampled weights"
+      ];
+
+      lines.forEach(function (line, index) {
+        context.fillText(
+          line,
+          26,
+          48 + index * 42
+        );
+      });
+
+      const texture = new THREE.CanvasTexture(canvas);
+
+      const plate = new THREE.Mesh(
+        new THREE.PlaneGeometry(8.8, 3.65),
+        new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity: 0.92,
+          side: THREE.DoubleSide
+        })
+      );
+
+      plate.position.set(
+        -textLayout.centralWidth / 2 - 5.4,
+        textLayout.topY + 1.1,
+        -2.8
+      );
+
+      plate.rotation.x = -0.18;
+      root.add(plate);
+    }
+
+    /* =========================================================
+       构建场景
+       ========================================================= */
+
+    function buildScene() {
+      clearRoot();
+
+      const model = MODELS[currentModelKey];
+      const textLayout = buildTextTower(model);
+
+      buildVisionTower(model, textLayout);
+      addConfigPlate(model, textLayout);
+
+      const fullLayers =
+        model.text.layers /
+        model.text.fullAttentionInterval;
+
+      const linearLayers =
+        model.text.layers - fullLayers;
+
+      stats.innerHTML =
+        "<b>" + model.name + "</b><br>" +
+        "文本层：<b>" + model.text.layers + "</b>，其中 " +
+        linearLayers + " 个 Linear Attention、" +
+        fullLayers + " 个 Full Attention<br>" +
+        "隐藏维度：" + model.text.hidden +
+        "　MLP：" + model.text.intermediate + "<br>" +
+        "词表：" + model.text.vocab +
+        "　视觉塔：" + model.vision.layers + " 层<br>" +
+        "Q/KV heads：" +
+        model.text.attentionHeads +
+        "/" +
+        model.text.kvHeads +
+        "　head dim：" +
+        model.text.headDim + "<br>" +
+        "当前雪花：随机模拟降采样权重，不是实际参数值";
+
+      caption.textContent =
+        model.name +
+        "：3 个 Linear Attention 层后出现 1 个 Full Attention 层；" +
+        "右侧为独立 27 层视觉编码器";
+
+      /*
+        27B 层数更多，需要稍微拉远。
+      */
+
+      radius =
+        currentModelKey === "qwen38"
+          ? 45
+          : 39;
+
+      targetY = 0.8;
+      updateCamera();
+    }
+
+    /* =========================================================
+       UI
+       ========================================================= */
+
+    document
+      .querySelectorAll("[data-model]")
+      .forEach(function (button) {
+        button.addEventListener("click", function () {
+          document
+            .querySelectorAll("[data-model]")
+            .forEach(function (other) {
+              other.classList.remove("active");
+            });
+
+          button.classList.add("active");
+          currentModelKey = button.dataset.model;
+          buildScene();
+        });
+      });
+
+    document
+      .querySelectorAll("[data-env]")
+      .forEach(function (button) {
+        button.addEventListener("click", function () {
+          document
+            .querySelectorAll("[data-env]")
+            .forEach(function (other) {
+              other.classList.remove("active");
+            });
+
+          button.classList.add("active");
+          envelopeMode = button.dataset.env;
+          buildScene();
+        });
+      });
+
+    document
+      .getElementById("visionToggle")
+      .addEventListener("click", function () {
+        showVision = !showVision;
+        this.classList.toggle("active", showVision);
+        buildScene();
+      });
+
+    document
+      .getElementById("labelsToggle")
+      .addEventListener("click", function () {
+        showLabels = !showLabels;
+        this.classList.toggle("active", showLabels);
+        buildScene();
+      });
+
+    document
+      .getElementById("autoRotate")
+      .addEventListener("click", function () {
+        rotating = !rotating;
+        this.classList.toggle("active", rotating);
+      });
+
+    document
+      .getElementById("reset")
+      .addEventListener("click", function () {
+        yaw = 0.56;
+        pitch = 0.18;
+        radius =
+          currentModelKey === "qwen38"
+            ? 45
+            : 39;
+        targetY = 0.8;
+        updateCamera();
+      });
+
+    /* =========================================================
+       动画
+       ========================================================= */
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (rotating && pointers.size === 0) {
+        yaw += 0.0012;
+        updateCamera();
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    addEventListener("resize", function () {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    updateCamera();
+    buildScene();
+    animate();
+  }
+})();
+</script>
+
+</body>
+</html>

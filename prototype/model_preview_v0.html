@@ -1,0 +1,405 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>真实架构拓扑：Qwen / GLM</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#ccc;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+#app{position:fixed;inset:0}
+#loading{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#000;
+  color:#888;text-align:center;line-height:1.7;padding:20px}
+  
+/* 面板缩小并靠边 */
+#panel{position:fixed;top:10px;left:10px;z-index:10;width:235px;padding:10px 12px;
+  border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(8,8,10,.88);
+  box-shadow:0 4px 20px rgba(0,0,0,.5);backdrop-filter:blur(8px);max-height:90vh;overflow-y:auto}
+#panel h1{margin:0 0 4px;font-size:13px;color:#fff;letter-spacing:.02em}
+.subtitle{margin-bottom:8px;color:#777;font-size:9.5px;line-height:1.4}
+
+/* 按钮紧凑 */
+.buttons{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+button{padding:5px 7px;border:1px solid #333;border-radius:5px;background:#111;
+  color:#999;font-family:inherit;font-size:10px;cursor:pointer;transition:all .15s;line-height:1.2}
+button:hover{background:#222;color:#ddd}
+button.active{border-color:#fff;background:#333;color:#fff;font-weight:500}
+
+/* 滑块紧凑 */
+.slider-group {margin-bottom: 6px;}
+.slider-row {display: flex;align-items: center;justify-content: space-between;
+  font-size: 10px;color: #888;margin-bottom: 2px;}
+.slider-row span {font-family: monospace;color: #fff;}
+input[type=range] {-webkit-appearance: none;width: 100%;background: transparent;margin: 4px 0;height: 14px;}
+input[type=range]:focus { outline: none; }
+input[type=range]::-webkit-slider-runnable-track {width: 100%;height: 3px;cursor: pointer;background: #333;border-radius: 2px;}
+input[type=range]::-webkit-slider-thumb {height: 10px;width: 10px;border-radius: 50%;background: #fff;
+  cursor: pointer;-webkit-appearance: none;margin-top: -3.5px;}
+
+#stats{margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08);
+  color:#777;font-size:9.5px;line-height:1.5}
+#stats b{color:#ccc;font-weight:500}
+
+#caption{position:fixed;z-index:5;bottom:12px;left:50%;width:min(700px,calc(100vw - 30px));
+  transform:translateX(-50%);padding:6px 12px;border-radius:14px;background:rgba(0,0,0,.6);
+  color:#888;text-align:center;font-size:10px;line-height:1.4;pointer-events:none;
+  border:1px solid rgba(255,255,255,.05);backdrop-filter:blur(4px)}
+</style>
+</head>
+<body>
+
+<div id="loading">加载 Three.js…</div>
+<div id="app"></div>
+
+<div id="panel">
+  <h1>架构拓扑</h1>
+  <div class="subtitle">真实 config.json 数据，拖动滑块调透明度。</div>
+  
+  <div class="buttons">
+    <button data-model="qwen9" class="active">Qwen3.5-9B</button>
+    <button data-model="qwen27">Qwen3.8-27B</button>
+    <button data-model="qwenflash">Qwen3.8-Flash</button>
+    <button data-model="glm51">GLM-5.1</button>
+  </div>
+  
+  <div class="buttons">
+    <button data-env="none">无包络</button>
+    <button data-env="wire" class="active">线框</button>
+    <button data-env="both">双包络</button>
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-row">
+      <label>线框透明度</label>
+      <span id="val-wire">0.35</span>
+    </div>
+    <input type="range" id="slider-wire" min="0" max="1" step="0.01" value="0.35">
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-row">
+      <label>外壳表面透明度</label>
+      <span id="val-face">0.012</span>
+    </div>
+    <input type="range" id="slider-face" min="0" max="0.1" step="0.002" value="0.012">
+  </div>
+  
+  <div class="buttons" style="margin-top:4px;margin-bottom:0;">
+    <button id="reset" style="width:100%">重置视角</button>
+  </div>
+
+  <div id="stats"></div>
+</div>
+
+<div id="caption"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  if (!window.THREE) {
+    document.getElementById("loading").innerHTML = "Three.js 加载失败，请检查网络。";
+    return;
+  }
+
+  document.getElementById("loading").remove();
+
+  var THREE = window.THREE;
+  var app = document.getElementById("app");
+  var caption = document.getElementById("caption");
+  var stats = document.getElementById("stats");
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 3000);
+  camera.position.set(0, 5, 60);
+
+  var renderer = new THREE.WebGLRenderer({ 
+    antialias: false, 
+    powerPreference: "high-performance" 
+  });
+  
+  var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  app.appendChild(renderer.domElement);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = .08;
+  controls.target.set(0, 0, 0);
+
+  var root = new THREE.Group();
+  scene.add(root);
+
+  var currentModel = "qwen9";
+  var currentEnv = "wire";
+
+  var wireMaterials = [];
+  var faceMaterials = [];
+
+  var CONFIGS = {
+    qwen9: {
+      name: "Qwen3.5-9B", layers: 32, hidden: 4096, intermediate: 12288,
+      vocab: 248320, q_heads: 16, kv_heads: 4, full_interval: 4, vision_layers: 27,
+      moe: false, experts: 0, dense_start: 0, attn_type: "gqa",
+      block_w: 8, block_d: 4, layer_gap: 2.0
+    },
+    qwen27: {
+      name: "Qwen3.8-27B", layers: 64, hidden: 5120, intermediate: 17408,
+      vocab: 248320, q_heads: 24, kv_heads: 4, full_interval: 4, vision_layers: 27,
+      moe: false, experts: 0, dense_start: 0, attn_type: "gqa",
+      block_w: 8, block_d: 4, layer_gap: 1.2
+    },
+    qwenflash: {
+      name: "Qwen3.8-Flash-Next", layers: 48, hidden: 2560, intermediate: 640,
+      vocab: 248320, q_heads: 24, kv_heads: 2, full_interval: 4, vision_layers: 27,
+      moe: true, experts: 512, dense_start: 0, attn_type: "gqa",
+      block_w: 9, block_d: 4, layer_gap: 1.8
+    },
+    glm51: {
+      name: "GLM-5.1 (754B MoE)", layers: 78, hidden: 6144, intermediate: 12288,
+      vocab: 154880, q_heads: 64, kv_heads: 64, full_interval: 1, vision_layers: 0,
+      moe: true, experts: 256, dense_start: 3, attn_type: "mla",
+      block_w: 9, block_d: 4.5, layer_gap: 1.0
+    }
+  };
+
+  function createSnowVolume(sx, sy, sz, count, baseL) {
+    var pos = new Float32Array(count * 3);
+    var col = new Float32Array(count * 3);
+    
+    for (var i = 0; i < count; i++) {
+      var x = (Math.random() - 0.5) * sx * 0.92;
+      var y = (Math.random() - 0.5) * sy * 0.92;
+      var z = (Math.random() - 0.5) * sz * 0.92;
+      
+      if (Math.abs(x) > sx*0.46 || Math.abs(y) > sy*0.46 || Math.abs(z) > sz*0.46) {
+        i--; continue;
+      }
+
+      pos[i*3] = x;
+      pos[i*3+1] = y;
+      pos[i*3+2] = z;
+
+      var v = Math.pow(Math.random(), 10); 
+      var l = baseL + v * (1.0 - baseL);
+      
+      col[i*3] = l;
+      col[i*3+1] = l;
+      col[i*3+2] = l;
+    }
+
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+
+    var mat = new THREE.PointsMaterial({
+      size: 0.8, vertexColors: true, transparent: true, opacity: 0.75,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false
+    });
+
+    return new THREE.Points(geo, mat);
+  }
+
+  function registerWireFrame(group, sx, sy, sz, baseOpacity) {
+    var edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(sx, sy, sz));
+    var wireMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: baseOpacity });
+    wireMaterials.push(wireMat);
+    group.add(new THREE.LineSegments(edgeGeo, wireMat));
+  }
+
+  function registerFaceSurface(group, sx, sy, sz, baseOpacity, isExpert) {
+    var faceMat = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff, transparent: true, opacity: baseOpacity, depthWrite: false, side: THREE.DoubleSide 
+    });
+    faceMat.userData.isExpert = isExpert;
+    faceMaterials.push(faceMat);
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), faceMat));
+  }
+
+  function makeBlock(name, x, y, z, sx, sy, sz, density, envType) {
+    var group = new THREE.Group();
+    group.position.set(x, y, z);
+    var count = Math.floor(Math.min(800, Math.max(40, density * 0.5)));
+    group.add(createSnowVolume(sx, sy, sz, count, 0.02));
+
+    if (envType === "both") {
+      registerFaceSurface(group, sx, sy, sz, parseFloat(document.getElementById("slider-face").value), false);
+    }
+    if (envType === "wire" || envType === "both") {
+      registerWireFrame(group, sx, sy, sz, parseFloat(document.getElementById("slider-wire").value));
+    }
+
+    root.add(group);
+    return group;
+  }
+
+  function makeExpertBlock(name, x, y, z, sx, sy, sz, nExperts, envType) {
+    var group = new THREE.Group();
+    group.position.set(x, y, z);
+
+    var count = Math.floor(Math.min(900, 300 + nExperts));
+    group.add(createSnowVolume(sx, sy, sz, count, 0.03));
+
+    var cols = 8;
+    var linePositions = [];
+    for (var c = 0; c < cols; c++) {
+      var px = -sx/2 + sx * (c + 0.5) / cols;
+      linePositions.push(px, -sy/2, -sz/2,  px, sy/2, -sz/2,  px, -sy/2,  sz/2,  px, sy/2,  sz/2);
+    }
+    var lge = new THREE.BufferGeometry();
+    lge.setAttribute("position", new THREE.Float32BufferAttribute(linePositions, 3));
+    
+    var innerWireMat = new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.12 });
+    wireMaterials.push(innerWireMat);
+    group.add(new THREE.LineSegments(lge, innerWireMat));
+
+    if (envType === "both") {
+      registerFaceSurface(group, sx, sy, sz, parseFloat(document.getElementById("slider-face").value), true);
+    }
+    if (envType === "wire" || envType === "both") {
+      registerWireFrame(group, sx, sy, sz, parseFloat(document.getElementById("slider-wire").value));
+    }
+
+    root.add(group);
+    return group;
+  }
+
+  function buildModel(modelKey, envType) {
+    while (root.children.length > 0) {
+      var child = root.children.pop();
+      child.traverse(function(n){
+        if(n.geometry) n.geometry.dispose();
+        if(n.material) n.material.dispose();
+      });
+    }
+
+    wireMaterials = [];
+    faceMaterials = [];
+
+    var cfg = CONFIGS[modelKey];
+    var layerGap = cfg.layer_gap;
+    var totalHeight = cfg.layers * layerGap;
+    var yStart = totalHeight / 2;
+    var W = cfg.block_w;
+    var D = cfg.block_d;
+
+    makeBlock("embed", 0, yStart + 3, 0, W*1.6, 3, D*1.6, 1200, envType);
+
+    for (var i = 0; i < cfg.layers; i++) {
+      var y = yStart - i * layerGap - layerGap/2;
+      var isDenseStart = (i < cfg.dense_start);
+      var isFull = cfg.attn_type === "mla" ? true : (i % cfg.full_interval === cfg.full_interval - 1);
+
+      if (cfg.attn_type === "mla") {
+        makeBlock("mla_lora", -W*0.75, y, 0, W*0.5, layerGap*0.85, D, 600, envType);
+        makeBlock("mla_core", -W*0.15, y, 0, W*0.25, layerGap*0.85, D*0.8, 500, envType);
+      } else if (isFull) {
+        makeBlock("full_attn", -W*0.7, y, 0, W*0.85, layerGap*0.85, D, 600, envType);
+        var kvRatio = cfg.kv_heads / cfg.q_heads;
+        var kvW = Math.max(0.15, W * 0.85 * kvRatio);
+        makeBlock("gqa_kv", -W*1.2, y, 0, kvW, layerGap*0.85, D, 250, envType);
+      } else {
+        makeBlock("gdn_attn", -W*0.7, y, 0, W*0.42, layerGap*0.7, D*0.8, 400, envType);
+      }
+
+      if (cfg.moe && !isDenseStart) {
+        if (modelKey === "glm51") {
+          makeBlock("shared", W*0.0, y, 0, W*0.18, layerGap*0.85, D, 350, envType);
+        }
+        makeExpertBlock("experts", W*0.95, y, 0, W*1.7, layerGap*0.8, D*0.9, cfg.experts, envType);
+      } else {
+        makeBlock("dense_mlp", W*0.7, y, 0, W*1.15, layerGap*0.85, D, 800, envType);
+      }
+    }
+
+    makeBlock("lm_head", 0, yStart - cfg.layers*layerGap - 3, 0, W*1.6, 3, D*1.6, 1200, envType);
+
+    if (cfg.vision_layers > 0) {
+      var vx = W * 2.4;
+      var vh = modelKey === "qwen27" ? 0.5 : 0.7;
+      for (var v = 0; v < cfg.vision_layers; v++) {
+        makeBlock("vision_" + v, vx, (v - cfg.vision_layers/2) * vh * 1.4, 0, 2.2, vh, 2.2, 120, envType);
+      }
+    }
+
+    var info = "<b>" + cfg.name + "</b> ";
+    if (cfg.moe) info += cfg.experts + "专家 ";
+    info += "| " + cfg.layers + "层 | H" + cfg.hidden;
+    stats.innerHTML = info;
+
+    caption.textContent = cfg.name + " ｜ 拖动滑块实时调整透明度。";
+  }
+
+  function setModel(key) {
+    document.querySelectorAll("[data-model]").forEach(function(b){ b.classList.toggle("active", b.dataset.model === key); });
+    currentModel = key;
+    buildModel(currentModel, currentEnv);
+    resetCamera();
+  }
+
+  function setEnv(type) {
+    document.querySelectorAll("[data-env]").forEach(function(b){ b.classList.toggle("active", b.dataset.env === type); });
+    currentEnv = type;
+    buildModel(currentModel, currentEnv);
+  }
+
+  function resetCamera() {
+    var cfg = CONFIGS[currentModel];
+    var h = cfg.layers * cfg.layer_gap;
+    // 自动偏移相机，给左侧面板留出空间
+    camera.position.set(2, 5, h * 1.15);
+    controls.target.set(2, 0, 0);
+    controls.update();
+  }
+
+  document.querySelectorAll("[data-model]").forEach(function(b){ b.addEventListener("click", function(){ setModel(b.dataset.model); }); });
+  document.querySelectorAll("[data-env]").forEach(function(b){ b.addEventListener("click", function(){ setEnv(b.dataset.env); }); });
+  document.getElementById("reset").addEventListener("click", resetCamera);
+
+  var sliderWire = document.getElementById("slider-wire");
+  var valWire = document.getElementById("val-wire");
+  var sliderFace = document.getElementById("slider-face");
+  var valFace = document.getElementById("val-face");
+
+  sliderWire.addEventListener("input", function() {
+    var v = parseFloat(this.value);
+    valWire.textContent = v.toFixed(2);
+    wireMaterials.forEach(function(mat) { mat.opacity = v; });
+  });
+
+  sliderFace.addEventListener("input", function() {
+    var v = parseFloat(this.value);
+    valFace.textContent = v.toFixed(3);
+    faceMaterials.forEach(function(mat) {
+      mat.opacity = v * (mat.userData.isExpert ? 0.7 : 1);
+    });
+  });
+
+  function animate() {
+    requestAnimationFrame(animate);
+    root.rotation.y += 0.0006;
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  window.addEventListener("resize", function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  buildModel(currentModel, currentEnv);
+  resetCamera();
+  animate();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>视觉语法候选 · 四种摆法</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07080a;color:#ccc;
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+#app{position:fixed;inset:0}
+#loading{position:fixed;inset:0;display:grid;place-items:center;color:#777;font-size:13px;z-index:50}
+
+#panel{position:fixed;top:10px;left:10px;z-index:10;width:250px;padding:10px 12px;
+  border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(8,8,10,.9);
+  box-shadow:0 4px 24px rgba(0,0,0,.6);backdrop-filter:blur(8px);max-height:92vh;overflow-y:auto}
+#panel h1{margin:0 0 3px;font-size:13px;color:#fff;font-weight:600}
+.subtitle{margin-bottom:8px;color:#6e7480;font-size:9.5px;line-height:1.5}
+.buttons{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+button{padding:5px 7px;border:1px solid #2c323c;border-radius:5px;background:#101216;
+  color:#9aa2ae;font-family:inherit;font-size:10px;cursor:pointer;line-height:1.2}
+button:hover{background:#1a1e25;color:#dde3ec}
+button.active{border-color:#cfe0ff;background:#2a3444;color:#fff}
+.slider-row{display:flex;align-items:center;justify-content:space-between;
+  font-size:10px;color:#8a90a0;margin:6px 0 2px}
+.slider-row span{font-family:monospace;color:#fff}
+input[type=range]{-webkit-appearance:none;width:100%;background:transparent;margin:4px 0;height:14px}
+input[type=range]:focus{outline:none}
+input[type=range]::-webkit-slider-runnable-track{width:100%;height:3px;background:#2a3038;border-radius:2px}
+input[type=range]::-webkit-slider-thumb{height:10px;width:10px;border-radius:50%;background:#fff;
+  -webkit-appearance:none;margin-top:-3.5px}
+#notes{margin-top:8px;padding-top:7px;border-top:1px solid rgba(255,255,255,.08);
+  color:#7b8290;font-size:9.5px;line-height:1.65}
+#notes b{color:#c6cdd8;font-weight:600}
+#notes .ok{color:#7fbf8f}
+#notes .warn{color:#d8b366}
+#notes .bad{color:#d0716f}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px;font-size:9px;color:#8a90a0}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:-1px}
+</style>
+</head>
+<body>
+
+<div id="loading">加载 three.js…</div>
+<div id="app"></div>
+
+<div id="panel">
+  <h1>视觉语法候选</h1>
+  <div class="subtitle">同一把尺：毛坯 25×25×80 mm，可雕区 20×20×65，32 层。<br>假数据，只表达「模块怎么摆、主干怎么走」。</div>
+
+  <div class="buttons">
+    <button data-solo="all" class="active">四个并排</button>
+    <button data-solo="A">A 脊柱</button>
+    <button data-solo="B">B 切片</button>
+    <button data-solo="C">C 树</button>
+    <button data-solo="D">D 穿棒切片</button>
+  </div>
+
+  <div class="buttons">
+    <button id="rot" class="active" style="width:100%">自转：开</button>
+  </div>
+
+  <div class="slider-row"><label>缝（把片切薄演示）</label><span id="v-gap">0.30</span></div>
+  <input type="range" id="s-gap" min="0" max="0.30" step="0.01" value="0.30">
+
+  <div class="slider-row"><label>实体不透明度</label><span id="v-op">0.42</span></div>
+  <input type="range" id="s-op" min="0.05" max="0.9" step="0.05" value="0.42">
+
+  <div class="legend">
+    <span><i style="background:#3d78b8"></i>GDN</span>
+    <span><i style="background:#d08a33"></i>全注意力</span>
+    <span><i style="background:#4e7d60"></i>MLP</span>
+    <span><i style="background:#59657a"></i>主干</span>
+    <span><i style="background:#8a6fa0"></i>embed/head</span>
+  </div>
+
+  <div id="notes"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  if (!window.THREE) {
+    document.getElementById("loading").innerHTML = "Three.js 加载失败，请检查网络。";
+    return;
+  }
+  document.getElementById("loading").remove();
+
+  var THREE = window.THREE;
+
+  // ---------------- 常量（mm） ----------------
+  var LAYERS = 32;
+  var FULL_EVERY = 4;
+  var BLANK = { w: 25, h: 80, d: 25 };
+  var CARVE = { w: 20, h: 65, d: 20 };
+  var Y_EMBED = [0.8, 5.6];
+  var Y_L0 = 6.4;
+  var LAYER_H = 1.62;
+  var Y_TOP = Y_L0 + LAYERS * LAYER_H;
+  var Y_HEAD = [Y_TOP + 0.8, Y_TOP + 5.6];
+
+  var COL = {
+    gdn: 0x3d78b8, full: 0xd08a33, mlp: 0x4e7d60,
+    trunk: 0x59657a, end: 0x8a6fa0, blank: 0x2a3038
+  };
+
+  var NOTES = {
+    A: ['<b>A 脊柱</b> — 主干不断，模块挂在主干上。',
+        '<span class="ok">可证伪：成品里若看不到一条不断的脊，这图就不成立。</span>',
+        '<span class="warn">代价：3 mm 主干占截面 12%，会挡视线。</span>'],
+    B: ['<b>B 一摞切片</b> — 32 片独立厚板，无竖向连接。',
+        '<span class="warn">丢掉了：残差被降级成「相邻」。</span>',
+        '好处：每片可独立刻，层节律一眼可数。'],
+    C: ['<b>C 倒长的树</b> — 主干收细，每层向外分叉。',
+        '<span class="bad">问题：分叉=信息不回流，与 14 行里的两个 + 矛盾。</span>',
+        '好看，但画的不是 transformer。'],
+    D: ['<b>D 穿棒切片</b> — B 的厚板 + A 的细棒穿过中缝。',
+        '<span class="ok">层是片，路是棍，两个信息都在。</span>',
+        '棒径 1.2 mm，占截面 5%，遮挡小。']
+  };
+
+  // ---------------- 场景 ----------------
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x07080a);
+
+  var camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 1, 2000);
+  camera.position.set(-30, 78, 210);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  renderer.setPixelRatio(isMobile ? 1 : Math.min(devicePixelRatio || 1, 1.6));
+  renderer.setSize(innerWidth, innerHeight);
+  document.getElementById("app").appendChild(renderer.domElement);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.075;
+  controls.target.set(0, 34, 0);
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.35;
+
+  // 给左侧面板让出空间：把画面整体右移，而不是把模型撞到面板底下
+  function applyViewOffset() {
+    var w = innerWidth, h = innerHeight;
+    var ui = (w > 720) ? 264 : 0;
+    if (ui > 0) {
+      camera.setViewOffset(w, h, -ui / 2, 0, w, h);
+    } else {
+      camera.clearViewOffset();
+    }
+    camera.updateProjectionMatrix();
+  }
+  applyViewOffset();
+
+  var grid = new THREE.GridHelper(320, 32, 0x232a33, 0x1a2028);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+
+  grid.position.y = 0;
+  scene.add(grid);
+
+  // ---------------- 小工具 ----------------
+  var solidMats = [];
+  var edgeMats = [];
+  var slabs = [];          // 切片类语法里的片，用来演示"切薄 -> 缝变大"
+
+  function box(w, h, d, color, x, y, z, opts) {
+    opts = opts || {};
+    var g = new THREE.BoxGeometry(w, h, d);
+    var m = new THREE.MeshBasicMaterial({
+      color: color, transparent: true, opacity: 0.42, depthWrite: false
+    });
+    solidMats.push(m);
+    var mesh = new THREE.Mesh(g, m);
+    mesh.position.set(x, y, z);
+
+    var em = new THREE.LineBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.26, depthWrite: false
+    });
+    edgeMats.push(em);
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), em));
+    return mesh;
+  }
+
+  function taper(rTop, rBottom, h, color, x, y, z) {
+    var g = new THREE.CylinderGeometry(rTop, rBottom, h, 4, 1);
+    var m = new THREE.MeshBasicMaterial({
+      color: color, transparent: true, opacity: 0.42, depthWrite: false
+    });
+    solidMats.push(m);
+    var mesh = new THREE.Mesh(g, m);
+    mesh.rotation.y = Math.PI / 4;
+    mesh.position.set(x, y, z);
+    var em = new THREE.LineBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.26, depthWrite: false
+    });
+    edgeMats.push(em);
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), em));
+    return mesh;
+  }
+
+  function blankOutline(group) {
+    var gb = new THREE.BoxGeometry(BLANK.w, BLANK.h, BLANK.d);
+    var lb = new THREE.LineBasicMaterial({ color: COL.blank, transparent: true, opacity: 0.9 });
+    var b = new THREE.LineSegments(new THREE.EdgesGeometry(gb), lb);
+    b.position.y = BLANK.h / 2;
+    group.add(b);
+
+    var gc = new THREE.BoxGeometry(CARVE.w, CARVE.h, CARVE.d);
+    var lc = new THREE.LineBasicMaterial({ color: 0x1f242c, transparent: true, opacity: 0.9 });
+    var c = new THREE.LineSegments(new THREE.EdgesGeometry(gc), lc);
+    c.position.y = 7.5 + CARVE.h / 2;
+    group.add(c);
+  }
+
+  function ends(group) {
+    group.add(box(9.5, 4.8, 9.5, COL.end, 0, (Y_EMBED[0] + Y_EMBED[1]) / 2, 0));
+    group.add(box(9.5, 4.8, 9.5, COL.end, 0, (Y_HEAD[0] + Y_HEAD[1]) / 2, 0));
+  }
+
+  function layerY(i) { return Y_L0 + (LAYERS - 1 - i) * LAYER_H; }
+  function isFull(i) { return i % FULL_EVERY === FULL_EVERY - 1; }
+
+  // ---------------- A 脊柱 ----------------
+  function buildA(group) {
+    blankOutline(group); ends(group);
+    group.add(box(3.0, Y_HEAD[0] - Y_EMBED[1], 3.0, COL.trunk, 0,
+                  (Y_HEAD[0] + Y_EMBED[1]) / 2, 0));
+    for (var i = 0; i < LAYERS; i++) {
+      var y = layerY(i), full = isFull(i);
+      var wAtt = full ? 6.2 : 3.4;
+      // 翼：X 方向宽、Z 方向薄
+      group.add(box(wAtt, LAYER_H * 0.7, 6.0, full ? COL.full : COL.gdn,
+                    -1.5 - wAtt / 2, y, 0));
+      // 囊：X 方向窄、Z 方向厚
+      group.add(box(5.0, LAYER_H * 0.8, 12.0, COL.mlp, 1.5 + 2.5, y, 0));
+    }
+  }
+
+  // ---------------- B 一摞切片 ----------------
+  function buildB(group) {
+    blankOutline(group); ends(group);
+    for (var i = 0; i < LAYERS; i++) {
+      var y = layerY(i), full = isFull(i);
+      var wAtt = full ? 9.0 : 5.2, gap = 0.5;
+      group.add(box(wAtt, LAYER_H * 0.84, 18, full ? COL.full : COL.gdn,
+                    -9.0 + wAtt / 2, y, 0));
+      group.add(box(9.0 - wAtt - gap, LAYER_H * 0.84, 18, COL.mlp,
+                    -9.0 + wAtt + gap + (9.0 - wAtt - gap) / 2, y, 0));
+      slabs.push(group.children[group.children.length - 1],
+                 group.children[group.children.length - 2]);
+    }
+  }
+
+  // ---------------- C 树 ----------------
+  function buildC(group) {
+    blankOutline(group); ends(group);
+    var h = Y_HEAD[0] - Y_EMBED[1];
+    group.add(taper(0.9, 3.0, h, COL.trunk, 0, (Y_HEAD[0] + Y_EMBED[1]) / 2, 0));
+    for (var i = 0; i < LAYERS; i++) {
+      var y = layerY(i), full = isFull(i);
+      var t = i / (LAYERS - 1);
+      var reach = 7.6 - 3.0 * t;
+      var base = 2.8 - 1.7 * t;
+      for (var s = -1; s <= 1; s += 2) {
+        var len = reach - base * 0.3;
+        var b = box(len, LAYER_H * 0.34, LAYER_H * 0.9,
+                    s > 0 ? COL.mlp : (full ? COL.full : COL.gdn),
+                    s * (base * 0.3 + len / 2), y, 0);
+        b.rotation.z = s * -0.06;
+        group.add(b);
+      }
+    }
+  }
+
+  // ---------------- D 穿棒切片 ----------------
+  function buildD(group) {
+    blankOutline(group); ends(group);
+    var rod = 1.2;
+    group.add(box(rod, Y_HEAD[0] - Y_EMBED[1], rod, COL.trunk, 0,
+                  (Y_HEAD[0] + Y_EMBED[1]) / 2, 0));
+    var inner = 1.6;               // 中缝半宽
+    var halfSpan = 9.0;
+    for (var i = 0; i < LAYERS; i++) {
+      var y = layerY(i), full = isFull(i);
+      var leftW = halfSpan - inner;
+      group.add(box(leftW, LAYER_H * 0.84, 18, full ? COL.full : COL.gdn,
+                    -inner - leftW / 2, y, 0));
+      group.add(box(leftW, LAYER_H * 0.84, 18, COL.mlp,
+                    inner + leftW / 2, y, 0));
+      slabs.push(group.children[group.children.length - 1],
+                 group.children[group.children.length - 2]);
+    }
+  }
+
+  // ---------------- 摆放 ----------------
+  var SPACING = 52;
+  var XS = { A: -1.5 * SPACING, B: -0.5 * SPACING, C: 0.5 * SPACING, D: 1.5 * SPACING };
+  var groups = {};
+
+  function label(text, x, y, z, scale) {
+    var c = document.createElement("canvas");
+    c.width = 512; c.height = 160;
+    var ctx = c.getContext("2d");
+    // 深色底版，避免白字直接叠在模型上糊成一片
+    ctx.fillStyle = "rgba(10,12,16,0.82)";
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(8, 26, 496, 108, 22); } else { ctx.rect(8, 26, 496, 108); }
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.14)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.font = '600 60px "Microsoft YaHei","PingFang SC",sans-serif';
+    ctx.fillStyle = "#e6ecf6";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 256, 80);
+    var tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    var spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthTest: false, opacity: 0.96
+    }));
+    spr.scale.set(scale * 3.6, scale * 1.125, 1);
+    spr.position.set(x, y, z);
+    return spr;
+  }
+
+  var builders = { A: buildA, B: buildB, C: buildC, D: buildD };
+  var titles = { A: "A  脊柱", B: "B  一摞切片", C: "C  倒长的树", D: "D  穿棒切片" };
+
+  Object.keys(builders).forEach(function (k) {
+    var g = new THREE.Group();
+    g.position.x = XS[k];
+    builders[k](g);
+    g.add(label(titles[k], 0, 90, 0, 7.0));
+    scene.add(g);
+    groups[k] = g;
+  });
+
+  // ---------------- 交互 ----------------
+  var soloMode = "all";
+  var notesEl = document.getElementById("notes");
+
+  function refreshSolo() {
+    Object.keys(groups).forEach(function (k) {
+      groups[k].visible = (soloMode === "all" || soloMode === k);
+    });
+    if (soloMode === "all") {
+      XS = { A: -1.5 * SPACING, B: -0.5 * SPACING, C: 0.5 * SPACING, D: 1.5 * SPACING };
+      controls.target.set(0, 34, 0);
+      camera.position.set(-30, 78, 210);
+      controls.autoRotate = true;
+    } else {
+      Object.keys(groups).forEach(function (k) { groups[k].position.x = 0; });
+      controls.target.set(0, 34, 0);
+      camera.position.set(0, 62, 132);
+      controls.autoRotate = true;
+    }
+    Object.keys(groups).forEach(function (k) {
+      if (soloMode === "all") groups[k].position.x = XS[k];
+    });
+    controls.update();
+
+    var txt = soloMode === "all"
+      ? ["<b>四个并排</b> — 拖动旋转，滚轮缩放。", "点上方按钮单独看其中一个，右边会给出它的取舍。"]
+      : NOTES[soloMode];
+    notesEl.innerHTML = txt.join("<br>");
+  }
+
+  document.querySelectorAll("[data-solo]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      soloMode = b.dataset.solo;
+      document.querySelectorAll("[data-solo]").forEach(function (o) {
+        o.classList.toggle("active", o === b);
+      });
+      refreshSolo();
+    });
+  });
+
+  var sOp = document.getElementById("s-op");
+  var vOp = document.getElementById("v-op");
+  sOp.addEventListener("input", function () {
+    var v = parseFloat(this.value);
+    vOp.textContent = v.toFixed(2);
+    solidMats.forEach(function (m) { m.opacity = v; });
+  });
+
+  var rotBtn = document.getElementById("rot");
+  rotBtn.addEventListener("click", function () {
+    controls.autoRotate = !controls.autoRotate;
+    rotBtn.textContent = "自转：" + (controls.autoRotate ? "开" : "关");
+    rotBtn.classList.toggle("active", controls.autoRotate);
+  });
+
+  var sGap = document.getElementById("s-gap");
+  var vGap = document.getElementById("v-gap");
+  sGap.addEventListener("input", function () {
+    var gap = parseFloat(this.value);          // mm
+    vGap.textContent = gap.toFixed(2);
+    var k = (LAYER_H - gap) / (LAYER_H - 0.30);
+    slabs.forEach(function (m) { m.scale.y = k; });
+  });
+
+  refreshSolo();
+
+  addEventListener("resize", function () {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    applyViewOffset();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  (function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  })();
+
+})();
+</script>
+</body>
+</html>
