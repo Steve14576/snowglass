@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>模型架构 · 白色雪花图谱</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#eee;
+font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+body{display:flex}
+aside{width:310px;flex-shrink:0;padding:18px;background:#101012;
+border-right:1px solid #29292d;overflow:auto;z-index:5}
+h1{font-size:18px;margin:0 0 9px}
+p,.muted{font-size:12px;color:#aaa;line-height:1.65}
+label{display:block;font-size:12px;color:#bbb;margin:14px 0 6px}
+select,button{font:inherit;color:#eee;background:#202024;border:1px solid #444;
+border-radius:8px;padding:8px;cursor:pointer}
+select{width:100%;font-size:12px}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+button{font-size:12px}
+button.active{background:#444;border-color:#ccc}
+input[type=range]{width:100%;accent-color:#ddd}
+#stage{position:relative;flex:1;min-width:0;overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#caption{position:absolute;bottom:10px;left:12px;right:12px;text-align:center;
+font-size:11px;color:#aaa;pointer-events:none}
+#status{position:absolute;inset:0;display:grid;place-items:center;background:#000;
+text-align:center;padding:22px;z-index:9}
+#tip{position:absolute;top:12px;left:12px;max-width:330px;background:#111e;
+border:1px solid #444;padding:12px;border-radius:9px;font-size:12px;
+white-space:pre-line;pointer-events:none;display:none}
+#info{font-size:12px;color:#bbb;line-height:1.8;margin-top:14px}
+details{margin-top:14px;font-size:12px;color:#aaa;line-height:1.7}
+summary{cursor:pointer}
+#mobileToggle{display:none}
+@media(max-width:700px){
+body{flex-direction:column}
+aside{width:100%;max-height:35vh;border-right:0;border-bottom:1px solid #333;
+padding:12px}
+aside.collapsed{max-height:54px;overflow:hidden}
+h1{font-size:16px;padding-right:80px}
+#mobileToggle{display:block;position:absolute;right:12px;top:9px}
+#stage{min-height:0}
+}
+</style>
+</head>
+<body>
+<aside id="panel">
+<h1>模型架构 · 立体权重雪花</h1>
+<button id="mobileToggle">收起面板</button>
+<p>完整保留各层，固定块高与黑缝。纯白三维随机雪花模拟权重；
+空间排布与尺度是可视化设计，不是芯片布局。</p>
+
+<label>模型</label>
+<select id="model"></select>
+
+<label>包络</label>
+<div class="row" id="env">
+<button data-env="none">无包络</button>
+<button data-env="face">留面</button>
+<button data-env="wire">留框</button>
+<button data-env="both" class="active">双包络</button>
+</div>
+
+<label>视图</label>
+<div class="row">
+<button id="overview">全景</button>
+<button id="detail">局部放大</button>
+<button id="front">正面</button>
+<button id="rotate">自动旋转</button>
+<button id="labels" class="active">标签</button>
+</div>
+
+<label>层间留白 <span id="gapValue"></span></label>
+<input id="gap" type="range" min="0.45" max="1.8" step="0.05" value="0.8">
+
+<label>浏览第 <span id="layerValue">0</span> 层</label>
+<input id="layer" type="range" min="0" max="31" value="0" step="1">
+
+<label>专家展示</label>
+<select id="experts">
+<option value="group">聚合展示：所有专家均包含，不按激活筛选</option>
+<option value="all">逐专家展示：完整数量，较重，建议局部观察</option>
+</select>
+
+<label>雪花密度</label>
+<input id="density" type="range" min="0.5" max="2" value="1" step="0.25">
+
+<div id="info"></div>
+<details>
+<summary>准确性与图例</summary>
+<p>
+每行由左到右：归一化 → 序列混合模块 → 归一化 → FFN/MoE。
+这是分组约定，残差、门控运算和数据流连线按你的要求不画。<br>
+视觉塔完整展示：Patch/位置参数组 → 全部视觉层 → Merger/Projector。
+不把 Tokenizer 或运行时状态伪装成权重块。<br>
+MoE 的每个格子表示一个专家或连续编号的专家组，不是新增的共享专家库。
+共享专家单列。<br>
+随机雪花不代表真实权重统计；包络不是权重；块体积做视觉补偿，不表示精确参数比例。
+</p>
+</details>
+</aside>
+
+<main id="stage">
+<div id="status">正在加载 Three.js……</div>
+<div id="tip"></div>
+<div id="caption">拖动旋转 · 滚轮/双指缩放 · Shift拖动/右键拖动平移 · 点击块查看名称</div>
+</main>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const urls=[
+"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+"https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js",
+"https://unpkg.com/three@0.128.0/build/three.min.js"
+];
+function load(i){
+ if(i>=urls.length){$("status").textContent="Three.js 加载失败。可将 r128 的 three.min.js 放在 HTML 同目录后刷新。";return}
+ const s=document.createElement("script");
+ s.src=urls[i];s.onload=()=>window.THREE?boot():load(i+1);
+ s.onerror=()=>load(i+1);document.head.appendChild(s);
+}
+const local=document.createElement("script");
+local.src="./three.min.js";
+local.onload=()=>window.THREE?boot():load(0);
+local.onerror=()=>load(0);document.head.appendChild(local);
+
+function boot(){
+const T=window.THREE;
+const models=[
+ {name:"Qwen3.5-9B",kind:"qwen",L:32,d:4096,f:12288,v:248320,
+ vision:27,vd:1152,vf:4304,mtp:1,
+ source:"Qwen/Qwen3.5-9B",
+ note:"24 层 Gated DeltaNet + 8 层 Full Attention；Dense FFN。"},
+ {name:"Qwen3.8-27B",kind:"qwen",L:64,d:5120,f:17408,v:248320,
+ vision:27,vd:1152,vf:4304,mtp:1,
+ source:"Qwen/Qwen3.8-27B",
+ note:"48 层 Gated DeltaNet + 16 层 Full Attention；Dense FFN。"},
+ {name:"Qwen3.8-Flash-Next",kind:"next",L:48,d:2560,f:640,v:248320,
+ vision:27,vd:1152,vf:4304,mtp:1,E:512,shared:1,hc:true,ple:true,
+ source:"Qwen/Qwen3.8-Flash-Next",
+ note:"GDN/QSA 混合；每层 MoE；额外 PLE/N-gram 参数组。PLE 的精确接入索引需结合实现确认。"},
+ {name:"GLM-5.3-Flash",kind:"glm",L:45,d:4096,f:12288,v:154880,
+ vision:24,vd:1024,vf:4096,mtp:1,E:288,shared:1,hc:true,firstDense:3,
+ source:"zai-org/GLM-5.3-Flash",
+ note:"34 层 KDA 线性注意力 + 11 层 DSA；前3层 Dense FFN，之后42层 MoE。"},
+ {name:"GPT-OSS-120B",kind:"oss",L:36,d:2880,f:2880,v:201088,E:128,
+ source:"openai/gpt-oss-120b",
+ note:"Sliding/Full Attention 交替；所有36层均为 MoE。"},
+ {name:"RWKV-7 7.2B",kind:"rwkv",L:32,d:4096,f:16384,v:65536,
+ source:"RWKV/RWKV7-7.2B-20260805",
+ note:"每层 TimeMix + ChannelMix。画的是递归计算的参数组，不是运行时 recurrent state。"},
+ {name:"Mamba2-2.7B",kind:"mamba",L:64,d:2560,f:0,v:50277,tied:true,
+ source:"state-spaces/mamba2-2.7b",
+ note:"纯 Mamba2；无独立 Dense FFN。词表按配置填充到16的倍数；输入/输出共享权重。"},
+ {name:"Jamba-v0.1",kind:"jamba",L:32,d:4096,f:14336,v:65536,E:16,
+ source:"ai21labs/Jamba-v0.1",
+ note:"L4/12/20/28 为 Attention，其余 Mamba；奇数层 MoE、偶数层 Dense FFN。"},
+ {name:"Llama-3.1-8B",kind:"llama",L:32,d:4096,f:14336,v:128256,
+ source:"meta-llama/Llama-3.1-8B",
+ note:"32层 GQA + SwiGLU；经典 Dense Transformer。"},
+ {name:"DeepSeek-V4-Flash-0731",kind:"ds",L:43,d:4096,f:2048,v:129280,
+ E:256,shared:1,hc:true,mtp:1,
+ source:"deepseek-ai/DeepSeek-V4-Flash-0731",
+ note:"按 compress_ratios 区分0/4/128压缩注意力，不再错误地套用Qwen的3:1 GDN周期；DSpark细节聚合显示。"}
+];
+models.forEach((m,i)=>$("model").add(new Option(m.name,i)));
+
+let renderer;
+try{
+ renderer=new T.WebGLRenderer({antialias:true,powerPreference:"high-performance"});
+}catch(e){$("status").textContent="无法创建 WebGL："+e.message;return}
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75));
+$("stage").appendChild(renderer.domElement);
+$("status").remove();
+
+const scene=new T.Scene();
+scene.background=new T.Color(0);
+const camera=new T.PerspectiveCamera(42,1,.05,3000);
+let root=new T.Group();scene.add(root);
+let m=models[0],env="both",labelsOn=true,rotating=false;
+let blocks=[],wires=[],faces=[],textObjects=[],pointObjects=[],hitObjects=[];
+let pitch=2.5,H=0,cx=0,cy=0,distance=100,yaw=.38,elevation=.10;
+let randomSeed=1;
+const raycaster=new T.Raycaster(),mouse=new T.Vector2();
+
+function random(){
+ randomSeed=(Math.imul(1664525,randomSeed)+1013904223)>>>0;
+ return randomSeed/4294967296;
+}
+function seed(s){
+ let a=2166136261;
+ for(let i=0;i<s.length;i++)a=Math.imul(a^s.charCodeAt(i),16777619);
+ randomSeed=a>>>0;
+}
+function label(text,x,y,z,width=5){
+ const c=document.createElement("canvas");c.width=768;c.height=96;
+ const ctx=c.getContext("2d");
+ ctx.font="34px system-ui";ctx.fillStyle="#c4c4c4";
+ ctx.textAlign="center";ctx.fillText(text,384,59);
+ const texture=new T.CanvasTexture(c);
+ const sprite=new T.Sprite(new T.SpriteMaterial({
+ map:texture,transparent:true,depthTest:false,depthWrite:false}));
+ sprite.position.set(x,y,z);sprite.scale.set(width,width/8,1);
+ sprite.visible=labelsOn;root.add(sprite);textObjects.push(sprite);
+}
+function block(name,x,y,z,sx,sy,sz,description=""){
+ const g=new T.Group();g.position.set(x,y,z);root.add(g);
+ blocks.push({name,x,y,z,sx,sy,sz});
+ seed(m.name+"|"+name);
+ const quality=Number($("density").value);
+ // 每块均匀的三维底噪，不把点聚到中心，也不越过边界。
+ const count=Math.round(Math.min(1700,Math.max(90,sx*sy*sz*70))*quality);
+ const pos=new Float32Array(count*3),col=new Float32Array(count*3);
+ for(let i=0;i<count;i++){
+  pos[i*3]=(random()-.5)*sx*.96;
+  pos[i*3+1]=(random()-.5)*sy*.96;
+  pos[i*3+2]=(random()-.5)*sz*.96;
+  const bright=random()<.16;
+  const v=bright?.48+random()*.52:.045+random()*.14;
+  col[i*3]=col[i*3+1]=col[i*3+2]=v;
+ }
+ const geo=new T.BufferGeometry();
+ geo.setAttribute("position",new T.BufferAttribute(pos,3));
+ geo.setAttribute("color",new T.BufferAttribute(col,3));
+ const pm=new T.PointsMaterial({
+ size:.055,vertexColors:true,transparent:true,opacity:.86,
+ depthWrite:false,blending:T.AdditiveBlending});
+ const dots=new T.Points(geo,pm);g.add(dots);pointObjects.push(dots);
+
+ const bg=new T.BoxGeometry(sx,sy,sz);
+ const face=new T.Mesh(bg,new T.MeshBasicMaterial({
+ color:0xffffff,opacity:.022,transparent:true,depthWrite:false,
+ side:T.DoubleSide}));
+ g.add(face);faces.push(face);
+ // 即使面隐藏，仍用其几何体做点击拾取。
+ face.userData={title:name,description};hitObjects.push(face);
+ const edge=new T.LineSegments(new T.EdgesGeometry(bg),new T.LineBasicMaterial({
+ color:0xffffff,transparent:true,opacity:.16,depthWrite:false}));
+ g.add(edge);wires.push(edge);
+ return g;
+}
+function envUpdate(){
+ faces.forEach(o=>o.visible=env==="both"||env==="face");
+ wires.forEach(o=>o.visible=env==="both"||env==="wire");
+}
+function clear(){
+ scene.remove(root);
+ const geometries=new Set(),materials=new Set(),textures=new Set();
+ root.traverse(o=>{
+ if(o.geometry)geometries.add(o.geometry);
+ if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(a=>{
+ materials.add(a);if(a.map)textures.add(a.map);
+ });
+ });
+ textures.forEach(t=>t.dispose());materials.forEach(t=>t.dispose());
+ geometries.forEach(t=>t.dispose());
+ root=new T.Group();scene.add(root);
+ blocks=[];faces=[];wires=[];textObjects=[];pointObjects=[];hitObjects=[];
+ $("tip").style.display="none";
+}
+function mixerType(i){
+ if(m.kind==="qwen")return i%4===3?"Full Attention":"Gated DeltaNet";
+ if(m.kind==="next")return i%4===3?"QSA / Indexer":"Gated DeltaNet";
+ if(m.kind==="glm")return i%4===3?"DSA / MLA":"KDA";
+ if(m.kind==="oss")return i%2?"Full Attention":"Sliding Attention";
+ if(m.kind==="rwkv")return "TimeMix";
+ if(m.kind==="mamba")return "Mamba2";
+ if(m.kind==="jamba")return i%8===4?"GQA":"Mamba";
+ if(m.kind==="ds")return i<2?"Local attention":i%2===0?"CSA ×4":"HCA ×128";
+ return "GQA";
+}
+function isMoe(i){
+ if(!m.E)return false;
+ if(m.kind==="glm")return i>=m.firstDense;
+ if(m.kind==="jamba")return i%2===1;
+ return true;
+}
+function partsFor(type){
+ if(type==="Gated DeltaNet")return ["输入投影","门控 / Conv","输出投影"];
+ if(type==="KDA")return ["QKV 投影","逐通道门控 / Conv","输出投影"];
+ if(type==="TimeMix")return ["R/K/V 投影","衰减 / 更新参数","门控 / 输出"];
+ if(type==="Mamba"||type==="Mamba2")return ["输入投影","Conv + SSM 参数","门控 / 输出"];
+ if(type.includes("DSA"))return ["Q 低秩投影","KV 低秩投影","Indexer / 输出"];
+ if(type.includes("QSA"))return ["QKV 投影","Indexer","输出投影"];
+ if(type.includes("CSA")||type.includes("HCA")||type.includes("Local"))
+ return ["Q/KV 投影","压缩 / 选择参数组","输出投影"];
+ return ["Q / Gate（如有）","K / V","输出投影"];
+}
+// 只在各自保留的区域内细分，不同时填父块与子块，避免重叠、重复计数。
+function mixer(i,y,h){
+ const type=mixerType(i);
+ const names=partsFor(type);
+ const start=-5.7,width=4.6,gap=.18,w=(width-2*gap)/3;
+ names.forEach((name,k)=>block("L"+i+" · "+type+" · "+name,
+ start+w/2+k*(w+gap),y,0,w,h,3.5,
+ "功能级参数分组；不代表运行时激活。\n类型："+type));
+}
+function ffn(i,y,h){
+ if(m.kind==="mamba")return;
+ if(!isMoe(i)){
+ const names=m.kind==="rwkv"?["ChannelMix · Key","ChannelMix · Value"]:
+ ["gate_proj","up_proj","down_proj"];
+ const start=.2,width=5.8,gap=.2,w=(width-gap*(names.length-1))/names.length;
+ names.forEach((n,k)=>block("L"+i+" · "+n,
+ start+w/2+k*(w+gap),y,0,w,h,3.5,
+ m.kind==="rwkv"?"ChannelMix 参数组":"Dense FFN 参数组；内部为随机模拟权重"));
+ return;
+ }
+ block("L"+i+" · Router",.5,y,0,.6,h,2.5,
+ "路由器权重。没有输入，因此不展示选择结果。");
+ const count=$("experts").value==="all"?m.E:Math.min(m.E,16);
+ const cols=Math.min(count,8),rows=Math.ceil(count/cols);
+ const start=1.15,totalWidth=4.85,totalDepth=3.5;
+ const dx=totalWidth/cols,dz=totalDepth/rows;
+ for(let k=0;k<count;k++){
+ const first=Math.floor(k*m.E/count);
+ const last=Math.floor((k+1)*m.E/count)-1;
+ const title=first===last?"Expert "+first:"Experts "+first+"–"+last;
+ block("L"+i+" · "+title,start+dx*(k%cols+.5),y,
+ -totalDepth/2+dz*(Math.floor(k/cols)+.5),
+ dx*.78,h,dz*.76,
+ "此格包括 "+(last-first+1)+" 个路由专家。\n全部专家等同显示；数量来自配置。");
+ }
+ if(m.shared)block("L"+i+" · Shared expert",7.15,y,0,1.3,h,3.5,
+ "独立共享专家参数；不是额外的全局专家库。");
+}
+function build(){
+ clear();
+ m=models[+$("model").value];
+ const h=1.35;
+ pitch=h+Number($("gap").value);
+ H=m.L*pitch;
+ $("gapValue").textContent=Number($("gap").value).toFixed(2);
+ $("layer").max=m.L-1;
+ if(+$("layer").value>=m.L)$("layer").value=m.L-1;
+ $("layerValue").textContent=$("layer").value;
+
+ block("Token Embedding",0,-H/2-3.1,0,8,3.4,4.4,
+ "词表配置："+m.v+"；hidden："+m.d+
+ (m.tied?"\n与 LM Head 共享同一参数。":"\n与 LM Head 不共享。"));
+ label(m.tied?"Embedding = LM Head（共享）":"Token Embedding",0,-H/2-5.4,2.6,8);
+
+ for(let i=0;i<m.L;i++){
+ const y=-H/2+(i+.5)*pitch;
+ block("L"+i+" · Norm 1",-6.55,y,0,.45,h,2.2);
+ mixer(i,y,h);
+ if(m.kind!=="mamba"){
+ block("L"+i+" · Norm 2",-.45,y,0,.45,h,2.2);
+ ffn(i,y,h);
+ }
+ if(m.hc){
+ block("L"+i+" · Hyper-connection 参数",8.8,y,0,.55,h,2.4,
+ "超连接的可训练参数分组；残差通路本身未画线。");
+ }
+ // 标签位于块的左侧空白区，不盖在雪花上。
+ label("L"+i+"  "+mixerType(i),-10,y,0,5.4);
+ }
+ block("Final Norm",0,H/2+1.15,0,3.6,.65,2.2);
+ if(!m.tied){
+ block("LM Head",0,H/2+3.9,0,8,3.4,4.4,
+ "输出投影参数，不是 logits 或 next token。");
+ label("LM Head",0,H/2+6.2,2.6,7);
+ }else{
+ label("Final Norm → 共享输出权重",0,H/2+2.6,1.6,8);
+ }
+ if(m.mtp){
+ block(m.kind==="ds"?"MTP / DSpark 辅助参数组":"MTP 辅助参数组",
+ 7,H/2+3.9,0,3,2.6,3.5,
+ "配置声明的辅助预测模块，按功能聚合；不展开为逐算子图。");
+ label("MTP"+(m.kind==="ds"?" / DSpark":""),7,H/2+5.8,2,4);
+ }
+ if(m.ple){
+ block("PLE / N-gram 参数表",-14,-H/2+5,0,5.5,7.5,4.4,
+ "额外 N-gram embedding / PLE 参数组。\n不是视觉编码器；接入位置在本图中只示意。");
+ label("PLE / N-gram",-14,-H/2+9.4,2.5,6);
+ }
+ if(m.vision)visionTower();
+
+ const types={};
+ for(let i=0;i<m.L;i++){const t=mixerType(i);types[t]=(types[t]||0)+1}
+ const moeCount=Array.from({length:m.L},(_,i)=>isMoe(i)).filter(Boolean).length;
+ $("info").textContent="";
+ const lines=[
+ m.name,
+ `文本主干：${m.L} 层 · hidden ${m.d} · vocab ${m.v}`,
+ Object.entries(types).map(([k,v])=>`${k} × ${v}`).join("；"),
+ m.E?`MoE 层 ${moeCount}；每层 ${m.E} 个路由专家${m.shared?" + 共享专家":""}`:"无 MoE",
+ m.vision?`视觉塔 ${m.vision} 层，顶部 Merger/Projector 已保留`:"无独立视觉塔",
+ m.note,
+ "布局保留全部层；细小参数按功能聚合，随机雪花不对应真实数值。"
+ ];
+ lines.forEach(s=>{const d=document.createElement("div");d.textContent=s;$("info").appendChild(d)});
+ const a=document.createElement("a");
+ a.href="https://huggingface.co/"+m.source+"/blob/main/config.json";
+ a.target="_blank";a.rel="noopener";a.textContent="打开源 config.json";a.style.color="#ddd";
+ $("info").appendChild(a);
+ envUpdate();fit();
+}
+function visionTower(){
+ // 视觉塔独立排布在右侧；固定层高与间距，不与主塔相交。
+ const x=16.5,vpitch=1.55,vh=1.0;
+ const bottom=-H/2+2,top=bottom+m.vision*vpitch;
+ block("Vision · Patch / Position 参数组",x,bottom-2.25,0,5.5,2.5,3.8,
+ "Patch embedding 与位置参数按功能聚合。");
+ label("Vision · Patch / Position",x,bottom-4,2.1,7);
+ for(let i=0;i<m.vision;i++){
+ const y=bottom+(i+.5)*vpitch;
+ block("Vision L"+i+" · Norm 1",x-3.25,y,0,.28,vh,1.7);
+ block("Vision L"+i+" · Attention",x-1.65,y,0,2.5,vh,3.1,
+ "视觉编码器 Attention 参数；hidden "+m.vd);
+ block("Vision L"+i+" · Norm 2",x,y,0,.28,vh,1.7);
+ block("Vision L"+i+" · MLP",x+1.9,y,0,2.9,vh,3.1,
+ "视觉编码器 MLP 参数；intermediate "+m.vf);
+ if(i%4===0||i===m.vision-1)label("V"+i,x+5,y,0,2.5);
+ }
+ // 不论选择哪种包络，头部始终存在。
+ block("Vision · Merger / Projector",x,top+2.25,0,5.8,2.7,4,
+ "视觉特征合并与投影参数组。\n输出到语言模型的 "+m.d+" 维表示。\n没有额外虚构分类头。");
+ label("Merger / Projector → "+m.d,x,top+4.05,2.3,8);
+}
+function bounds(){
+ const b=new T.Box3();
+ blocks.forEach(o=>{
+ b.expandByPoint(new T.Vector3(o.x-o.sx/2,o.y-o.sy/2,o.z-o.sz/2));
+ b.expandByPoint(new T.Vector3(o.x+o.sx/2,o.y+o.sy/2,o.z+o.sz/2));
+ });
+ return b;
+}
+function fit(){
+ const b=bounds(),c=b.getCenter(new T.Vector3()),s=b.getSize(new T.Vector3());
+ cx=c.x;cy=c.y;
+ const angle=camera.fov*Math.PI/360;
+ distance=Math.max((s.y+9)/2/Math.tan(angle),
+ (s.x+13)/2/(Math.tan(angle)*camera.aspect))*1.12+s.z;
+ updateCamera();
+}
+function updateCamera(){
+ elevation=Math.max(-1.25,Math.min(1.25,elevation));
+ distance=Math.max(8,Math.min(1800,distance));
+ camera.position.set(cx+Math.sin(yaw)*Math.cos(elevation)*distance,
+ cy+Math.sin(elevation)*distance,Math.cos(yaw)*Math.cos(elevation)*distance);
+ camera.lookAt(cx,cy,0);
+}
+function focusLayer(){
+ const i=+$("layer").value;
+ $("layerValue").textContent=i;
+ cx=1;cy=-H/2+(i+.5)*pitch;
+ distance=Math.max(28,22/camera.aspect);updateCamera();
+}
+function resize(){
+ const r=$("stage").getBoundingClientRect();
+ renderer.setSize(r.width,r.height);
+ camera.aspect=r.width/Math.max(1,r.height);
+ camera.updateProjectionMatrix();
+}
+const pointers=new Map();let down=null,dragged=false;
+renderer.domElement.addEventListener("contextmenu",e=>e.preventDefault());
+renderer.domElement.addEventListener("pointerdown",e=>{
+ renderer.domElement.setPointerCapture(e.pointerId);
+ pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ down={x:e.clientX,y:e.clientY};dragged=false;
+});
+renderer.domElement.addEventListener("pointermove",e=>{
+ const p=pointers.get(e.pointerId);if(!p)return;
+ const dx=e.clientX-p.x,dy=e.clientY-p.y;
+ if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>5)dragged=true;
+ if(pointers.size===2){
+ const other=Array.from(pointers.entries()).find(([id])=>id!==e.pointerId)[1];
+ const oldD=Math.hypot(p.x-other.x,p.y-other.y);
+ const newD=Math.hypot(e.clientX-other.x,e.clientY-other.y);
+ if(newD>1)distance*=oldD/newD;
+ }else if(e.shiftKey||e.buttons===2){
+ cx-=dx*distance/650;cy+=dy*distance/650;
+ }else{yaw-=dx*.005;elevation+=dy*.005}
+ pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});updateCamera();
+});
+renderer.domElement.addEventListener("pointerup",e=>{
+ pointers.delete(e.pointerId);
+ if(dragged)return;
+ const r=renderer.domElement.getBoundingClientRect();
+ mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+ scene.updateMatrixWorld(true);
+ raycaster.setFromCamera(mouse,camera);
+ const hits=raycaster.intersectObjects(hitObjects,false);
+ if(hits.length){
+ const d=hits[0].object.userData;
+ $("tip").textContent=d.title+"\n"+(d.description||"可训练参数的功能分组；显示随机雪花。");
+ $("tip").style.display="block";
+ }else $("tip").style.display="none";
+});
+renderer.domElement.addEventListener("pointercancel",e=>pointers.delete(e.pointerId));
+renderer.domElement.addEventListener("wheel",e=>{
+ e.preventDefault();distance*=Math.exp(e.deltaY*.001);updateCamera();
+},{passive:false});
+$("model").onchange=build;
+$("gap").onchange=build;
+$("density").onchange=build;
+$("experts").onchange=build;
+$("layer").oninput=focusLayer;
+$("overview").onclick=fit;
+$("detail").onclick=focusLayer;
+$("front").onclick=()=>{yaw=0;elevation=0;fit()};
+$("rotate").onclick=function(){rotating=!rotating;this.classList.toggle("active",rotating)};
+$("labels").onclick=function(){
+ labelsOn=!labelsOn;this.classList.toggle("active",labelsOn);
+ textObjects.forEach(t=>t.visible=labelsOn);
+};
+document.querySelectorAll("[data-env]").forEach(btn=>btn.onclick=()=>{
+ env=btn.dataset.env;
+ document.querySelectorAll("[data-env]").forEach(b=>b.classList.toggle("active",b===btn));
+ // 不重建点云、不重置相机，便于直接比较。
+ envUpdate();
+});
+$("mobileToggle").onclick=function(){
+ $("panel").classList.toggle("collapsed");
+ this.textContent=$("panel").classList.contains("collapsed")?"展开面板":"收起面板";
+ resize();fit();
+};
+window.addEventListener("resize",()=>{resize();fit()});
+resize();build();
+let last=performance.now();
+function animate(now){
+ requestAnimationFrame(animate);
+ const dt=Math.min((now-last)/1000,.05);last=now;
+ if(rotating&&!pointers.size){yaw+=dt*.035;updateCamera()}
+ renderer.render(scene,camera);
+}
+requestAnimationFrame(animate);
+}
+})();
+</script>
+</body>
+</html>

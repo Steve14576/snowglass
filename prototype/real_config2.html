@@ -1,0 +1,1490 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Model Architecture Atlas</title>
+
+<style>
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #eee;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#loading {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  display: grid;
+  place-items: center;
+  background: #000;
+  color: #ccc;
+  text-align: center;
+  line-height: 1.8;
+}
+
+#panel {
+  position: fixed;
+  z-index: 20;
+  top: 12px;
+  left: 12px;
+  width: min(410px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 15px 16px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 16px;
+  background: rgba(10,10,12,.89);
+  box-shadow: 0 12px 45px rgba(0,0,0,.52);
+  backdrop-filter: blur(12px);
+}
+
+h1 {
+  margin: 0 0 5px;
+  font-size: 19px;
+}
+
+.sub {
+  margin-bottom: 12px;
+  color: #aaa;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.title {
+  margin: 12px 0 6px;
+  color: #777;
+  font-size: 10px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button {
+  padding: 7px 10px;
+  border: 1px solid #444;
+  border-radius: 9px;
+  background: #1a1a1d;
+  color: #ccc;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+button.active {
+  border-color: #fff;
+  background: #3b3b40;
+  color: #fff;
+}
+
+#info {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.13);
+  color: #aaa;
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+#caption {
+  position: fixed;
+  z-index: 10;
+  right: 14px;
+  bottom: 14px;
+  max-width: min(750px, calc(100vw - 28px));
+  padding: 9px 14px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 22px;
+  background: rgba(0,0,0,.72);
+  color: #aaa;
+  text-align: center;
+  font-size: 11px;
+  pointer-events: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="loading">
+  正在加载 Three.js……
+</div>
+
+<div id="app"></div>
+
+<section id="panel">
+  <h1>Model Architecture Atlas</h1>
+
+  <div class="sub">
+    每个雪花块模拟一个经过降采样的权重/状态块。
+    块的排列来自模型架构；块内雪花是视觉模拟，不是实际权重。
+  </div>
+
+  <div class="title">模型</div>
+  <div class="buttons" id="modelButtons"></div>
+
+  <div class="title">显示</div>
+  <div class="buttons">
+    <button data-env="none">无包络</button>
+    <button data-env="face">留面</button>
+    <button data-env="wire">留框</button>
+    <button data-env="both" class="active">双包络</button>
+  </div>
+
+  <div class="buttons" style="margin-top:6px">
+    <button id="labels" class="active">标签</button>
+    <button id="vision" class="active">视觉塔</button>
+    <button id="rotate" class="active">自动旋转</button>
+    <button id="reset">重置</button>
+  </div>
+
+  <div id="info"></div>
+</section>
+
+<div id="caption"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  const cdns = [
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+    "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js",
+    "https://unpkg.com/three@0.128.0/build/three.min.js"
+  ];
+
+  function loadThree(index) {
+    if (index >= cdns.length) {
+      document.getElementById("loading").innerHTML =
+        "Three.js 加载失败。<br>请检查网络，或将 three.min.js 下载到本地。";
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = cdns[index];
+
+    script.onload = function () {
+      if (window.THREE) boot();
+      else loadThree(index + 1);
+    };
+
+    script.onerror = function () {
+      loadThree(index + 1);
+    };
+
+    document.head.appendChild(script);
+  }
+
+  loadThree(0);
+
+  function boot() {
+    document.getElementById("loading").remove();
+
+    const THREE = window.THREE;
+    const app = document.getElementById("app");
+    const panelInfo = document.getElementById("info");
+    const caption = document.getElementById("caption");
+    const modelButtons = document.getElementById("modelButtons");
+
+    /*
+      架构数据。
+      layerPattern:
+        linear       线性注意力 / SSM-like mixer
+        full         标准全注意力
+        sliding      滑窗注意力
+        sparse       稀疏注意力
+        recurrent    递归状态块
+        mamba        Mamba2 状态空间块
+    */
+
+    const MODELS = {
+      qwen35: {
+        name: "Qwen3.5-9B",
+        family: "混合 Gated DeltaNet",
+        layers: 32,
+        hidden: 4096,
+        ffn: 12288,
+        vocab: 248320,
+        pattern: ["linear", "linear", "linear", "full"],
+        visionLayers: 27,
+        experts: 0,
+        activeExperts: 0,
+        kind: "qwen",
+        note: "3 Linear Attention + 1 Full Attention"
+      },
+
+      qwen38: {
+        name: "Qwen3.8-27B",
+        family: "混合 Gated DeltaNet",
+        layers: 64,
+        hidden: 5120,
+        ffn: 17408,
+        vocab: 248320,
+        pattern: ["linear", "linear", "linear", "full"],
+        visionLayers: 27,
+        experts: 0,
+        activeExperts: 0,
+        kind: "qwen",
+        note: "3 Linear Attention + 1 Full Attention"
+      },
+
+      qwenFlash: {
+        name: "Qwen3.8-Flash-Next",
+        family: "GDN + Sparse Attention + MoE + N-gram",
+        layers: 48,
+        hidden: 2560,
+        ffn: 640,
+        vocab: 248320,
+        pattern: ["linear", "linear", "linear", "sparse"],
+        visionLayers: 27,
+        experts: 512,
+        activeExperts: 10,
+        sharedExpert: true,
+        ngram: true,
+        kind: "qwenMoe",
+        note: "512 experts / top-10 / shared expert / N-gram"
+      },
+
+      glm53: {
+        name: "GLM-5.3-Flash",
+        family: "Linear Attention + DeepSeek Sparse Attention + MoE",
+        layers: 45,
+        hidden: 4096,
+        ffn: 12288,
+        vocab: 154880,
+        pattern: [
+          "linear", "linear", "linear", "sparse",
+          "linear", "linear", "linear", "sparse"
+        ],
+        visionLayers: 24,
+        experts: 288,
+        activeExperts: 8,
+        firstDense: 3,
+        kind: "glm",
+        note: "前 3 层 Dense，之后 Linear×3 + Sparse×1"
+      },
+
+      deepseekV4: {
+        name: "DeepSeek-V4-Flash-0731",
+        family: "Linear Attention + Sparse Attention + MoE",
+        layers: 43,
+        hidden: 4096,
+        ffn: 2048,
+        vocab: 129280,
+        pattern: [
+          "linear", "linear", "linear", "sparse"
+        ],
+        visionLayers: 0,
+        experts: 256,
+        activeExperts: 6,
+        sharedExpert: true,
+        kind: "deepseek",
+        note: "256 路由专家 / top-6 / 1 shared expert"
+      },
+
+      gptoss: {
+        name: "GPT-OSS-120B",
+        family: "Sliding Attention + Full Attention + MoE",
+        layers: 36,
+        hidden: 2880,
+        ffn: 2880,
+        vocab: 201088,
+        pattern: ["sliding", "full"],
+        visionLayers: 0,
+        experts: 128,
+        activeExperts: 4,
+        kind: "gptoss",
+        note: "128 experts / top-4 / sliding-full 交替"
+      },
+
+      rwkv7: {
+        name: "RWKV-7 7.2B",
+        family: "Attention-free recurrent state model",
+        layers: 32,
+        hidden: 4096,
+        ffn: 16384,
+        vocab: 65536,
+        pattern: ["recurrent"],
+        visionLayers: 0,
+        experts: 0,
+        activeExperts: 0,
+        kind: "rwkv",
+        note: "固定大小 recurrent state；无 Q/K/V Attention"
+      },
+
+      mamba2: {
+        name: "Mamba2-2.7B",
+        family: "纯 State Space Model",
+        layers: 64,
+        hidden: 2560,
+        ffn: 0,
+        vocab: 50277,
+        pattern: ["mamba"],
+        visionLayers: 0,
+        experts: 0,
+        activeExperts: 0,
+        kind: "mamba",
+        note: "64 层 Mamba2；无 Attention、无 MoE"
+      },
+
+      jambav01: {
+        name: "Jamba-v0.1",
+        family: "Mamba + Attention + MoE",
+        layers: 32,
+        hidden: 4096,
+        ffn: 14336,
+        vocab: 65536,
+        pattern: ["mamba", "mamba", "mamba", "mamba", "attention", "mamba", "mamba", "mamba"],
+        visionLayers: 0,
+        experts: 16,
+        activeExperts: 2,
+        kind: "jamba",
+        note: "Attention period 8；Expert period 2"
+      },
+
+      llama31: {
+        name: "Llama-3.1-8B",
+        family: "经典 Dense Transformer + GQA",
+        layers: 32,
+        hidden: 4096,
+        ffn: 14336,
+        vocab: 128256,
+        pattern: ["full"],
+        visionLayers: 0,
+        experts: 0,
+        activeExperts: 0,
+        kind: "llama",
+        note: "32 层全 Attention / 32 Q heads / 8 KV heads"
+      }
+    };
+
+    let currentKey = "qwen35";
+    let envelope = "both";
+    let labels = true;
+    let showVision = true;
+    let autoRotate = true;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(
+      44,
+      innerWidth / innerHeight,
+      0.05,
+      500
+    );
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    app.appendChild(renderer.domElement);
+
+    const root = new THREE.Group();
+    scene.add(root);
+
+    let yaw = 0.55;
+    let pitch = 0.16;
+    let distance = 40;
+    let targetY = 0;
+
+    const pointers = new Map();
+    let pinch = 0;
+
+    function updateCamera() {
+      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+      distance = Math.max(10, Math.min(100, distance));
+
+      camera.position.set(
+        Math.sin(yaw) * Math.cos(pitch) * distance,
+        targetY + Math.sin(pitch) * distance,
+        Math.cos(yaw) * Math.cos(pitch) * distance
+      );
+
+      camera.lookAt(0, targetY, 0);
+    }
+
+    renderer.domElement.addEventListener("pointerdown", function (e) {
+      renderer.domElement.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, {
+        x: e.clientX,
+        y: e.clientY
+      });
+      pinch = 0;
+    });
+
+    renderer.domElement.addEventListener("pointermove", function (e) {
+      const old = pointers.get(e.pointerId);
+      if (!old) return;
+
+      const now = {
+        x: e.clientX,
+        y: e.clientY
+      };
+
+      if (pointers.size === 1) {
+        yaw -= (now.x - old.x) * 0.007;
+        pitch -= (now.y - old.y) * 0.007;
+      } else if (pointers.size === 2) {
+        const arr = Array.from(pointers.entries());
+        const other = arr[0][0] === e.pointerId
+          ? arr[1][1]
+          : arr[0][1];
+
+        const d = Math.hypot(
+          now.x - other.x,
+          now.y - other.y
+        );
+
+        if (pinch > 0) distance *= pinch / d;
+        pinch = d;
+      }
+
+      pointers.set(e.pointerId, now);
+      updateCamera();
+    });
+
+    function pointerUp(e) {
+      pointers.delete(e.pointerId);
+      pinch = 0;
+    }
+
+    renderer.domElement.addEventListener("pointerup", pointerUp);
+    renderer.domElement.addEventListener("pointercancel", pointerUp);
+
+    renderer.domElement.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      distance *= e.deltaY > 0 ? 1.08 : 0.92;
+      updateCamera();
+    }, { passive: false });
+
+    function mulberry32(seed) {
+      return function () {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function hash(text) {
+      let h = 2166136261;
+
+      for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+
+      return h >>> 0;
+    }
+
+    function disposeMaterial(mat) {
+      if (!mat) return;
+
+      if (Array.isArray(mat)) {
+        mat.forEach(disposeMaterial);
+        return;
+      }
+
+      if (mat.map) mat.map.dispose();
+      mat.dispose();
+    }
+
+    function clearRoot() {
+      while (root.children.length) {
+        const child = root.children.pop();
+
+        child.traverse(function (node) {
+          if (node.geometry) node.geometry.dispose();
+          if (node.material) disposeMaterial(node.material);
+        });
+      }
+    }
+
+    function addLabel(text, x, y, z, scale, opacity) {
+      if (!labels) return;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1024;
+      canvas.height = 128;
+
+      const ctx = canvas.getContext("2d");
+      ctx.font = "bold 42px system-ui";
+      ctx.fillStyle =
+        "rgba(225,225,230," +
+        (opacity == null ? .82 : opacity) +
+        ")";
+      ctx.fillText(text, 15, 78);
+
+      const tex = new THREE.CanvasTexture(canvas);
+
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: tex,
+          transparent: true,
+          depthTest: false
+        })
+      );
+
+      sprite.position.set(x, y, z);
+      sprite.scale.set(scale || 4, .56, 1);
+      root.add(sprite);
+    }
+
+    function snowBlock(opts) {
+      const {
+        name,
+        x, y, z,
+        sx, sy, sz,
+        density = 1,
+        brightness = 1,
+        seed = 1
+      } = opts;
+
+      const group = new THREE.Group();
+      group.name = name;
+      group.position.set(x, y, z);
+
+      const rand = mulberry32(seed);
+      const volume = Math.max(.025, sx * sy * sz);
+
+      let floorCount = Math.floor(18 + volume * 32 * density);
+      let signalCount = Math.floor(7 + volume * 7 * density);
+
+      floorCount = Math.min(580, Math.max(10, floorCount));
+      signalCount = Math.min(135, Math.max(4, signalCount));
+
+      function makePoints(count, signal) {
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+
+        for (let i = 0; i < count; i++) {
+          let px = (rand() - .5) * sx * .94;
+          let py = (rand() - .5) * sy * .94;
+          let pz = (rand() - .5) * sz * .94;
+
+          if (signal && rand() < .42) {
+            px *= .70;
+            py *= .70;
+            pz *= .70;
+          }
+
+          if (signal && rand() < .18) {
+            px =
+              Math.round(px / Math.max(.001, sx) * 6) *
+              sx / 6;
+          }
+
+          positions[i * 3] = px;
+          positions[i * 3 + 1] = py;
+          positions[i * 3 + 2] = pz;
+
+          let v = signal
+            ? .46 + Math.pow(rand(), .45) * .54
+            : .025 + Math.pow(rand(), 2.25) * .14;
+
+          v = Math.min(1, v * brightness);
+
+          colors[i * 3] = v;
+          colors[i * 3 + 1] = v;
+          colors[i * 3 + 2] = v;
+        }
+
+        const geo = new THREE.BufferGeometry();
+
+        geo.setAttribute(
+          "position",
+          new THREE.BufferAttribute(positions, 3)
+        );
+
+        geo.setAttribute(
+          "color",
+          new THREE.BufferAttribute(colors, 3)
+        );
+
+        const side = Math.min(sx, sy, sz);
+
+        const mat = new THREE.PointsMaterial({
+          size: signal
+            ? Math.max(.024, Math.min(.075, side * .08))
+            : Math.max(.014, Math.min(.038, side * .045)),
+          vertexColors: true,
+          transparent: true,
+          opacity: signal ? .92 : .46,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          sizeAttenuation: true
+        });
+
+        return new THREE.Points(geo, mat);
+      }
+
+      group.add(makePoints(floorCount, false));
+      group.add(makePoints(signalCount, true));
+
+      if (envelope === "face" || envelope === "both") {
+        group.add(
+          new THREE.Mesh(
+            new THREE.BoxGeometry(sx, sy, sz),
+            new THREE.MeshBasicMaterial({
+              color: 0xffffff,
+              transparent: true,
+              opacity: .018,
+              depthWrite: false,
+              side: THREE.DoubleSide
+            })
+          )
+        );
+      }
+
+      if (envelope === "wire" || envelope === "both") {
+        group.add(
+          new THREE.LineSegments(
+            new THREE.EdgesGeometry(
+              new THREE.BoxGeometry(sx, sy, sz)
+            ),
+            new THREE.LineBasicMaterial({
+              color: 0xffffff,
+              transparent: true,
+              opacity: .18
+            })
+          )
+        );
+      }
+
+      root.add(group);
+    }
+
+    function patternAt(model, layer) {
+      const pattern = model.pattern;
+
+      if (
+        model.firstDense &&
+        layer < model.firstDense
+      ) {
+        return "dense";
+      }
+
+      return pattern[layer % pattern.length];
+    }
+
+    function patternName(type) {
+      return {
+        dense: "DENSE",
+        full: "FULL",
+        linear: "LINEAR",
+        sparse: "SPARSE",
+        sliding: "SLIDING",
+        recurrent: "RECURRENT",
+        mamba: "MAMBA",
+        attention: "ATTN"
+      }[type] || type.toUpperCase();
+    }
+
+    function buildEmbedding(model, x, y) {
+      snowBlock({
+        name: "Embedding",
+        x,
+        y,
+        z: 0,
+        sx: 5.5,
+        sy: 1.9,
+        sz: 4.5,
+        density: 1.3,
+        brightness: 1,
+        seed: hash(model.name + "_embedding")
+      });
+
+      addLabel(
+        "Embedding · vocab " + model.vocab,
+        x - 3.4,
+        y - 1.35,
+        2.5,
+        5.0,
+        .85
+      );
+    }
+
+    function buildDenseCore(model, layer, y, x) {
+      const attnW = 2.8;
+      const mlpW = 3.55;
+
+      snowBlock({
+        name: "Dense Attention",
+        x: x - .85,
+        y,
+        z: 0,
+        sx: attnW,
+        sy: 1.0,
+        sz: 2.9,
+        density: .82,
+        brightness: .82,
+        seed: hash(model.name + "_dense_attn_" + layer)
+      });
+
+      snowBlock({
+        name: "Dense MLP",
+        x: x + 1.65,
+        y,
+        z: 0,
+        sx: mlpW,
+        sy: 1.0,
+        sz: 2.9,
+        density: 1.05,
+        brightness: .92,
+        seed: hash(model.name + "_dense_mlp_" + layer)
+      });
+
+      addLabel(
+        "Dense",
+        x - 2.25,
+        y,
+        2.55,
+        2.6,
+        .52
+      );
+    }
+
+    function buildQwenLayer(model, layer, y, x, type) {
+      if (type === "full") {
+        const parts = ["Q", "K", "V", "O"];
+
+        parts.forEach(function (part, i) {
+          const small =
+            part === "K" || part === "V";
+
+          snowBlock({
+            name: "Full " + part,
+            x: x - 2.1 + i * .73,
+            y,
+            z: 1.15,
+            sx: small ? .38 : .63,
+            sy: .92,
+            sz: 2.0,
+            density: small ? .60 : .92,
+            brightness: small ? .68 : .90,
+            seed: hash(model.name + "_full_" + part + "_" + layer)
+          });
+        });
+
+        snowBlock({
+          name: "Full MLP",
+          x: x + 1.55,
+          y,
+          z: 0,
+          sx: 3.4,
+          sy: .92,
+          sz: 2.75,
+          density: 1.04,
+          brightness: .92,
+          seed: hash(model.name + "_full_mlp_" + layer)
+        });
+
+        addLabel("FULL", x - 2.4, y, 2.5, 2.4, .75);
+      } else {
+        snowBlock({
+          name: "Linear State",
+          x: x - .75,
+          y,
+          z: 0,
+          sx: 2.9,
+          sy: .92,
+          sz: 2.65,
+          density: .90,
+          brightness: .80,
+          seed: hash(model.name + "_linear_" + layer)
+        });
+
+        snowBlock({
+          name: "Linear Gate Conv",
+          x: x + 1.65,
+          y,
+          z: 1.35,
+          sx: 1.35,
+          sy: .72,
+          sz: 1.0,
+          density: .58,
+          brightness: .58,
+          seed: hash(model.name + "_gate_" + layer)
+        });
+
+        snowBlock({
+          name: "Linear MLP",
+          x: x + 1.55,
+          y,
+          z: -1.0,
+          sx: 3.35,
+          sy: .82,
+          sz: 1.15,
+          density: 1,
+          brightness: .88,
+          seed: hash(model.name + "_linear_mlp_" + layer)
+        });
+
+        addLabel("LINEAR", x - 2.65, y, 2.5, 2.5, .48);
+      }
+    }
+
+    function buildQwenMoeLayer(model, layer, y, x, type) {
+      if (type === "sparse") {
+        snowBlock({
+          name: "Sparse Attention",
+          x: x - 1.25,
+          y,
+          z: 0,
+          sx: 2.25,
+          sy: .95,
+          sz: 2.7,
+          density: .78,
+          brightness: .78,
+          seed: hash(model.name + "_sparse_" + layer)
+        });
+
+        snowBlock({
+          name: "Router",
+          x: x + .35,
+          y,
+          z: 1.45,
+          sx: .55,
+          sy: .74,
+          sz: 1.0,
+          density: .55,
+          brightness: .72,
+          seed: hash(model.name + "_router_" + layer)
+        });
+
+        const expertsToShow =
+          model.experts > 300 ? 8 : 6;
+
+        for (let i = 0; i < expertsToShow; i++) {
+          const ex = x + .8 + (i % 4) * .76;
+          const ey = y - .38 + Math.floor(i / 4) * .76;
+
+          snowBlock({
+            name: "Expert " + i,
+            x: ex,
+            y: ey,
+            z: 1.25,
+            sx: .52,
+            sy: .42,
+            sz: .48,
+            density: .58,
+            brightness: .76,
+            seed: hash(model.name + "_expert_" + layer + "_" + i)
+          });
+        }
+
+        if (model.sharedExpert) {
+          snowBlock({
+            name: "Shared Expert",
+            x: x + 2.15,
+            y,
+            z: -1.1,
+            sx: 1.4,
+            sy: .65,
+            sz: .9,
+            density: .78,
+            brightness: .82,
+            seed: hash(model.name + "_shared_" + layer)
+          });
+        }
+
+        addLabel(
+          "SPARSE · " +
+          model.experts +
+          "E / top-" +
+          model.activeExperts,
+          x - 2.65,
+          y,
+          2.5,
+          3.0,
+          .72
+        );
+      } else {
+        buildQwenLayer(model, layer, y, x, type);
+      }
+
+      if (model.ngram && layer === 2) {
+        snowBlock({
+          name: "N-gram / PLE",
+          x: x + 3.35,
+          y,
+          z: 0,
+          sx: 1.05,
+          sy: .7,
+          sz: 1.9,
+          density: .78,
+          brightness: .88,
+          seed: hash(model.name + "_ngram")
+        });
+
+        addLabel(
+          "N-GRAM",
+          x + 2.8,
+          y - .9,
+          1.7,
+          2.8,
+          .65
+        );
+      }
+    }
+
+    function buildGPTLayer(model, layer, y, x, type) {
+      if (type === "sliding") {
+        snowBlock({
+          name: "Sliding Attention",
+          x: x - 1.25,
+          y,
+          z: 0,
+          sx: 2.5,
+          sy: .95,
+          sz: 2.7,
+          density: .8,
+          brightness: .75,
+          seed: hash(model.name + "_sliding_" + layer)
+        });
+      } else {
+        snowBlock({
+          name: "Full Attention",
+          x: x - 1.25,
+          y,
+          z: 0,
+          sx: 2.5,
+          sy: .95,
+          sz: 2.7,
+          density: .92,
+          brightness: .9,
+          seed: hash(model.name + "_full_" + layer)
+        });
+      }
+
+      snowBlock({
+        name: "Router",
+        x: x + .18,
+        y,
+        z: 1.38,
+        sx: .48,
+        sy: .7,
+        sz: .8,
+        density: .58,
+        brightness: .65,
+        seed: hash(model.name + "_router_" + layer)
+      });
+
+      for (let i = 0; i < 6; i++) {
+        snowBlock({
+          name: "Expert " + i,
+          x: x + .72 + (i % 3) * .72,
+          y: y - .34 + Math.floor(i / 3) * .68,
+          z: 1.25,
+          sx: .47,
+          sy: .38,
+          sz: .43,
+          density: .57,
+          brightness: .74,
+          seed: hash(model.name + "_expert_" + layer + "_" + i)
+        });
+      }
+
+      addLabel(
+        type === "sliding" ? "SLIDING" : "FULL",
+        x - 2.5,
+        y,
+        2.5,
+        2.5,
+        .65
+      );
+    }
+
+    function buildRWKVLayer(model, layer, y, x) {
+      snowBlock({
+        name: "RWKV State",
+        x: x - .85,
+        y,
+        z: 0,
+        sx: 3.9,
+        sy: .94,
+        sz: 2.8,
+        density: 1.0,
+        brightness: .86,
+        seed: hash(model.name + "_state_" + layer)
+      });
+
+      snowBlock({
+        name: "RWKV Low Rank A",
+        x: x + 1.72,
+        y,
+        z: 1.2,
+        sx: .85,
+        sy: .72,
+        sz: 1.0,
+        density: .65,
+        brightness: .68,
+        seed: hash(model.name + "_a_" + layer)
+      });
+
+      snowBlock({
+        name: "RWKV Decay",
+        x: x + 1.72,
+        y,
+        z: -1.15,
+        sx: .85,
+        sy: .72,
+        sz: 1.0,
+        density: .65,
+        brightness: .68,
+        seed: hash(model.name + "_decay_" + layer)
+      });
+
+      addLabel(
+        "RECURRENT",
+        x - 2.4,
+        y,
+        2.5,
+        2.9,
+        .70
+      );
+    }
+
+    function buildMambaLayer(model, layer, y, x) {
+      snowBlock({
+        name: "Mamba SSM State",
+        x,
+        y,
+        z: 0,
+        sx: 4.6,
+        sy: .95,
+        sz: 2.9,
+        density: 1.0,
+        brightness: .86,
+        seed: hash(model.name + "_ssm_" + layer)
+      });
+
+      snowBlock({
+        name: "Mamba Conv",
+        x: x + 1.9,
+        y,
+        z: 1.25,
+        sx: .82,
+        sy: .72,
+        sz: .95,
+        density: .62,
+        brightness: .62,
+        seed: hash(model.name + "_conv_" + layer)
+      });
+
+      snowBlock({
+        name: "Mamba Delta",
+        x: x + 1.9,
+        y,
+        z: -1.18,
+        sx: .82,
+        sy: .72,
+        sz: .95,
+        density: .62,
+        brightness: .62,
+        seed: hash(model.name + "_delta_" + layer)
+      });
+
+      addLabel(
+        "MAMBA2",
+        x - 2.2,
+        y,
+        2.5,
+        2.5,
+        .70
+      );
+    }
+
+    function buildJambaLayer(model, layer, y, x, type) {
+      if (type === "attention") {
+        buildGPTLayer(model, layer, y, x, "full");
+      } else {
+        buildMambaLayer(model, layer, y, x);
+      }
+
+      if (layer % 2 === 1) {
+        for (let i = 0; i < 4; i++) {
+          snowBlock({
+            name: "Jamba Expert " + i,
+            x: x + .55 + (i % 2) * .72,
+            y: y + .22 + Math.floor(i / 2) * .52,
+            z: 1.35,
+            sx: .44,
+            sy: .32,
+            sz: .40,
+            density: .5,
+            brightness: .7,
+            seed: hash(model.name + "_expert_" + layer + "_" + i)
+          });
+        }
+      }
+    }
+
+    function buildLlamaLayer(model, layer, y, x) {
+      snowBlock({
+        name: "QKV/O Attention",
+        x: x - .95,
+        y,
+        z: 0,
+        sx: 2.55,
+        sy: .94,
+        sz: 2.75,
+        density: .9,
+        brightness: .86,
+        seed: hash(model.name + "_attn_" + layer)
+      });
+
+      snowBlock({
+        name: "SwiGLU MLP",
+        x: x + 1.55,
+        y,
+        z: 0,
+        sx: 3.55,
+        sy: .94,
+        sz: 2.75,
+        density: 1.1,
+        brightness: .93,
+        seed: hash(model.name + "_mlp_" + layer)
+      });
+
+      addLabel(
+        "GQA",
+        x - 2.65,
+        y,
+        2.5,
+        2.1,
+        .65
+      );
+    }
+
+    function buildVision(model, x) {
+      if (!showVision || !model.visionLayers) return;
+
+      const height = 13;
+      const pitch = height / model.visionLayers;
+      const bottom = -height / 2 - 1;
+
+      snowBlock({
+        name: "Vision Patch",
+        x,
+        y: bottom - 1.0,
+        z: 0,
+        sx: 3.3,
+        sy: 1.2,
+        sz: 3.0,
+        density: .85,
+        brightness: .82,
+        seed: hash(model.name + "_vision_patch")
+      });
+
+      for (let i = 0; i < model.visionLayers; i++) {
+        const y = bottom + pitch * i + pitch / 2;
+
+        snowBlock({
+          name: "Vision Attention " + i,
+          x: x - .72,
+          y,
+          z: 0,
+          sx: 1.25,
+          sy: pitch * .72,
+          sz: 2.5,
+          density: .67,
+          brightness: .68,
+          seed: hash(model.name + "_vision_a_" + i)
+        });
+
+        snowBlock({
+          name: "Vision MLP " + i,
+          x: x + .72,
+          y,
+          z: 0,
+          sx: 1.25,
+          sy: pitch * .72,
+          sz: 2.5,
+          density: .75,
+          brightness: .78,
+          seed: hash(model.name + "_vision_m_" + i)
+        });
+      }
+
+      addLabel(
+        "VISION · " + model.visionLayers + " layers",
+        x - 2.15,
+        bottom - 2.0,
+        1.6,
+        4.2,
+        .72
+      );
+    }
+
+    function buildModel() {
+      clearRoot();
+
+      const model = MODELS[currentKey];
+
+      const height = 22;
+      const pitch = height / model.layers;
+      const bottom = -height / 2;
+      const mainX = -2.0;
+
+      buildEmbedding(model, mainX, bottom - 1.9);
+
+      for (let layer = 0; layer < model.layers; layer++) {
+        const y = bottom + pitch * layer + pitch / 2;
+        const type = patternAt(model, layer);
+
+        if (model.kind === "qwen") {
+          buildQwenLayer(model, layer, y, mainX, type);
+        } else if (model.kind === "qwenMoe") {
+          buildQwenMoeLayer(model, layer, y, mainX, type);
+        } else if (model.kind === "glm") {
+          if (type === "sparse") {
+            buildQwenMoeLayer(model, layer, y, mainX, type);
+          } else {
+            buildQwenLayer(model, layer, y, mainX, type);
+          }
+        } else if (model.kind === "deepseek") {
+          buildQwenMoeLayer(model, layer, y, mainX, type);
+        } else if (model.kind === "gptoss") {
+          buildGPTLayer(model, layer, y, mainX, type);
+        } else if (model.kind === "rwkv") {
+          buildRWKVLayer(model, layer, y, mainX);
+        } else if (model.kind === "mamba") {
+          buildMambaLayer(model, layer, y, mainX);
+        } else if (model.kind === "jamba") {
+          buildJambaLayer(model, layer, y, mainX, type);
+        } else if (model.kind === "llama") {
+          buildLlamaLayer(model, layer, y, mainX);
+        }
+
+        if (
+          labels &&
+          (
+            layer === 0 ||
+            layer === model.layers - 1 ||
+            layer % Math.max(1, Math.floor(model.layers / 8)) === 0
+          )
+        ) {
+          addLabel(
+            "L" + layer + " · " + patternName(type),
+            mainX - 5.0,
+            y,
+            2.1,
+            3.2,
+            .55
+          );
+        }
+      }
+
+      const top = bottom + height;
+
+      snowBlock({
+        name: "LM Head",
+        x: mainX,
+        y: top + 2.2,
+        z: 0,
+        sx: 5.5,
+        sy: 1.9,
+        sz: 4.5,
+        density: 1.25,
+        brightness: 1,
+        seed: hash(model.name + "_lm_head")
+      });
+
+      addLabel(
+        "LM Head · " + model.vocab,
+        mainX - 3.3,
+        top + 3.45,
+        2.5,
+        5.0,
+        .85
+      );
+
+      if (model.experts) {
+        snowBlock({
+          name: "Expert Bank",
+          x: mainX + 5.0,
+          y: 0,
+          z: 0,
+          sx: 2.2,
+          sy: 10,
+          sz: 3.8,
+          density: .8,
+          brightness: .82,
+          seed: hash(model.name + "_expert_bank")
+        });
+
+        addLabel(
+          "EXPERT BANK\n" +
+          model.experts +
+          " experts\n" +
+          "top-" +
+          model.activeExperts,
+          mainX + 3.9,
+          0,
+          2.15,
+          4.0,
+          .72
+        );
+      }
+
+      buildVision(model, mainX + 8.4);
+
+      const pat = model.pattern
+        .map(patternName)
+        .join(" → ");
+
+      panelInfo.innerHTML =
+        "<b>" + model.name + "</b><br>" +
+        "家族：" + model.family + "<br>" +
+        "层数：" + model.layers +
+        "　hidden：" + model.hidden +
+        "　vocab：" + model.vocab + "<br>" +
+        "层周期：" + pat + "<br>" +
+        (model.experts
+          ? "专家：" + model.experts +
+            "　每 token：" + model.activeExperts + "<br>"
+          : "") +
+        (model.visionLayers
+          ? "视觉塔：" + model.visionLayers + " 层<br>"
+          : "") +
+        "<span style='color:#777'>" +
+        model.note +
+        "</span>";
+
+      caption.textContent =
+        model.name +
+        " · " +
+        model.family +
+        " · 雪花为随机降采样权重模拟";
+
+      distance =
+        model.layers > 50
+          ? 47
+          : 40;
+
+      targetY = .4;
+      updateCamera();
+    }
+
+    Object.keys(MODELS).forEach(function (key) {
+      const button = document.createElement("button");
+      button.textContent = MODELS[key].name;
+      button.dataset.key = key;
+      if (key === currentKey) button.classList.add("active");
+
+      button.addEventListener("click", function () {
+        document
+          .querySelectorAll("#modelButtons button")
+          .forEach(function (b) {
+            b.classList.remove("active");
+          });
+
+        button.classList.add("active");
+        currentKey = key;
+        buildModel();
+      });
+
+      modelButtons.appendChild(button);
+    });
+
+    document.querySelectorAll("[data-env]")
+      .forEach(function (button) {
+        button.addEventListener("click", function () {
+          document
+            .querySelectorAll("[data-env]")
+            .forEach(function (b) {
+              b.classList.remove("active");
+            });
+
+          button.classList.add("active");
+          envelope = button.dataset.env;
+          buildModel();
+        });
+      });
+
+    document.getElementById("labels")
+      .addEventListener("click", function () {
+        labels = !labels;
+        this.classList.toggle("active", labels);
+        buildModel();
+      });
+
+    document.getElementById("vision")
+      .addEventListener("click", function () {
+        showVision = !showVision;
+        this.classList.toggle("active", showVision);
+        buildModel();
+      });
+
+    document.getElementById("rotate")
+      .addEventListener("click", function () {
+        autoRotate = !autoRotate;
+        this.classList.toggle("active", autoRotate);
+      });
+
+    document.getElementById("reset")
+      .addEventListener("click", function () {
+        yaw = .55;
+        pitch = .16;
+        distance = MODELS[currentKey].layers > 50 ? 47 : 40;
+        targetY = .4;
+        updateCamera();
+      });
+
+    addEventListener("resize", function () {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (autoRotate && pointers.size === 0) {
+        yaw += .0011;
+        updateCamera();
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    buildModel();
+    animate();
+  }
+})();
+</script>
+
+</body>
+</html>

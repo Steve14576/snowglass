@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>snowglass 编辑器 · Qwen3.5-9B（阶段 1）</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#e6e6e6;
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+#app{position:fixed;inset:0}
+canvas{display:block;touch-action:none}
+#loading{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:#000;
+  color:#bbb;text-align:center;line-height:1.8;padding:24px;font-size:13px}
+.card{position:fixed;z-index:20;border:1px solid rgba(255,255,255,.18);border-radius:14px;
+  background:rgba(10,10,12,.9);box-shadow:0 12px 42px rgba(0,0,0,.5);backdrop-filter:blur(10px)}
+#panel{top:10px;left:10px;width:330px;max-height:calc(100vh - 20px);overflow:auto;padding:12px 14px}
+#panel h1{margin:0 0 3px;font-size:16px}
+.sub{color:#999;font-size:10.5px;line-height:1.55;margin-bottom:6px}
+.sec{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
+.sec-t{color:#8a8a90;font-size:10px;letter-spacing:.08em;margin-bottom:5px}
+.btns{display:flex;flex-wrap:wrap;gap:5px}
+button,select,input[type=number]{padding:5px 8px;border:1px solid #3d3d42;border-radius:8px;background:#18181b;
+  color:#ccc;font-family:inherit;font-size:11px;cursor:pointer}
+input[type=number]{width:58px;cursor:text}
+button:hover{background:#26262a}
+button.on{border-color:#fff;background:#3a3a3e;color:#fff}
+.row{display:flex;justify-content:space-between;font-size:10.5px;color:#9a9aa0;margin:6px 0 1px}
+.row span{font-family:ui-monospace,Consolas,monospace;color:#fff}
+.row span.warn{color:#ffb454}
+input[type=range]{-webkit-appearance:none;width:100%;background:transparent;height:14px;margin:2px 0}
+input[type=range]:focus{outline:none}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:#333;border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;height:11px;width:11px;border-radius:50%;
+  background:#fff;margin-top:-4px}
+#meter{top:10px;right:10px;width:300px;padding:11px 13px;font-size:11px;line-height:1.6}
+#meter h2,#hover h2{margin:0 0 6px;font-size:12.5px;color:#fff}
+.m-row{display:flex;justify-content:space-between}
+.m-row b{font-weight:500;color:#fff;font-family:ui-monospace,Consolas,monospace}
+.bar{height:7px;border-radius:4px;background:#222;overflow:hidden;display:flex;margin:5px 0 7px}
+.bar i{display:block;height:100%}
+.ok{color:#8fd19e}.bad{color:#ff7a7a}.mid{color:#ffb454}
+#hover{right:10px;bottom:10px;width:360px;max-height:46vh;overflow:auto;padding:11px 13px;font-size:10.5px;
+  line-height:1.6;color:#bbb}
+#hover code{font-family:ui-monospace,Consolas,monospace;color:#ddd;font-size:10px}
+#badge{position:fixed;z-index:15;left:50%;bottom:12px;transform:translateX(-50%);padding:6px 14px;
+  border-radius:20px;background:rgba(0,0,0,.72);border:1px solid rgba(255,180,84,.35);color:#ffb454;
+  font-size:11px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="loading"><div id="loadmsg">正在加载 three.js 与拓扑数据……</div></div>
+<div id="app"></div>
+<section id="panel" class="card">
+  <h1>snowglass · Qwen3.5-9B</h1>
+  <div class="sub">阶段 1 编辑器。结构与尺寸来自真实张量清单（<code>out/ir/qwen35_9b.topo.json</code>）；
+    块内雪花是模拟数据。所有长度单位为毫米。</div>
+  <div id="controls"></div>
+</section>
+<section id="meter" class="card"></section>
+<section id="hover" class="card"><h2>悬停查看</h2>把鼠标移到任意块上，这里显示它来自哪些张量。</section>
+<div id="badge">块内雪花为模拟数据，不是真实权重（阶段 2 替换）</div>
+
+<script>
+(function () {
+"use strict";
+
+const TOPO_URLS = ["data/qwen35_9b.topo.json", "../out/ir/qwen35_9b.topo.json", "../prototype/data/qwen35_9b.topo.json"];
+const CDNS = ["https://cdn.jsdelivr.net/npm/three@0.128.0/", "https://unpkg.com/three@0.128.0/"];
+const FILES = ["build/three.min.js", "examples/js/controls/OrbitControls.js", "examples/js/controls/TransformControls.js"];
+
+function loadSeq(i, cdn, done, fail) {
+  if (i >= FILES.length) return done();
+  const s = document.createElement("script");
+  s.src = CDNS[cdn] + FILES[i];
+  s.onload = () => loadSeq(i + 1, cdn, done, fail);
+  s.onerror = () => (cdn + 1 < CDNS.length ? loadSeq(i, cdn + 1, done, fail) : fail(FILES[i]));
+  document.head.appendChild(s);
+}
+const msg = t => (document.getElementById("loadmsg").innerHTML = t);
+
+loadSeq(0, 0, () => {
+  // 依次尝试几个相对位置：从 8123（根=prototype/）和从 8124（根=项目根）都能打开
+  (async () => {
+    let last = null, tried = [];
+    for (const u of TOPO_URLS) {
+      tried.push(u);
+      try { const r = await fetch(u, { cache: "no-store" }); if (!r.ok) { last = r.status; continue; } return start(await r.json()); }
+      catch (e) { last = e.message; }
+    }
+    msg("读不到拓扑文件，试过这些路径：<br><code>" + tried.join("</code><br><code>") + "</code><br>最后的结果：" + last +
+      "<br><br>拓扑文件由 <code>scripts/build_topology_qwen35.py</code> 生成，应出现在 <code>prototype/data/qwen35_9b.topo.json</code>。" +
+      "<br>如果文件不在，先跑一次那个脚本。");
+  })();
+}, f => msg("three.js 加载失败：" + f));
+
+function start(topo) {
+document.getElementById("loading").remove();
+const THREE = window.THREE;
+
+/* ============================================================
+   参数（docs/decisions.md D9：外观 / 几何 / 数据 三类）
+   ============================================================ */
+const P = {
+  // 外观：只影响屏幕
+  showFrames: true, showShells: true, showRod: true, showSnow: true,
+  labels: true, plate: true, colorByRole: false, autoRotate: false, displayPoints: 300000,
+  // 毛坯与机台
+  blank: [25, 25, 80], margin: 2.5, pitch: 0.08, dotUm: 60, warnDensity: 0.10, speed: 4500,
+  // 几何
+  vision: true, scale: 0.90, colOffset: 4.0, layerGap: 0.3, frameT: 0.3, shellT: 0.16, rodD: 1.2, compress: 1,
+  // 数据
+  frameGray: 0.15, shellGray: 0.10, rodGray: 0.30, gamma: 2.4, floor: 0.03,
+};
+const BLANKS = [[25, 25, 80], [20, 20, 60], [30, 30, 100], [50, 50, 50], [50, 50, 80], [60, 60, 100]];
+
+/* ============================================================
+   场景
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.5, 3000);
+camera.position.set(85, 25, 150);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.getElementById("app").appendChild(renderer.domElement);
+
+function applyViewOffset() {
+  // 左侧面板 330px、右侧用量表 300px：画面中心向右挪两者差值的一半，让模型落在两张卡片中间
+  const w = innerWidth, h = innerHeight, shift = w > 900 ? (330 - 300) / 2 : 0;
+  camera.aspect = w / h;
+  if (shift !== 0) camera.setViewOffset(w, h, -shift, 0, w, h); else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+applyViewOffset();
+
+const orbit = new THREE.OrbitControls(camera, renderer.domElement);
+orbit.enableDamping = true; orbit.dampingFactor = 0.08; orbit.autoRotateSpeed = 0.6;
+
+const glass = new THREE.Group();   // 玻璃坐标系：毛坯中心为原点
+scene.add(glass);
+const model = new THREE.Group();   // 模型坐标系：gumball 作用在这里
+glass.add(model);
+
+const gumball = new THREE.TransformControls(camera, renderer.domElement);
+gumball.setSize(0.8);
+scene.add(gumball);
+gumball.addEventListener("dragging-changed", e => { orbit.enabled = !e.value; if (!e.value) onGumballEnd(); });
+gumball.addEventListener("objectChange", () => { checkContainment(); renderMeter(); renderGumballInfo(); });
+
+/* ============================================================
+   工具
+   ============================================================ */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+const fmtInt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + " M" : n >= 1e3 ? (n / 1e3).toFixed(1) + " k" : Math.round(n) + "";
+const pct = v => (v * 100).toFixed(v < 0.1 ? 1 : 0) + " %";
+const mm = v => v.toFixed(2) + " mm";
+const ROLE_HUE = { embed: 196, lm_head: 203, norm: 325, attn_q: 272, attn_k: 264, attn_v: 255, attn_o: 246,
+  gdn_q: 220, gdn_k: 212, gdn_v: 204, gdn_gate: 190, gdn_ctrl: 175, gdn_out: 232, mlp_gate: 34, mlp_up: 24,
+  mlp_down: 14, vis_attn: 140, vis_mlp: 110, vis_patch: 160, vis_merger: 95, mtp: 0, residual_rod: 0 };
+function roleColor(role, light) {
+  if (!P.colorByRole || ROLE_HUE[role] === undefined || role === "residual_rod") return new THREE.Color(light, light, light);
+  return new THREE.Color().setHSL(ROLE_HUE[role] / 360, 0.75, 0.25 + light * 0.45);
+}
+
+const blockById = {};
+topo.blocks.forEach(b => (blockById[b.id] = b));
+const layerSides = [];
+topo.blocks.forEach(b => {
+  if (b.layer === undefined) return;
+  (layerSides[b.layer] = layerSides[b.layer] || { attn: [], mlp: [] })[b.side].push(b);
+});
+layerSides.forEach(s => { s.attn.sort((a, b) => a.order - b.order); s.mlp.sort((a, b) => a.order - b.order); });
+
+/* ============================================================
+   布局：只在这里实现一次（decisions.md 阶段计划）
+   输出 solids：每个实体的轴对齐包围盒（模型坐标，毫米）
+   ============================================================ */
+let L = null;   // 当前布局结果
+
+function carveDims() { return [P.blank[0] - 2 * P.margin, P.blank[1] - 2 * P.margin, P.blank[2] - 2 * P.margin]; }
+
+function alloc(total, items, g) {
+  const normW = Math.max(0.35, 4 * P.pitch), minW = Math.max(0.3, 3 * P.pitch);
+  const n = items.length, widths = new Array(n).fill(0);
+  let rest = total - g * (n - 1), free = [];
+  items.forEach((b, k) => { if (b.role === "norm") { widths[k] = normW; rest -= normW; } else free.push(k); });
+  const ok = rest > free.length * minW;
+  for (let it = 0; it < 8 && free.length; it++) {
+    const sum = free.reduce((s, k) => s + Math.sqrt(items[k].params), 0);
+    free.forEach(k => (widths[k] = Math.max(rest, 0) * Math.sqrt(items[k].params) / sum));
+    const small = free.filter(k => widths[k] < minW);
+    if (!small.length) break;
+    small.forEach(k => { widths[k] = minW; rest -= minW; });
+    free = free.filter(k => !small.includes(k));
+  }
+  return { widths, ok };
+}
+
+function layout() {
+  const [cw, cd, ch] = carveDims();
+  const W = cw * P.scale, D = cd * P.scale, H = ch * P.scale, g = P.layerGap;
+  const solids = [], warns = [], labels = [];
+  const add = (id, kind, block, x0, x1, y0, y1, z0, z1) => solids.push({ id, kind, block, x0, x1, y0, y1, z0, z1,
+    role: block ? block.role : id === "mtp" ? "mtp" : "residual_rod" });
+
+  /* ---------------- 水平：norm 柱 | 主体 | 空隙 | 视觉塔 ----------------
+     照 real_config 的比例：主体 6.8 : 空隙 3.7 : 视觉塔 3.4（共 13.9），
+     映射到可雕区宽度；两条 norm 柱在主体外侧，内侧不再放东西。 */
+  const kX = W / 20;
+  const vW = P.vision ? 3.4 * kX : 0;
+  const vGap = P.vision ? 3.0 * kX : 0;
+  const normW = Math.max(0.34 * kX, 3 * P.pitch);
+  const normGap = 0.10 * kX;
+  const bodyW = Math.max(W - vW - vGap - 2 * (normW + normGap), W * 0.35);
+  const halfBody = bodyW / 2;
+  const xBody = -W / 2 + normW + normGap + halfBody;
+  const xVis = xBody + halfBody + normW + normGap + vGap + vW / 2;
+
+  /* ---------------- 垂直：头 | 间隙 | 塔体 | 脖子 | 头 ----------------
+     real_config 的总高 28.8 单位换算到可雕区高度：层距 0.6875->1.79mm，
+     头高 2.10->5.5mm，头离塔 2.05->2.6mm 空隙，脖子离塔顶 0.85->1.6mm。 */
+  const kH = H / 75;
+  const headH = 5.5 * kH, headGap = 2.6 * kH;
+  const neckH = 1.25 * kH, neckGap = 1.6 * kH;
+  const N = topo.model.n_layers;
+  const towerH = H - 2 * headH - 2 * headGap - neckGap - neckH;
+  const pitchY = towerH / N, bodyH = pitchY * 0.76;
+  if (bodyH < 4 * P.pitch) warns.push("层块高只有 " + mm(bodyH) + "，毛坯太矮或头太大");
+
+  /* ---------------- 深度：块不改深度，两列前后错开 ----------------
+     块深仍然是可雕区深度；错开量把总深度顶到可雕区之外，靠 gumball 缩放收。 */
+  const colOff = P.colOffset * kX;
+  const zAttn = -colOff / 2, zMlp = colOff / 2;
+  const Dh = Math.min(D * 0.92, W * 0.92), rh = P.rodD / 2;
+
+  let y = -H / 2;
+  const headW = bodyW * 0.78, headOff = bodyW * 0.12;
+  // Embedding：左偏，比层块大得多
+  add("embed", "block", blockById.embed,
+      xBody - headOff - headW / 2, xBody - headOff + headW / 2, y, y + headH, -Dh / 2, Dh / 2);
+  y += headH + headGap;
+  const yTower0 = y;
+
+  /* ---------------- 每一层：两侧都是从外往里排，norm 在最外侧 ---------------- */
+  for (let i = 0; i < N; i++) {
+    // 层中心一律从塔底 yTower0 算，不能用累加的 y（会一次算两遍，层越往上偏得越多）
+    const yc = yTower0 + pitchY * (i + 0.5), y0 = yc - bodyH / 2, y1 = yc + bodyH / 2;
+    ["attn", "mlp"].forEach(side => {
+      const items = layerSides[i][side], sign = side === "attn" ? -1 : 1;
+      const zc = side === "attn" ? zAttn : zMlp;
+      const r = alloc(halfBody - rh - g, items, g);
+      if (!r.ok) warns.push("L" + i + (side === "attn" ? " 注意力" : " MLP") + " 一侧放不下");
+      let cur = halfBody;                     // 从主体外边缘往中间排
+      items.forEach((b, k) => {
+        const w = r.widths[k], dz = b.role === "norm" ? D * 0.55 : D;
+        const xa = xBody + sign * cur, xb = xBody + sign * (cur - w);
+        add(b.id, "block", b, Math.min(xa, xb), Math.max(xa, xb), y0, y1, zc - dz / 2, zc + dz / 2);
+        cur -= w + g;
+      });
+    });
+    if (i === 0 || i === N - 1 || topo.layers[i].kind === "full")
+      labels.push({ text: "L" + i + (topo.layers[i].kind === "full" ? " 全" : ""), x: -W / 2 - 1.0, y: yc });
+  }
+  y = yTower0 + towerH;
+
+  /* ---------------- 脖子：居中、扁、离塔顶有距离 ---------------- */
+  const yNeck = y + neckGap;
+  add("final_norm", "block", blockById.final_norm,
+      xBody - bodyW * 0.17, xBody + bodyW * 0.17, yNeck, yNeck + neckH, -Dh * 0.22, Dh * 0.22);
+  y = yNeck + neckH + headGap;
+
+  /* ---------------- LM Head：右偏，与 embedding 左右对称 ---------------- */
+  const mtpW = Math.min(bodyW * 0.24, W * 0.14);
+  add("lm_head", "block", blockById.lm_head,
+      xBody + headOff - headW / 2, xBody + headOff + headW / 2, y, y + headH, -Dh / 2, Dh / 2);
+  add("mtp", "mtp", null, xBody + headOff + headW / 2 + g, xBody + headOff + headW / 2 + g + mtpW,
+      y + headH * 0.1, y + headH * 0.9, -Dh * 0.25, Dh * 0.25);
+
+  /* ---------------- 残差棒：留在两列之间的中线上，细 ---------------- */
+  add("residual_rod", "rod", null, xBody - rh, xBody + rh, -H / 2 + headH, yNeck, -rh, rh);
+  labels.push({ text: "Embedding", x: -W / 2 - 1.0, y: -H / 2 + headH / 2 },
+              { text: "LM Head", x: -W / 2 - 1.0, y: y + headH / 2 },
+              { text: "Final norm", x: -W / 2 - 1.0, y: yNeck + neckH / 2 });
+
+  /* ---------------- 视觉塔：独立一列，patch 在底往上流，上下都拉开 ---------------- */
+  if (P.vision) {
+    const nV = topo.model.vision_layers;
+    const vBot = yTower0 + towerH * 0.02, vTop = yTower0 + towerH * 0.62;
+    const patchH = headH * 0.5, projH = headH * 0.5, Dv = D * 0.7, halfV = (vW - g) / 2;
+    add("V.patch", "block", blockById["V.patch"], xVis - vW / 2, xVis + vW / 2,
+        vBot - patchH - g, vBot - g, -Dv / 2, Dv / 2);
+    add("V.merger", "block", blockById["V.merger"], xVis - vW / 2, xVis + vW / 2,
+        vTop + g, vTop + projH + g, -Dv / 2, Dv / 2);
+    const hV = (vTop - vBot - (nV - 1) * g) / nV;
+    if (hV < 3 * P.pitch) warns.push("视觉塔层高只有 " + mm(hV));
+    for (let j = 0; j < nV; j++) {
+      const y0 = vBot + j * (hV + g), tag = "V" + String(j).padStart(2, "0");
+      add(tag + ".attn", "block", blockById[tag + ".attn"], xVis - vW / 2, xVis - vW / 2 + halfV, y0, y0 + hV, -Dv / 2, Dv / 2);
+      add(tag + ".mlp", "block", blockById[tag + ".mlp"], xVis - vW / 2 + halfV + g, xVis + vW / 2, y0, y0 + hV, -Dv / 2, Dv / 2);
+    }
+    labels.push({ text: "视觉 patch ↑", x: xVis + vW / 2 + 0.8, y: vBot - patchH, right: true },
+                { text: "视觉投影器", x: xVis + vW / 2 + 0.8, y: vTop + projH, right: true });
+  }
+
+  // 两两不重叠检查（接触不算重叠）
+  const eps = 1e-6, overlaps = [];
+  for (let a = 0; a < solids.length; a++) for (let b = a + 1; b < solids.length; b++) {
+    const s = solids[a], t = solids[b];
+    if (s.x0 < t.x1 - eps && t.x0 < s.x1 - eps && s.y0 < t.y1 - eps && t.y0 < s.y1 - eps && s.z0 < t.z1 - eps && t.z0 < s.z1 - eps)
+      overlaps.push([s.id, t.id]);
+  }
+  const bbox = solids.reduce((b, s) => [Math.min(b[0], s.x0), Math.max(b[1], s.x1), Math.min(b[2], s.y0),
+    Math.max(b[3], s.y1), Math.min(b[4], s.z0), Math.max(b[5], s.z1)], [1e9, -1e9, 1e9, -1e9, 1e9, -1e9]);
+  return { solids, warns, overlaps, labels, W, D, H, bbox };
+}
+
+/* ============================================================
+   几何量：框与壳的有效厚度（块太小会被收窄）、每块的内部体积
+   与点数无关，只由毫米尺寸和两个厚度参数决定
+   ============================================================ */
+function prepare() {
+  let clamped = 0;
+  L.solids.forEach(s => {
+    const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0, mn = Math.min(lx, ly, lz);
+    if (s.kind === "rod") { s.tEff = 0; s.sEff = 0; s.interior = 0; return; }
+    const t = Math.min(P.frameT, mn / 2.2), sh = Math.min(P.shellT, mn / 2.2);
+    if (t < P.frameT - 1e-9 || sh < P.shellT - 1e-9) clamped++;
+    s.tEff = t; s.sEff = sh;
+    const inner = Math.max(lx - 2 * sh, 0) * Math.max(ly - 2 * sh, 0) * Math.max(lz - 2 * sh, 0);
+    s.interior = s.kind === "block" ? inner : 0;
+  });
+  L.clamped = clamped;
+}
+
+/* ============================================================
+   后验报告（decisions.md D2）
+   点数不是限额：网格由几何定，每格放不放点由灰度定，总数是结果。
+   这里只统计并报出来，不改任何生成逻辑，也没有可以“用完”的预算。
+   ============================================================ */
+function report() {
+  const [cw, cd, ch] = carveDims(), p = P.pitch, perMM3 = 1 / (p * p * p);
+  const grid = Math.floor(cw / p) * Math.floor(cd / p) * Math.floor(ch / p);
+  let frame = 0, shell = 0, rod = 0, snow = 0, interior = 0, params = 0;
+  const fills = [], peaks = [];
+  L.solids.forEach(s => {
+    const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0;
+    if (s.kind === "rod") { rod += lx * ly * lz * P.rodGray * perMM3; return; }
+    const t = s.tEff, sh = s.sEff, inner = s.interior;
+    const fv = 4 * t * t * (lx + (ly - 2 * t) + (lz - 2 * t));
+    const sv = s.kind === "mtp" ? 0 : lx * ly * lz - inner;
+    const ov = s.kind === "mtp" ? 0 : (t * t - Math.pow(Math.max(t - sh, 0), 2)) * 4 * (lx + ly + lz - 4 * t);
+    frame += (fv - ov) * P.frameGray * perMM3;
+    shell += (sv - ov) * P.shellGray * perMM3;
+    frame += ov * Math.max(P.frameGray, P.shellGray) * perMM3;
+    if (s.kind === "block" && inner > 0) {
+      // 该块点数 = 内部体素数 x 该块灰度的均值（已经过 gamma / floor）。由数据决定，无上限。
+      const meanP = s.meanP == null ? 0 : s.meanP;
+      s.snowPoints = inner * perMM3 * meanP;
+      snow += s.snowPoints;
+      fills.push(meanP);
+      if (s.maxP != null) peaks.push(s.maxP);
+    }
+    interior += inner;
+    if (s.block) params += s.block.params;
+  });
+  const sorted = a => a.slice().sort((x, y) => x - y);
+  const fs = sorted(fills), ps = sorted(peaks);
+  const q = (arr, t) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(t * arr.length))] : 0);
+  const total = frame + shell + rod + snow, cell = P.compress * p;
+  return { grid, frame, shell, rod, snow, total, interior, params, clamped: L.clamped || 0,
+    fillMedian: q(fs, 0.5), fillP95: q(fs, 0.95), fillMax: fs.length ? fs[fs.length - 1] : 0,
+    peakLocal: ps.length ? ps[ps.length - 1] : 0,
+    densAvg: interior > 0 ? snow / (interior * perMM3) : 0,
+    densCarve: grid > 0 ? total / grid : 0,
+    wpv: interior > 0 ? params / (interior / (cell * cell * cell)) : 0,
+    minutes: total / P.speed / 60 };
+}
+
+/* ============================================================
+   绘制：框（12 根方梁）与包络面（6 块薄板）都是有毫米厚度的实体
+   ============================================================ */
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+const MAXI = 520;
+const frameMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
+const shellMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+const frames = new THREE.InstancedMesh(unitBox, frameMat, MAXI * 12);
+const shells = new THREE.InstancedMesh(unitBox, shellMat, MAXI * 6);
+const proxies = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial({ visible: false }), MAXI);
+[frames, shells, proxies].forEach(m => { m.frustumCulled = false; model.add(m); });
+for (let i = 0; i < MAXI * 12; i++) frames.setColorAt(i, new THREE.Color(1, 1, 1));
+for (let i = 0; i < MAXI * 6; i++) shells.setColorAt(i, new THREE.Color(1, 1, 1));
+const rodMesh = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }));
+model.add(rodMesh);
+const hl = new THREE.LineSegments(new THREE.EdgesGeometry(unitBox), new THREE.LineBasicMaterial({ color: 0x6fd3ff }));
+hl.visible = false; model.add(hl);
+
+const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3();
+function put(mesh, i, cx, cy, cz, sx, sy, sz) { mesh.setMatrixAt(i, M.compose(V.set(cx, cy, cz), Q, S.set(sx, sy, sz))); }
+
+function drawStructure() {
+  let fi = 0, si = 0, pi = 0;
+  L.solids.forEach((s, idx) => {
+    const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0;
+    const cx = (s.x0 + s.x1) / 2, cy = (s.y0 + s.y1) / 2, cz = (s.z0 + s.z1) / 2;
+    put(proxies, pi++, cx, cy, cz, lx, ly, lz);
+    s.pid = pi - 1;
+    if (s.kind === "rod") {
+      rodMesh.position.set(cx, cy, cz); rodMesh.scale.set(lx, ly, lz); return;
+    }
+    const t = s.tEff, sh = s.sEff, col = roleColor(s.role, 1);
+    // 框：沿 x 的 4 根取全长，沿 y、z 的各 4 根两端各让出 t，彼此不重叠
+    for (const yy of [s.y0 + t / 2, s.y1 - t / 2]) for (const zz of [s.z0 + t / 2, s.z1 - t / 2]) { frames.setColorAt(fi, col); put(frames, fi++, cx, yy, zz, lx, t, t); }
+    for (const xx of [s.x0 + t / 2, s.x1 - t / 2]) for (const zz of [s.z0 + t / 2, s.z1 - t / 2]) { frames.setColorAt(fi, col); put(frames, fi++, xx, cy, zz, t, ly - 2 * t, t); }
+    for (const xx of [s.x0 + t / 2, s.x1 - t / 2]) for (const yy of [s.y0 + t / 2, s.y1 - t / 2]) { frames.setColorAt(fi, col); put(frames, fi++, xx, yy, cz, t, t, lz - 2 * t); }
+    if (s.kind === "mtp") return;   // U9：MTP 只画框
+    // 包络面：上下两块取全尺寸，前后两块让出上下，左右两块再让出前后，彼此不重叠
+    for (const yy of [s.y0 + sh / 2, s.y1 - sh / 2]) { shells.setColorAt(si, col); put(shells, si++, cx, yy, cz, lx, sh, lz); }
+    for (const zz of [s.z0 + sh / 2, s.z1 - sh / 2]) { shells.setColorAt(si, col); put(shells, si++, cx, cy, zz, lx, ly - 2 * sh, sh); }
+    for (const xx of [s.x0 + sh / 2, s.x1 - sh / 2]) { shells.setColorAt(si, col); put(shells, si++, xx, cy, cz, sh, ly - 2 * sh, lz - 2 * sh); }
+  });
+  frames.count = fi; shells.count = si; proxies.count = pi;
+  [frames, shells, proxies].forEach(m => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+  applyAppearance();
+}
+
+function applyAppearance() {
+  // 预览近似：灰度显示成不透明度（成品里是点的疏密）
+  frameMat.opacity = Math.min(1, P.frameGray * 2.2); frames.visible = P.showFrames && P.frameGray > 0;
+  shellMat.opacity = Math.min(1, P.shellGray * 0.9); shells.visible = P.showShells && P.shellGray > 0;
+  rodMesh.material.opacity = Math.min(1, P.rodGray * 1.4); rodMesh.visible = P.showRod && P.rodGray > 0;
+  snowPts.visible = P.showSnow;
+  labelGroup.visible = P.labels; plate.visible = P.plate;
+  orbit.autoRotate = P.autoRotate;
+}
+
+/* ============================================================
+   雪花（模拟）：按 γ 与底噪地板接受采样，只为预览 U7 的效果
+   ============================================================ */
+const MAXP = 800000;
+const sPos = new Float32Array(MAXP * 3), sCol = new Float32Array(MAXP * 3);
+const snowGeo = new THREE.BufferGeometry();
+snowGeo.setAttribute("position", new THREE.BufferAttribute(sPos, 3));
+snowGeo.setAttribute("color", new THREE.BufferAttribute(sCol, 3));
+const snowPts = new THREE.Points(snowGeo, new THREE.PointsMaterial({ size: 0.2, vertexColors: true, transparent: true,
+  opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+snowPts.frustumCulled = false; model.add(snowPts);
+
+function fakeField(s) {
+  // 注意力类：沿层高方向有若干亮暗带（q_proj 实测像这样）；MLP 与其余：接近均匀（down_proj 实测像这样）
+  const r = mulberry32(hash(s.id)), banded = /^(attn|gdn)_/.test(s.role) || s.role === "vis_attn";
+  const nb = 8 + Math.floor(r() * 16), bands = [];
+  for (let i = 0; i < nb; i++) bands.push(r());
+  const base = 0.30 + 0.25 * r(), amp = banded ? 0.45 : 0.08;
+  return (u, v, w, n) => Math.min(1, Math.max(0, base + amp * (bands[Math.floor(v * nb) % nb] - 0.5) + 0.18 * (n - 0.5)));
+}
+
+function buildSnow() {
+  // 这里只决定“屏幕上画哪些点”。玻璃里到底有多少个点，由 report() 按数据算，两者不是一回事。
+  // 块与块之间的抽样比例由 内部体积 x 该块灰度均值 决定，也就是数据亮的地方屏幕上点也多。
+  const blocks = L.solids.filter(s => s.kind === "block" && s.interior > 0);
+  const pOf = g => P.floor + (1 - P.floor) * Math.pow(g, P.gamma);
+  const weights = blocks.map(s => {
+    const f = fakeField(s), r = mulberry32(hash(s.id) ^ 0x9e37);
+    let m = 0, mx = 0;
+    for (let k = 0; k < 64; k++) { const q = pOf(f(r(), r(), r(), r())); m += q; mx = Math.max(mx, q); }
+    s.meanP = m / 64; s.maxP = Math.min(1, mx * 1.1);
+    return s.interior * s.meanP;
+  });
+  const sum = weights.reduce((a, b) => a + b, 0) || 1;
+  let n = 0;
+  blocks.forEach((s, k) => {
+    const want = Math.max(16, Math.round(P.displayPoints * weights[k] / sum));
+    const f = fakeField(s), r = mulberry32(hash(s.id) + 7), sh = s.sEff;
+    const x0 = s.x0 + sh, y0 = s.y0 + sh, z0 = s.z0 + sh, lx = s.x1 - s.x0 - 2 * sh, ly = s.y1 - s.y0 - 2 * sh, lz = s.z1 - s.z0 - 2 * sh;
+    let got = 0;
+    // 块与块之间的疏密由 weights 决定；块内用 p / maxP 接受，保留块内的相对疏密，同时采够点
+    for (let tries = 0; tries < want * 12 && got < want && n < MAXP; tries++) {
+      const u = r(), v = r(), w = r(), g = f(u, v, w, r());
+      if (r() * s.maxP > pOf(g)) continue;
+      sPos[n * 3] = x0 + u * lx; sPos[n * 3 + 1] = y0 + v * ly; sPos[n * 3 + 2] = z0 + w * lz;
+      const c = roleColor(s.role, 0.35 + 0.65 * g);
+      sCol[n * 3] = c.r; sCol[n * 3 + 1] = c.g; sCol[n * 3 + 2] = c.b;
+      n++; got++;
+    }
+  });
+  snowGeo.setDrawRange(0, n);
+  snowGeo.attributes.position.needsUpdate = true; snowGeo.attributes.color.needsUpdate = true;
+  L.displayed = n;
+}
+
+/* ============================================================
+   毛坯、可雕区、标签、铭牌（只影响屏幕）
+   ============================================================ */
+const blankGroup = new THREE.Group(); glass.add(blankGroup);
+const labelGroup = new THREE.Group(); model.add(labelGroup);
+let plate = new THREE.Group(); scene.add(plate);
+
+function textSprite(text, h, color) {
+  const c = document.createElement("canvas"), ctx = c.getContext("2d"), fs = 44;
+  ctx.font = "500 " + fs + "px system-ui,'Microsoft YaHei'";
+  c.width = Math.ceil(ctx.measureText(text).width) + 16; c.height = fs + 16;
+  ctx.font = "500 " + fs + "px system-ui,'Microsoft YaHei'";
+  ctx.fillStyle = color || "rgba(220,220,225,0.85)"; ctx.textBaseline = "middle"; ctx.fillText(text, 8, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(h * c.width / c.height, h, 1);
+  return sp;
+}
+
+function disposeTree(o) {
+  o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
+}
+
+function drawBlank() {
+  while (blankGroup.children.length) { const c = blankGroup.children[0]; blankGroup.remove(c); disposeTree(c); }
+  const [bw, bd, bh] = P.blank, [cw, cd, ch] = carveDims();
+  const e1 = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(bw, bh, bd)),
+    new THREE.LineBasicMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.55 }));
+  const e2 = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(cw, ch, cd)),
+    new THREE.LineDashedMaterial({ color: 0x5a6070, dashSize: 1.2, gapSize: 0.8, transparent: true, opacity: 0.7 }));
+  e2.computeLineDistances();
+  blankGroup.add(e1, e2);
+}
+
+function drawLabels() {
+  while (labelGroup.children.length) { const c = labelGroup.children[0]; labelGroup.remove(c); disposeTree(c); }
+  L.labels.forEach(l => {
+    const sp = textSprite(l.text, 1.1);
+    sp.center.set(l.right ? 0 : 1, 0.5);
+    sp.position.set(l.x, l.y, 0); labelGroup.add(sp);
+  });
+}
+
+function drawPlate() {
+  scene.remove(plate); disposeTree(plate);
+  const c = document.createElement("canvas"); c.width = 900; c.height = 420;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "rgba(8,8,10,.94)"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 3; ctx.strokeRect(3, 3, c.width - 6, c.height - 6);
+  ctx.fillStyle = "#e5e5e5"; ctx.font = "bold 30px ui-monospace,Consolas,monospace";
+  const m = topo.model;
+  ["Qwen3.5-9B · " + m.precision_label,
+   "text layers  : " + m.n_layers + "  (3 linear + 1 full) x 8",
+   "hidden / ffn : 4096 / 12288",
+   "params text  : " + (m.params_text / 1e9).toFixed(3) + " B",
+   "params vision: " + (m.params_vision / 1e9).toFixed(3) + " B",
+   "blocks       : " + topo.blocks.length,
+   "blank        : " + P.blank.join(" x ") + " mm",
+   "snow         : SIMULATED (stage 1)"].forEach((t, i) => ctx.fillText(t, 26, 52 + i * 46));
+  const tex = new THREE.CanvasTexture(c);
+  plate = new THREE.Mesh(new THREE.PlaneGeometry(27, 12.6), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+  plate.position.set(-P.blank[0] / 2 - 19, P.blank[2] / 2 - 8, 0);
+  plate.visible = P.plate;
+  scene.add(plate);
+}
+
+/* ============================================================
+   包含检查（经过 gumball 变换后，所有实体必须在可雕区内）
+   ============================================================ */
+let outside = 0;
+function checkContainment() {
+  if (!L) return;
+  model.updateMatrixWorld(true);
+  const [cw, cd, ch] = carveDims(), m = model.matrix, v = new THREE.Vector3(), e = 1e-6;
+  outside = 0;
+  L.solids.forEach(s => {
+    let out = false;
+    for (const x of [s.x0, s.x1]) for (const y of [s.y0, s.y1]) for (const z of [s.z0, s.z1]) {
+      v.set(x, y, z).applyMatrix4(m);
+      if (Math.abs(v.x) > cw / 2 + e || Math.abs(v.y) > ch / 2 + e || Math.abs(v.z) > cd / 2 + e) out = true;
+    }
+    s.outside = out; if (out) outside++;
+  });
+}
+
+/* ============================================================
+   面板
+   ============================================================ */
+const SECTIONS = [
+  ["视图 · 只影响屏幕，不进文件", [
+    ["toggles", [["showFrames", "框"], ["showShells", "包络面"], ["showRod", "残差棒"], ["showSnow", "雪花"],
+                 ["labels", "标签"], ["plate", "铭牌"], ["colorByRole", "按功能着色", "struct"], ["autoRotate", "自转"]]],
+    ["slider", "displayPoints", "显示的雪花点数", 50000, 800000, 10000, v => (v / 1e4).toFixed(0) + " 万", "snow"],
+    ["note", "显示开关只影响屏幕。要从成品里去掉某种结构件，把它的灰度调到 0。"],
+  ]],
+  ["毛坯与机台", [
+    ["blank"],
+    ["slider", "margin", "安全边距", 1, 5, 0.1, mm, "all"],
+    ["slider", "pitch", "加工点距", 0.05, 0.2, 0.005, v => v.toFixed(3) + " mm", "all"],
+    ["slider", "dotUm", "点径", 40, 80, 1, v => v + " μm", "meter"],
+    ["slider", "warnDensity", "密度告警参考线（仅报警）", 0.02, 0.5, 0.01, pct, "meter"],
+    ["note", "这条线只用来把后验数字标红，不参与生成，也不会从别的块那里夺走点。"],
+    ["slider", "speed", "打点速度", 1000, 20000, 500, v => v + " 点/秒", "meter"],
+  ]],
+  ["结构件 · 几何与灰度（进文件）", [
+    ["toggles", [["vision", "视觉塔进作品"]], "all"],
+    ["slider", "frameT", "框的粗细", 0.1, 1.0, 0.01, mm, "struct", () => P.frameT < 2 * P.pitch],
+    ["slider", "frameGray", "框的灰度（= 透明度）", 0, 1, 0.01, pct, "struct"],
+    ["slider", "shellT", "包络面厚度", 0.05, 0.5, 0.01, mm, "struct", () => P.shellT < 2 * P.pitch],
+    ["slider", "shellGray", "包络面灰度（= 透明度）", 0, 1, 0.01, pct, "struct"],
+    ["slider", "rodD", "残差棒粗细", 0.4, 3, 0.05, mm, "all"],
+    ["slider", "rodGray", "残差棒灰度", 0, 1, 0.01, pct, "struct"],
+    ["slider", "layerGap", "块间隙", 0.1, 1.0, 0.01, mm, "all"],
+    ["slider", "colOffset", "两列前后错开（深度）", 0, 10, 0.1, mm, "all"],
+    ["slider", "scale", "模型缩放", 0.3, 1.2, 0.005, v => v.toFixed(3) + " ×", "all"],
+    ["fit"],
+  ]],
+  ["雪花 · 数据（进文件）", [
+    ["slider", "compress", "降采样压缩倍数", 1, 8, 0.5, v => v + " × 点距", "meter"],
+    ["slider", "gamma", "γ（对比度）", 1, 4, 0.05, v => v.toFixed(2), "snow"],
+    ["slider", "floor", "底噪地板", 0, 0.1, 0.002, pct, "snow"],
+    ["note", "块内雪花现在是模拟数据：注意力类块有亮暗带，MLP 接近均匀，只用来看 γ 与底噪地板的作用。"],
+  ]],
+  ["Gumball · 移动 / 旋转 / 缩放", [["gumball"]]],
+  ["导出", [["export"]]],
+];
+
+const sliders = {};
+function buildPanel() {
+  const root = document.getElementById("controls");
+  SECTIONS.forEach(([title, items]) => {
+    const sec = document.createElement("div"); sec.className = "sec";
+    sec.innerHTML = '<div class="sec-t">' + title + "</div>";
+    items.forEach(it => {
+      if (it[0] === "note") { const d = document.createElement("div"); d.className = "sub"; d.style.marginTop = "6px"; d.textContent = it[1]; sec.appendChild(d); }
+      if (it[0] === "toggles") {
+        const d = document.createElement("div"); d.className = "btns";
+        it[1].forEach(([key, text, lvl]) => {
+          const b = document.createElement("button"); b.textContent = text; b.classList.toggle("on", P[key]);
+          b.onclick = () => { P[key] = !P[key]; b.classList.toggle("on", P[key]); schedule(lvl || it[2] || "view"); };
+          d.appendChild(b);
+        });
+        sec.appendChild(d);
+      }
+      if (it[0] === "slider") {
+        const [, key, label, min, max, step, fmt, level, warnFn] = it;
+        const row = document.createElement("div"); row.className = "row";
+        row.innerHTML = "<label>" + label + "</label><span></span>";
+        const inp = document.createElement("input"); inp.type = "range"; inp.min = min; inp.max = max; inp.step = step; inp.value = P[key];
+        const out = row.querySelector("span");
+        const show = () => { out.textContent = fmt(P[key]); out.classList.toggle("warn", !!(warnFn && warnFn())); };
+        inp.oninput = () => { P[key] = parseFloat(inp.value); show(); schedule(level); };
+        sliders[key] = { inp, show }; show();
+        sec.appendChild(row); sec.appendChild(inp);
+      }
+      if (it[0] === "blank") {
+        const d = document.createElement("div"); d.className = "btns"; d.style.alignItems = "center";
+        const sel = document.createElement("select");
+        BLANKS.forEach(b => { const o = document.createElement("option"); o.value = b.join(","); o.textContent = b.join(" × ") + " mm"; sel.appendChild(o); });
+        const o = document.createElement("option"); o.value = "custom"; o.textContent = "自定义"; sel.appendChild(o);
+        const nums = [0, 1, 2].map(i => { const n = document.createElement("input"); n.type = "number"; n.min = 5; n.max = 300; n.step = 0.5; n.value = P.blank[i];
+          n.onchange = () => { P.blank[i] = parseFloat(n.value); sel.value = "custom"; schedule("all"); }; return n; });
+        sel.onchange = () => { if (sel.value === "custom") return; P.blank = sel.value.split(",").map(Number); nums.forEach((n, i) => (n.value = P.blank[i])); schedule("all"); };
+        d.appendChild(sel);
+        ["宽", "深", "高"].forEach((t, i) => { const s = document.createElement("span"); s.style.fontSize = "10px"; s.style.color = "#888"; s.textContent = t; d.appendChild(s); d.appendChild(nums[i]); });
+        sec.appendChild(d);
+      }
+      if (it[0] === "fit") {
+        const d = document.createElement("div"); d.className = "btns";
+        const b = document.createElement("button"); b.textContent = "按可雕区适配缩放";
+        b.onclick = () => { fitToCarve(); };
+        d.appendChild(b); sec.appendChild(d);
+      }
+      if (it[0] === "gumball") {
+        const d = document.createElement("div"); d.className = "btns";
+        [["off", "关"], ["translate", "移动 W"], ["rotate", "旋转 E"], ["scale", "缩放 R"]].forEach(([m, t]) => {
+          const b = document.createElement("button"); b.textContent = t; b.dataset.gm = m; b.onclick = () => setGumball(m); d.appendChild(b);
+        });
+        const r = document.createElement("button"); r.textContent = "重置变换";
+        r.onclick = () => { model.position.set(0, 0, 0); model.rotation.set(0, 0, 0); model.scale.set(1, 1, 1); P.scale = 1; sliders.scale.inp.value = 1; sliders.scale.show(); schedule("all"); };
+        d.appendChild(r);
+        const info = document.createElement("div"); info.id = "gminfo"; info.className = "sub"; info.style.marginTop = "6px";
+        sec.appendChild(d); sec.appendChild(info);
+      }
+      if (it[0] === "export") {
+        const d = document.createElement("div"); d.className = "btns";
+        const b = document.createElement("button"); b.textContent = "导出 layout.json（参数 + 布局 + 检查结果）"; b.onclick = exportLayout;
+        d.appendChild(b); sec.appendChild(d);
+      }
+    });
+    root.appendChild(sec);
+  });
+  setGumball("off");
+}
+
+function setGumball(mode) {
+  document.querySelectorAll("[data-gm]").forEach(b => b.classList.toggle("on", b.dataset.gm === mode));
+  if (mode === "off") { gumball.detach(); } else { gumball.attach(model); gumball.setMode(mode); }
+  renderGumballInfo();
+}
+addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  if (k === "w") setGumball("translate"); if (k === "e") setGumball("rotate"); if (k === "r") setGumball("scale"); if (k === "q") setGumball("off");
+});
+function onGumballEnd() {
+  // 缩放不直接缩放几何：框、壳、棒的毫米厚度必须保持物理值，所以把缩放量折算进布局后重算
+  const f = (model.scale.x + model.scale.y + model.scale.z) / 3;
+  if (Math.abs(f - 1) > 1e-6) {
+    model.scale.set(1, 1, 1);
+    P.scale = Math.min(1.5, Math.max(0.2, P.scale * f));
+    sliders.scale.inp.value = P.scale; sliders.scale.show();
+    schedule("all");
+  }
+}
+function renderGumballInfo() {
+  const el = document.getElementById("gminfo"); if (!el) return;
+  const p = model.position, r = model.rotation, d = v => (v * 180 / Math.PI).toFixed(1) + "°";
+  el.innerHTML = "位置 " + [p.x, p.y, p.z].map(v => v.toFixed(2)).join(" / ") + " mm<br>旋转 " + [r.x, r.y, r.z].map(d).join(" / ") +
+    "<br>缩放 " + P.scale.toFixed(3) + " ×（松手后折算进布局，框和壳的毫米厚度不随之缩放）<br>快捷键：W 移动、E 旋转、R 缩放、Q 关闭";
+}
+
+/* ============================================================
+   用量表与悬停信息
+   ============================================================ */
+function renderMeter() {
+  const k = L.ink, W = P.warnDensity;
+  const st = (ok, a, b) => '<span class="' + (ok ? "ok" : "bad") + '">' + (ok ? a : b) + "</span>";
+  const cls = v => (v > W * 2 ? "bad" : v > W ? "mid" : "ok");
+  const share = v => (k.total > 0 ? pct(v / k.total) : "–");
+  const seg = (v, c) => '<i style="width:' + Math.min(100, v / Math.max(k.total, 1) * 100) + "%;background:" + c + '"></i>';
+  const overPeak = k.peakLocal > W, overMax = k.fillMax > W;
+  const [cw, cd, ch] = carveDims(), b = L.bbox;
+  const bw = b[1] - b[0], bh = b[3] - b[2], bd = b[5] - b[4];
+  const needScale = Math.min(cw / bw, cd / bd, ch / bh), fits = needScale >= 1;
+  document.getElementById("meter").innerHTML =
+    "<h2>后验报告</h2>" +
+    '<div class="sub">点数是算出来的结果，不是配额。超了标红，回去改前置再重算。</div>' +
+    '<div class="m-row">可雕区格点<b>' + fmtInt(k.grid) + "</b></div>" +
+    '<div class="m-row">总点数<b>' + fmtInt(k.total) + "</b></div>" +
+    '<div class="m-row">预计机时<b>' + k.minutes.toFixed(1) + " 分钟</b></div>" +
+    '<div class="bar">' + seg(k.frame, "#9ad0ff") + seg(k.shell, "#7a8cff") + seg(k.rod, "#ffd27a") + seg(k.snow, "#e8e8e8") + "</div>" +
+    '<div class="m-row"><span style="color:#9ad0ff">■ 框</span><b>' + fmtInt(k.frame) + " · " + share(k.frame) + "</b></div>" +
+    '<div class="m-row"><span style="color:#7a8cff">■ 包络面</span><b>' + fmtInt(k.shell) + " · " + share(k.shell) + "</b></div>" +
+    '<div class="m-row"><span style="color:#ffd27a">■ 残差棒</span><b>' + fmtInt(k.rod) + " · " + share(k.rod) + "</b></div>" +
+    '<div class="m-row"><span>■ 雪花</span><b>' + fmtInt(k.snow) + " · " + share(k.snow) + "</b></div>" +
+    '<div class="m-row">可雕区平均填充率<b>' + pct(k.densCarve) + "</b></div>" +
+    '<div class="m-row">块内平均填充率<b>' + pct(k.densAvg) + "</b></div>" +
+    '<div class="m-row">最密一块 · 平均<b class="' + cls(k.fillMax) + '">' + pct(k.fillMax) + "</b></div>" +
+    '<div class="m-row">最密一块 · 局部峰值<b class="' + cls(k.peakLocal) + '">' + pct(k.peakLocal) + "</b></div>" +
+    '<div class="m-row">每体素平均代表<b>' + fmtInt(k.wpv) + " 个权重</b></div>" +
+    '<div class="m-row">屏幕上画出的点<b>' + fmtInt(L.displayed || 0) + "</b></div>" +
+    '<div class="sub">屏幕上画多少点只为不卡，与玻璃里实际多少个点无关。</div>' +
+    '<div style="margin-top:6px">后验告警（参考线 ' + pct(W) + "）：" +
+    "<br>· 局部峰值密度：" + st(!overPeak, "未超", "超了 " + ((k.peakLocal / Math.max(W, 1e-9) - 1) * 100).toFixed(0) + "%，可调低 γ、调高底噪地板或加大压缩倍数，再重算看") +
+    "<br>· 最密一块平均值：" + st(!overMax, "未超", "超了，同上") +
+    "</div>" +
+    '<div style="margin-top:6px">结构检查：' +
+    "<br>· 块两两不重叠：" + st(!L.overlaps.length, "通过（" + L.solids.length + " 个实体）", L.overlaps.length + " 处重叠，如 " + L.overlaps[0]) +
+    "<br>· 包围盒：" + bw.toFixed(1) + " 宽 × " + bd.toFixed(1) + " 深 × " + bh.toFixed(1) + " 高 mm（可雕区 " +
+      cw.toFixed(1) + " × " + cd.toFixed(1) + " × " + ch.toFixed(1) + "）" +
+    "<br>· 在可雕区内：" + st(fits, "是", "超出，需再缩到 " + needScale.toFixed(2) + "×（或点“按可雕区适配缩放”）") +
+    (k.clamped ? '<br>· <span class="mid">' + k.clamped + " 个块太小，框或壳的厚度被自动收窄</span>" : "") +
+    (P.frameT < 2 * P.pitch || P.shellT < 2 * P.pitch ? '<br>· <span class="mid">框或壳薄于 2 倍点距，切出来可能断续</span>' : "") +
+    L.warns.map(w => '<br>· <span class="bad">' + w + "</span>").join("") +
+    '</div><div class="sub" style="margin-top:6px">点数的算法：结构件 = 体积 × 灰度 ÷ 点距³；雪花 = 内部体素数 × 该块灰度的均值。框与壳重叠处按较高灰度计一次。</div>';
+}
+
+function fitToCarve() {
+  // 按当前包围盒算需要再乘多少才能塞进可雕区，留 3% 余量（不顶头）
+  if (!L) return;
+  const [cw, cd, ch] = carveDims(), b = L.bbox;
+  const bw = b[1] - b[0], bh = b[3] - b[2], bd = b[5] - b[4];
+  const f = Math.min(cw / bw, cd / bd, ch / bh) * 0.97;
+  P.scale = Math.min(1.2, Math.max(0.2, P.scale * f));
+  if (sliders.scale) { sliders.scale.inp.value = P.scale; sliders.scale.show(); }
+  schedule("all");
+}
+
+let hoveredSolid = null;
+function hoverInfo(s) {
+  hoveredSolid = s;
+  const el = document.getElementById("hover");
+  if (!s) { el.innerHTML = "<h2>悬停查看</h2>把鼠标移到任意块上，这里显示它来自哪些张量。"; hl.visible = false; return; }
+  const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0;
+  hl.visible = true; hl.position.set((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, (s.z0 + s.z1) / 2); hl.scale.set(lx, ly, lz);
+  let h = "<h2>" + s.id + (s.block ? " · " + s.block.label : "") + "</h2>";
+  h += "尺寸 " + [lx, ly, lz].map(v => v.toFixed(2)).join(" × ") + " mm" + (s.outside ? ' <span class="bad">（出界）</span>' : "") + "<br>";
+  if (s.kind === "rod") h += "残差流 x：4096 维，贯穿全模型。没有权重，是纯几何（D11），来自代码里的两个 <code>+</code>。";
+  else if (s.kind === "mtp") h += "MTP 多 token 预测头。GGUF 文件里没有这部分权重，按 U9 暂时只画框。";
+  else {
+    const b = s.block, cell = P.compress * P.pitch, vox = s.interior / (cell * cell * cell);
+    h += "参数 " + fmtInt(b.params) + "，块内约 " + fmtInt(vox) + " 个数据格子，每格约代表 " + fmtInt(b.params / Math.max(vox, 1)) + " 个权重<br>";
+    if (s.snowPoints != null) h += "本题案点数 " + fmtInt(s.snowPoints) + "，块内平均填充率 " + pct(s.meanP || 0) +
+      "，局部峰值 " + pct(s.maxP || 0) + "<br>";
+    if (b.fold) h += "二维→三维（D13）：" + (b.fold.basis === "structure" && b.fold.factors ? "按" + (b.fold.axis === "cols" ? "列" : "行") + "拆成 " + b.fold.factors.join(" × ") + "（" + b.fold.labels.join(" / ") + "）" : b.fold.note || b.fold.basis) + "<br>";
+    h += "张量：";
+    b.tensors.forEach(t => {
+      h += "<br>· <code>" + t.gguf + (t.rows ? "[" + t.rows[0] + ":" + t.rows[1] + "]" : "") + "</code> [" + t.shape.join(", ") + "] " + t.qtype;
+      if (t.hf) h += "<br>　HF：<code>" + t.hf.replace("model.language_model.", "") + "</code>";
+      if (t.restore) h += "<br>　还原（U10）：<code>" + t.restore + "</code>";
+    });
+  }
+  el.innerHTML = h;
+}
+
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+let hoverDirty = false;
+renderer.domElement.addEventListener("pointermove", e => { mouse.x = e.clientX / innerWidth * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; hoverDirty = true; });
+function updateHover() {
+  if (!hoverDirty || !L) return; hoverDirty = false;
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObject(proxies, false)[0];
+  hoverInfo(hit ? L.solids.find(s => s.pid === hit.instanceId) : null);
+}
+
+function exportLayout() {
+  const data = { tool: "snowglass_editor stage1", topo_model: topo.model, policy: topo.policy, params: P,
+    carve_mm: carveDims(), transform: { position: model.position.toArray(), rotation_euler_rad: [model.rotation.x, model.rotation.y, model.rotation.z] },
+    ink: L.ink, checks: { overlaps: L.overlaps, outside_count: outside, warnings: L.warns },
+    solids: L.solids.map(s => ({ id: s.id, kind: s.kind, role: s.role, aabb_mm: [s.x0, s.y0, s.z0, s.x1, s.y1, s.z1], frame_t: s.tEff, shell_t: s.sEff })) };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+  a.download = "layout.json"; a.click();
+}
+
+/* ============================================================
+   重算调度：all（重布局）> struct（重画结构）> snow（重采雪花）> meter > view
+   ============================================================ */
+const RANK = { view: 0, meter: 1, snow: 2, struct: 3, all: 4 };
+let pending = -1;
+function schedule(level) { pending = Math.max(pending, RANK[level] ?? 4); }
+function flush() {
+  if (pending < 0) return;
+  const lv = pending; pending = -1;
+  if (lv >= 4) { L = layout(); hoveredSolid = null; drawBlank(); drawLabels(); drawPlate(); }
+  if (lv >= 3) { prepare(); drawStructure(); }
+  if (lv >= 2) buildSnow();
+  if (lv >= 1) { L.ink = report(); checkContainment(); renderMeter(); }
+  applyAppearance();
+  Object.values(sliders).forEach(s => s.show());
+  // 参数变了但鼠标没动时，悬停卡片里的点数/填充率也要跟着重算
+  if (hoveredSolid && L.ink) hoverInfo(hoveredSolid);
+}
+
+buildPanel();
+schedule("all");
+flush();
+orbit.target.set(0, 0, 0);
+
+addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); applyViewOffset(); });
+(function loop() { requestAnimationFrame(loop); flush(); updateHover(); orbit.update(); renderer.render(scene, camera); })();
+}
+})();
+</script>
+</body>
+</html>
