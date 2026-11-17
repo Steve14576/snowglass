@@ -8,13 +8,14 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#e6e6e6;
   font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
-#app{position:fixed;inset:0}
+:root{--bg:0 0% 0%;--panel:240 6% 6%;--text:0 0% 90%;--muted:240 3% 65%;--border:240 5% 20%;--accent:202 85% 68%;--warn:36 100% 67%;--danger:0 100% 73%;--radius:10px}
+#app{position:fixed;left:320px;right:300px;top:0;bottom:0;background:hsl(var(--bg))}
 canvas{display:block;touch-action:none}
 #loading{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:#000;
   color:#bbb;text-align:center;line-height:1.8;padding:24px;font-size:13px}
 .card{position:fixed;z-index:20;border:1px solid rgba(255,255,255,.18);border-radius:14px;
   background:rgba(10,10,12,.9);box-shadow:0 12px 42px rgba(0,0,0,.5);backdrop-filter:blur(10px)}
-#panel{top:10px;left:10px;width:330px;max-height:calc(100vh - 20px);overflow:auto;padding:12px 14px}
+#panel{top:0;left:0;bottom:0;width:310px;overflow:auto;padding:16px;border-radius:0;background:hsl(var(--panel))}
 #panel h1{margin:0 0 3px;font-size:16px}
 .sub{color:#999;font-size:10.5px;line-height:1.55;margin-bottom:6px}
 .sec{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
@@ -29,23 +30,33 @@ button.on{border-color:#fff;background:#3a3a3e;color:#fff}
 .row span{font-family:ui-monospace,Consolas,monospace;color:#fff}
 .row span.warn{color:#ffb454}
 input[type=range]{-webkit-appearance:none;width:100%;background:transparent;height:14px;margin:2px 0}
-input[type=range]:focus{outline:none}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid hsl(var(--accent));outline-offset:2px}
+button:disabled{opacity:.5;cursor:not-allowed}
+input[type=range]:focus-visible{outline:2px solid hsl(var(--accent))}
 input[type=range]::-webkit-slider-runnable-track{height:3px;background:#333;border-radius:2px}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;height:11px;width:11px;border-radius:50%;
   background:#fff;margin-top:-4px}
-#meter{top:10px;right:10px;width:300px;padding:11px 13px;font-size:11px;line-height:1.6}
+#meter{top:10px;right:10px;width:280px;max-height:52vh;overflow:auto;padding:11px 13px;font-size:11px;line-height:1.65}
 #meter h2,#hover h2{margin:0 0 6px;font-size:12.5px;color:#fff}
 .m-row{display:flex;justify-content:space-between}
 .m-row b{font-weight:500;color:#fff;font-family:ui-monospace,Consolas,monospace}
 .bar{height:7px;border-radius:4px;background:#222;overflow:hidden;display:flex;margin:5px 0 7px}
 .bar i{display:block;height:100%}
 .ok{color:#8fd19e}.bad{color:#ff7a7a}.mid{color:#ffb454}
-#hover{right:10px;bottom:10px;width:360px;max-height:46vh;overflow:auto;padding:11px 13px;font-size:10.5px;
+#hover{right:10px;bottom:10px;width:280px;max-height:43vh;overflow:auto;padding:11px 13px;font-size:10.5px;
   line-height:1.6;color:#bbb}
 #hover code{font-family:ui-monospace,Consolas,monospace;color:#ddd;font-size:10px}
 #badge{position:fixed;z-index:15;left:50%;bottom:12px;transform:translateX(-50%);padding:6px 14px;
   border-radius:20px;background:rgba(0,0,0,.72);border:1px solid rgba(255,180,84,.35);color:#ffb454;
   font-size:11px;pointer-events:none}
+#boxselect{position:fixed;z-index:12;border:1px solid hsl(var(--accent));background:hsla(var(--accent)/.12);pointer-events:none;display:none}
+#focus-view{position:fixed;right:310px;top:10px;z-index:25}.focus-view #panel,.focus-view #meter,.focus-view #hover{display:none}
+.focus-view #app{left:0;right:0;top:0}.focus-view #focus-view{right:10px}
+#selectioninfo,#notice{font-size:11px;line-height:1.6;color:hsl(var(--muted))}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:7px 0}.feature-grid input{width:100%}
+#ghostFields input{width:70px}code{overflow-wrap:anywhere}
+@media(max-width:950px){#panel{width:270px}#app{left:280px;right:0}#meter,#hover{display:none}}
+@media(max-width:600px){#panel{width:100%;height:38vh;bottom:auto}#app{left:0;top:38vh}#badge{left:50%;max-width:95%;width:max-content;font-size:10px}}
 </style>
 </head>
 <body>
@@ -53,13 +64,15 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;height:11px;widt
 <div id="app"></div>
 <section id="panel" class="card">
   <h1>snowglass · Qwen3.5-9B</h1>
-  <div class="sub">阶段 1 编辑器。结构与尺寸来自真实张量清单（<code>out/ir/qwen35_9b.topo.json</code>）；
-    块内雪花是模拟数据。所有长度单位为毫米。</div>
+  <div class="sub" id="configinfo">配置驱动架构 · 4.2 默认排布 · 1 单位＝1 mm。块内点仅为模拟，不作加工数据。</div>
+  <div id="notice" role="status" aria-live="polite"></div>
   <div id="controls"></div>
 </section>
 <section id="meter" class="card"></section>
 <section id="hover" class="card"><h2>悬停查看</h2>把鼠标移到任意块上，这里显示它来自哪些张量。</section>
-<div id="badge">块内雪花为模拟数据，不是真实权重（阶段 2 替换）</div>
+<div id="badge">模拟雪花 · 布局变形不重采样 · 尚未加载真实权重</div>
+<div id="boxselect"></div>
+<button id="focus-view" aria-pressed="false">专注视图 F</button>
 
 <script>
 (function () {
@@ -82,20 +95,18 @@ const msg = t => (document.getElementById("loadmsg").innerHTML = t);
 loadSeq(0, 0, () => {
   // 依次尝试几个相对位置：从 8123（根=prototype/）和从 8124（根=项目根）都能打开
   (async () => {
-    let last = null, tried = [];
-    for (const u of TOPO_URLS) {
-      tried.push(u);
-      try { const r = await fetch(u, { cache: "no-store" }); if (!r.ok) { last = r.status; continue; } return start(await r.json()); }
-      catch (e) { last = e.message; }
+    let last=null,tried=[],doc=null;
+    for(const u of TOPO_URLS){tried.push(u);
+      try{const r=await fetch(u,{cache:"no-store"});if(!r.ok){last=r.status;continue;}doc=await r.json();break;}
+      catch(e){last=e.message;}
     }
-    msg("读不到拓扑文件，试过这些路径：<br><code>" + tried.join("</code><br><code>") + "</code><br>最后的结果：" + last +
-      "<br><br>拓扑文件由 <code>scripts/build_topology_qwen35.py</code> 生成，应出现在 <code>prototype/data/qwen35_9b.topo.json</code>。" +
-      "<br>如果文件不在，先跑一次那个脚本。");
+    if(doc){try{start(doc);}catch(e){console.error(e);msg("编辑器初始化失败："+String(e.message).replace(/</g,"&lt;")+"<br>请检查配置或重新生成拓扑。此错误不是文件未找到。");}return;}
+    msg("读不到拓扑文件：<br><code>"+tried.join("</code><br><code>")+"</code><br>最后结果："+last+
+      "<br>请运行 scripts/build_topology_qwen35.py，生成 prototype/data/qwen35_9b.topo.json。");
   })();
 }, f => msg("three.js 加载失败：" + f));
 
 function start(topo) {
-document.getElementById("loading").remove();
 const THREE = window.THREE;
 
 /* ============================================================
@@ -103,35 +114,38 @@ const THREE = window.THREE;
    ============================================================ */
 const P = {
   // 外观：只影响屏幕
-  showFrames: true, showShells: true, showRod: true, showSnow: true,
-  labels: true, plate: true, colorByRole: false, autoRotate: false, displayPoints: 300000,
-  // 毛坯与机台
-  blank: [25, 25, 80], margin: 2.5, pitch: 0.08, dotUm: 60, warnDensity: 0.10, speed: 4500,
-  // 几何
-  vision: true, scale: 0.90, colOffset: 4.0, layerGap: 0.3, frameT: 0.3, shellT: 0.16, rodD: 1.2, compress: 1,
-  // 数据
-  frameGray: 0.15, shellGray: 0.10, rodGray: 0.30, gamma: 2.4, floor: 0.03,
+  showFrames: true, showShells: true, showSnow: true,
+  labels: true, plate: false, colorByRole: false, autoRotate: false, displayPoints: 300000,
+  pitch: 0.08, dotUm: 60, warnDensity: 0.10, speed: 4500,
+  vision: true, scale: 1, squash: 0.55, depth: 6.2, widthMode: "equal", layerGap: 0,
+  frameT: 0.04, shellT: 0.02, frameGray: 0.18, shellGray: 0.024,
+  compress: 1, gamma: 2.4, floor: 0.03, adaptive: true, seed: 20261118,
+  pointSize: 0.065, brightness: 1, grayDisplay: "brightness",
 };
-const BLANKS = [[25, 25, 80], [20, 20, 60], [30, 30, 100], [50, 50, 50], [50, 50, 80], [60, 60, 100]];
+const DEFAULTS = JSON.parse(JSON.stringify(P));
+const STORAGE_KEY = "snowglass.preweights.v2";
+let manuals = {}, assembly = new THREE.Matrix4(), ghosts = [{id:"ghost-1",name:"参照毛坯 1",shape:"box",dims:[25,80,25],radius:12.5,height:80,margin:2.5,matrix:new THREE.Matrix4().toArray()}];
+let primaryGhost = "ghost-1", selected = new Set(), gmMode = "off", boxMode = false, gesture = null, transformSession = null;
+let dirtySnow = false, mockGeneration = 0;
+const mockCache = new Map();
 
 /* ============================================================
    场景
    ============================================================ */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.5, 3000);
-camera.position.set(85, 25, 150);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 3000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.getElementById("app").appendChild(renderer.domElement);
+renderer.domElement.tabIndex=0;renderer.domElement.setAttribute("role","application");
+renderer.domElement.setAttribute("aria-label","三维模型：单击选择、Shift加选、W移动、E旋转、R缩放");
 
 function applyViewOffset() {
-  // 左侧面板 330px、右侧用量表 300px：画面中心向右挪两者差值的一半，让模型落在两张卡片中间
-  const w = innerWidth, h = innerHeight, shift = w > 900 ? (330 - 300) / 2 : 0;
-  camera.aspect = w / h;
-  if (shift !== 0) camera.setViewOffset(w, h, -shift, 0, w, h); else camera.clearViewOffset();
-  camera.updateProjectionMatrix();
+  const rect = document.getElementById("app").getBoundingClientRect();
+  renderer.setSize(rect.width, rect.height); camera.aspect = rect.width / Math.max(1, rect.height);
+  camera.clearViewOffset(); camera.updateProjectionMatrix();
 }
 applyViewOffset();
 
@@ -146,8 +160,10 @@ glass.add(model);
 const gumball = new THREE.TransformControls(camera, renderer.domElement);
 gumball.setSize(0.8);
 scene.add(gumball);
-gumball.addEventListener("dragging-changed", e => { orbit.enabled = !e.value; if (!e.value) onGumballEnd(); });
-gumball.addEventListener("objectChange", () => { checkContainment(); renderMeter(); renderGumballInfo(); });
+const pivot = new THREE.Object3D(); scene.add(pivot);
+gumball.addEventListener("mouseDown", beginTransform);
+gumball.addEventListener("dragging-changed", e => { orbit.enabled = !e.value && !boxMode; if (!e.value) onGumballEnd(); });
+gumball.addEventListener("objectChange", applyTransform);
 
 /* ============================================================
    工具
@@ -160,20 +176,17 @@ const pct = v => (v * 100).toFixed(v < 0.1 ? 1 : 0) + " %";
 const mm = v => v.toFixed(2) + " mm";
 const ROLE_HUE = { embed: 196, lm_head: 203, norm: 325, attn_q: 272, attn_k: 264, attn_v: 255, attn_o: 246,
   gdn_q: 220, gdn_k: 212, gdn_v: 204, gdn_gate: 190, gdn_ctrl: 175, gdn_out: 232, mlp_gate: 34, mlp_up: 24,
-  mlp_down: 14, vis_attn: 140, vis_mlp: 110, vis_patch: 160, vis_merger: 95, mtp: 0, residual_rod: 0 };
+  mlp_down: 14, vis_attn: 140, vis_mlp: 110, vis_patch: 160, vis_merger: 95, mtp: 0 };
 function roleColor(role, light) {
-  if (!P.colorByRole || ROLE_HUE[role] === undefined || role === "residual_rod") return new THREE.Color(light, light, light);
+  if (!P.colorByRole || ROLE_HUE[role] === undefined) return new THREE.Color(light, light, light);
   return new THREE.Color().setHSL(ROLE_HUE[role] / 360, 0.75, 0.25 + light * 0.45);
 }
 
-const blockById = {};
+const blockById = Object.create(null);
 topo.blocks.forEach(b => (blockById[b.id] = b));
-const layerSides = [];
-topo.blocks.forEach(b => {
-  if (b.layer === undefined) return;
-  (layerSides[b.layer] = layerSides[b.layer] || { attn: [], mlp: [] })[b.side].push(b);
-});
-layerSides.forEach(s => { s.attn.sort((a, b) => a.order - b.order); s.mlp.sort((a, b) => a.order - b.order); });
+if (topo.schema_version !== 2) throw new Error("拓扑版本过旧，请重新运行 build_topology_qwen35.py");
+const RECIPE = Object.freeze({mixerStart:-9.2,mixerWidth:7.8,mixerGap:.28,ffnStart:.4,ffnWidth:9.6,ffnGap:.32,
+  norm1X:-10.2,norm2X:-.55,normWidth:.65,headWidth:14,visionX:23.5});
 
 /* ============================================================
    布局：只在这里实现一次（decisions.md 阶段计划）
@@ -181,141 +194,75 @@ layerSides.forEach(s => { s.attn.sort((a, b) => a.order - b.order); s.mlp.sort((
    ============================================================ */
 let L = null;   // 当前布局结果
 
-function carveDims() { return [P.blank[0] - 2 * P.margin, P.blank[1] - 2 * P.margin, P.blank[2] - 2 * P.margin]; }
-
-function alloc(total, items, g) {
-  const normW = Math.max(0.35, 4 * P.pitch), minW = Math.max(0.3, 3 * P.pitch);
-  const n = items.length, widths = new Array(n).fill(0);
-  let rest = total - g * (n - 1), free = [];
-  items.forEach((b, k) => { if (b.role === "norm") { widths[k] = normW; rest -= normW; } else free.push(k); });
-  const ok = rest > free.length * minW;
-  for (let it = 0; it < 8 && free.length; it++) {
-    const sum = free.reduce((s, k) => s + Math.sqrt(items[k].params), 0);
-    free.forEach(k => (widths[k] = Math.max(rest, 0) * Math.sqrt(items[k].params) / sum));
-    const small = free.filter(k => widths[k] < minW);
-    if (!small.length) break;
-    small.forEach(k => { widths[k] = minW; rest -= minW; });
-    free = free.filter(k => !small.includes(k));
-  }
-  return { widths, ok };
+function groupWidths(total, items, gap) {
+  const available = total - gap * (items.length - 1);
+  const sum = items.reduce((n,b) => n + (b.params || 0), 0);
+  return items.map(b => available * (P.widthMode === "params" && sum ? b.params / sum : 1 / items.length));
+}
+function boundsOf(solids) {
+  const box = new THREE.Box3(); solids.forEach(s => s.corners.forEach(v => box.expandByPoint(v)));
+  return box;
 }
 
 function layout() {
-  const [cw, cd, ch] = carveDims();
-  const W = cw * P.scale, D = cd * P.scale, H = ch * P.scale, g = P.layerGap;
-  const solids = [], warns = [], labels = [];
-  const add = (id, kind, block, x0, x1, y0, y1, z0, z1) => solids.push({ id, kind, block, x0, x1, y0, y1, z0, z1,
-    role: block ? block.role : id === "mtp" ? "mtp" : "residual_rod" });
-
-  /* ---------------- 水平：norm 柱 | 主体 | 空隙 | 视觉塔 ----------------
-     照 real_config 的比例：主体 6.8 : 空隙 3.7 : 视觉塔 3.4（共 13.9），
-     映射到可雕区宽度；两条 norm 柱在主体外侧，内侧不再放东西。 */
-  const kX = W / 20;
-  const vW = P.vision ? 3.4 * kX : 0;
-  const vGap = P.vision ? 3.0 * kX : 0;
-  const normW = Math.max(0.34 * kX, 3 * P.pitch);
-  const normGap = 0.10 * kX;
-  const bodyW = Math.max(W - vW - vGap - 2 * (normW + normGap), W * 0.35);
-  const halfBody = bodyW / 2;
-  const xBody = -W / 2 + normW + normGap + halfBody;
-  const xVis = xBody + halfBody + normW + normGap + vGap + vW / 2;
-
-  /* ---------------- 垂直：头 | 间隙 | 塔体 | 脖子 | 头 ----------------
-     real_config 的总高 28.8 单位换算到可雕区高度：层距 0.6875->1.79mm，
-     头高 2.10->5.5mm，头离塔 2.05->2.6mm 空隙，脖子离塔顶 0.85->1.6mm。 */
-  const kH = H / 75;
-  const headH = 5.5 * kH, headGap = 2.6 * kH;
-  const neckH = 1.25 * kH, neckGap = 1.6 * kH;
-  const N = topo.model.n_layers;
-  const towerH = H - 2 * headH - 2 * headGap - neckGap - neckH;
-  const pitchY = towerH / N, bodyH = pitchY * 0.76;
-  if (bodyH < 4 * P.pitch) warns.push("层块高只有 " + mm(bodyH) + "，毛坯太矮或头太大");
-
-  /* ---------------- 深度：块不改深度，两列前后错开 ----------------
-     块深仍然是可雕区深度；错开量把总深度顶到可雕区之外，靠 gumball 缩放收。 */
-  const colOff = P.colOffset * kX;
-  const zAttn = -colOff / 2, zMlp = colOff / 2;
-  const Dh = Math.min(D * 0.92, W * 0.92), rh = P.rodD / 2;
-
-  let y = -H / 2;
-  const headW = bodyW * 0.78, headOff = bodyW * 0.12;
-  // Embedding：左偏，比层块大得多
-  add("embed", "block", blockById.embed,
-      xBody - headOff - headW / 2, xBody - headOff + headW / 2, y, y + headH, -Dh / 2, Dh / 2);
-  y += headH + headGap;
-  const yTower0 = y;
-
-  /* ---------------- 每一层：两侧都是从外往里排，norm 在最外侧 ---------------- */
-  for (let i = 0; i < N; i++) {
-    // 层中心一律从塔底 yTower0 算，不能用累加的 y（会一次算两遍，层越往上偏得越多）
-    const yc = yTower0 + pitchY * (i + 0.5), y0 = yc - bodyH / 2, y1 = yc + bodyH / 2;
-    ["attn", "mlp"].forEach(side => {
-      const items = layerSides[i][side], sign = side === "attn" ? -1 : 1;
-      const zc = side === "attn" ? zAttn : zMlp;
-      const r = alloc(halfBody - rh - g, items, g);
-      if (!r.ok) warns.push("L" + i + (side === "attn" ? " 注意力" : " MLP") + " 一侧放不下");
-      let cur = halfBody;                     // 从主体外边缘往中间排
-      items.forEach((b, k) => {
-        const w = r.widths[k], dz = b.role === "norm" ? D * 0.55 : D;
-        const xa = xBody + sign * cur, xb = xBody + sign * (cur - w);
-        add(b.id, "block", b, Math.min(xa, xb), Math.max(xa, xb), y0, y1, zc - dz / 2, zc + dz / 2);
-        cur -= w + g;
-      });
-    });
-    if (i === 0 || i === N - 1 || topo.layers[i].kind === "full")
-      labels.push({ text: "L" + i + (topo.layers[i].kind === "full" ? " 全" : ""), x: -W / 2 - 1.0, y: yc });
+  const solids = [], labels = [], warns = [], slots = [];
+  const c = topo.model, sq = P.squash, fix = c.n_layers > 45 ? .72 : 1;
+  const h = .72 * sq * fix, pitch = 1.17 * sq * fix, H = c.n_layers * pitch, depth = P.depth;
+  const global = assembly.clone().multiply(new THREE.Matrix4().makeScale(P.scale,P.scale,P.scale));
+  function add(b, center, dims, kind = "block") {
+    if (!b) return;
+    const size = dims.map((v,i) => Math.max(.0001, v - (i < 2 ? P.layerGap : 0)));
+    if (dims[0] <= P.layerGap || dims[1] <= P.layerGap) warns.push(b.id + " 间隙已大于块尺寸，仅保留最小数学厚度");
+    const anchor = global.clone().multiply(new THREE.Matrix4().makeTranslation(...center));
+    const matrix = anchor.clone().multiply(new THREE.Matrix4().fromArray(manuals[b.id] || new THREE.Matrix4().toArray()))
+      .multiply(new THREE.Matrix4().makeScale(...size));
+    const corners = []; for (const x of [-.5,.5]) for (const y of [-.5,.5]) for (const z of [-.5,.5])
+      corners.push(new THREE.Vector3(x,y,z).applyMatrix4(matrix));
+    const box = new THREE.Box3().setFromPoints(corners), lengths = [0,1,2].map(i => new THREE.Vector3().setFromMatrixColumn(matrix,i).length());
+    solids.push({id:b.id,kind,block:b,role:b.role,slot:{center: center.slice(),size:dims.slice()},size:lengths,
+      localSize:size,anchor,matrix,corners,box,center:new THREE.Vector3().setFromMatrixPosition(matrix),
+      x0:box.min.x,x1:box.max.x,y0:box.min.y,y1:box.max.y,z0:box.min.z,z1:box.max.z});
+    slots.push({corners:corners.map(v=>v.clone())});
   }
-  y = yTower0 + towerH;
-
-  /* ---------------- 脖子：居中、扁、离塔顶有距离 ---------------- */
-  const yNeck = y + neckGap;
-  add("final_norm", "block", blockById.final_norm,
-      xBody - bodyW * 0.17, xBody + bodyW * 0.17, yNeck, yNeck + neckH, -Dh * 0.22, Dh * 0.22);
-  y = yNeck + neckH + headGap;
-
-  /* ---------------- LM Head：右偏，与 embedding 左右对称 ---------------- */
-  const mtpW = Math.min(bodyW * 0.24, W * 0.14);
-  add("lm_head", "block", blockById.lm_head,
-      xBody + headOff - headW / 2, xBody + headOff + headW / 2, y, y + headH, -Dh / 2, Dh / 2);
-  add("mtp", "mtp", null, xBody + headOff + headW / 2 + g, xBody + headOff + headW / 2 + g + mtpW,
-      y + headH * 0.1, y + headH * 0.9, -Dh * 0.25, Dh * 0.25);
-
-  /* ---------------- 残差棒：留在两列之间的中线上，细 ---------------- */
-  add("residual_rod", "rod", null, xBody - rh, xBody + rh, -H / 2 + headH, yNeck, -rh, rh);
-  labels.push({ text: "Embedding", x: -W / 2 - 1.0, y: -H / 2 + headH / 2 },
-              { text: "LM Head", x: -W / 2 - 1.0, y: y + headH / 2 },
-              { text: "Final norm", x: -W / 2 - 1.0, y: yNeck + neckH / 2 });
-
-  /* ---------------- 视觉塔：独立一列，patch 在底往上流，上下都拉开 ---------------- */
-  if (P.vision) {
-    const nV = topo.model.vision_layers;
-    const vBot = yTower0 + towerH * 0.02, vTop = yTower0 + towerH * 0.62;
-    const patchH = headH * 0.5, projH = headH * 0.5, Dv = D * 0.7, halfV = (vW - g) / 2;
-    add("V.patch", "block", blockById["V.patch"], xVis - vW / 2, xVis + vW / 2,
-        vBot - patchH - g, vBot - g, -Dv / 2, Dv / 2);
-    add("V.merger", "block", blockById["V.merger"], xVis - vW / 2, xVis + vW / 2,
-        vTop + g, vTop + projH + g, -Dv / 2, Dv / 2);
-    const hV = (vTop - vBot - (nV - 1) * g) / nV;
-    if (hV < 3 * P.pitch) warns.push("视觉塔层高只有 " + mm(hV));
-    for (let j = 0; j < nV; j++) {
-      const y0 = vBot + j * (hV + g), tag = "V" + String(j).padStart(2, "0");
-      add(tag + ".attn", "block", blockById[tag + ".attn"], xVis - vW / 2, xVis - vW / 2 + halfV, y0, y0 + hV, -Dv / 2, Dv / 2);
-      add(tag + ".mlp", "block", blockById[tag + ".mlp"], xVis - vW / 2 + halfV + g, xVis + vW / 2, y0, y0 + hV, -Dv / 2, Dv / 2);
+  function group(items,start,width,gap,y) {
+    items.sort((a,b)=>a.order-b.order); let cursor = start;
+    groupWidths(width,items,gap).forEach((w,i)=>{add(items[i],[cursor+w/2,y,0],[w,h,depth]);cursor += w+gap;});
+  }
+  const headH = Math.max(1.4,2.5*sq);
+  add(blockById.embed,[0,-H/2-headH/2-1.2,0],[14,headH,depth*1.15]);
+  labels.push({text:"Token Embedding",x:0,y:-H/2-headH-2.2});
+  for (let i=0;i<c.n_layers;i++) {
+    const y = -H/2+(i+.5)*pitch, items = topo.blocks.filter(b=>b.layer===i);
+    add(items.find(b=>b.slot==="norm1"),[-10.2,y,0],[.65,h,depth*.6]);
+    group(items.filter(b=>b.slot==="mixer"),RECIPE.mixerStart,RECIPE.mixerWidth,RECIPE.mixerGap,y);
+    add(items.find(b=>b.slot==="norm2"),[-.55,y,0],[.65,h,depth*.6]);
+    group(items.filter(b=>b.slot==="ffn"),RECIPE.ffnStart,RECIPE.ffnWidth,RECIPE.ffnGap,y);
+    if(i%(c.n_layers>45?8:4)===0||i===c.n_layers-1||topo.layers[i].kind==="full")
+      labels.push({text:"L"+i+" · "+(topo.layers[i].kind==="full"?"Full":"GDN"),x:-14.1,y});
+  }
+  add(blockById.final_norm,[0,H/2+.85,0],[6.5,Math.max(.4,.6*sq),depth*.6]);
+  add(blockById.lm_head,[0,H/2+headH/2+1.8,0],[14,headH,depth*1.15]);
+  labels.push({text:"LM Head",x:0,y:H/2+headH+2.8});
+  if(topo.geometry_only.some(b=>b.id==="mtp")) add({id:"mtp",role:"mtp",label:"MTP · 权重未收录",tensors:[],params:0},
+    [10.5,H/2+headH/2+1.8,0],[4.2,headH*.85,depth*.9],"mtp");
+  if(P.vision&&c.vision_layers) {
+    const x=RECIPE.visionX, vp=Math.max(.65,H*.85/c.vision_layers), vh=vp*.62, span=c.vision_layers*vp;
+    add(blockById["V.patch"],[x,-span/2-1.4,0],[8.2,Math.max(1.1,1.7*sq),depth*.9]);
+    add(blockById["V.merger"],[x,span/2+1.5,0],[8.5,Math.max(1.2,1.9*sq),depth*.95]);
+    for(let i=0;i<c.vision_layers;i++) {
+      const y=-span/2+(i+.5)*vp, tag="V"+String(i).padStart(2,"0");
+      [["norm1",-4.5,.45,.5],["attn",-2.1,3.6,.85],["norm2",.3,.45,.5],["mlp",2.9,4,.85]].forEach(([slot,dx,w,d])=>
+        add(blockById[tag+"."+slot],[x+dx,y,0],[w,vh,depth*d]));
+      if(i%6===0||i===c.vision_layers-1) labels.push({text:"V"+i,x:x+6.4,y});
     }
-    labels.push({ text: "视觉 patch ↑", x: xVis + vW / 2 + 0.8, y: vBot - patchH, right: true },
-                { text: "视觉投影器", x: xVis + vW / 2 + 0.8, y: vTop + projH, right: true });
+    labels.push({text:"Vision Patch",x,y:-span/2-2.9},{text:"Merger / Projector",x,y:span/2+3.2});
   }
-
-  // 两两不重叠检查（接触不算重叠）
-  const eps = 1e-6, overlaps = [];
-  for (let a = 0; a < solids.length; a++) for (let b = a + 1; b < solids.length; b++) {
-    const s = solids[a], t = solids[b];
-    if (s.x0 < t.x1 - eps && t.x0 < s.x1 - eps && s.y0 < t.y1 - eps && t.y0 < s.y1 - eps && s.z0 < t.z1 - eps && t.z0 < s.z1 - eps)
-      overlaps.push([s.id, t.id]);
-  }
-  const bbox = solids.reduce((b, s) => [Math.min(b[0], s.x0), Math.max(b[1], s.x1), Math.min(b[2], s.y0),
-    Math.max(b[3], s.y1), Math.min(b[4], s.z0), Math.max(b[5], s.z1)], [1e9, -1e9, 1e9, -1e9, 1e9, -1e9]);
-  return { solids, warns, overlaps, labels, W, D, H, bbox };
+  // 槽位尺度独立于间隙；实际外沿可内缩，不推动邻居或改层节距。
+  const slotBounds = new THREE.Box3(); solids.forEach(s=>{
+    const slotM=s.anchor.clone().multiply(new THREE.Matrix4().makeScale(...s.slot.size));
+    for(const x of [-.5,.5])for(const y of [-.5,.5])for(const z of [-.5,.5])slotBounds.expandByPoint(new THREE.Vector3(x,y,z).applyMatrix4(slotM));
+  });
+  return {solids,labels,warns,H,pitch,bounds:boundsOf(solids),slotBounds,overlaps:[]};
 }
 
 /* ============================================================
@@ -325,9 +272,8 @@ function layout() {
 function prepare() {
   let clamped = 0;
   L.solids.forEach(s => {
-    const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0, mn = Math.min(lx, ly, lz);
-    if (s.kind === "rod") { s.tEff = 0; s.sEff = 0; s.interior = 0; return; }
-    const t = Math.min(P.frameT, mn / 2.2), sh = Math.min(P.shellT, mn / 2.2);
+    const [lx,ly,lz] = s.size, mn = Math.min(lx,ly,lz);
+    const t = Math.min(P.frameT, mn / 2), sh = Math.min(P.shellT, mn / 2);
     if (t < P.frameT - 1e-9 || sh < P.shellT - 1e-9) clamped++;
     s.tEff = t; s.sEff = sh;
     const inner = Math.max(lx - 2 * sh, 0) * Math.max(ly - 2 * sh, 0) * Math.max(lz - 2 * sh, 0);
@@ -342,49 +288,28 @@ function prepare() {
    这里只统计并报出来，不改任何生成逻辑，也没有可以“用完”的预算。
    ============================================================ */
 function report() {
-  const [cw, cd, ch] = carveDims(), p = P.pitch, perMM3 = 1 / (p * p * p);
-  const grid = Math.floor(cw / p) * Math.floor(cd / p) * Math.floor(ch / p);
-  let frame = 0, shell = 0, rod = 0, snow = 0, interior = 0, params = 0;
-  const fills = [], peaks = [];
-  L.solids.forEach(s => {
-    const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0;
-    if (s.kind === "rod") { rod += lx * ly * lz * P.rodGray * perMM3; return; }
-    const t = s.tEff, sh = s.sEff, inner = s.interior;
-    const fv = 4 * t * t * (lx + (ly - 2 * t) + (lz - 2 * t));
-    const sv = s.kind === "mtp" ? 0 : lx * ly * lz - inner;
-    const ov = s.kind === "mtp" ? 0 : (t * t - Math.pow(Math.max(t - sh, 0), 2)) * 4 * (lx + ly + lz - 4 * t);
-    frame += (fv - ov) * P.frameGray * perMM3;
-    shell += (sv - ov) * P.shellGray * perMM3;
-    frame += ov * Math.max(P.frameGray, P.shellGray) * perMM3;
-    if (s.kind === "block" && inner > 0) {
-      // 该块点数 = 内部体素数 x 该块灰度的均值（已经过 gamma / floor）。由数据决定，无上限。
-      const meanP = s.meanP == null ? 0 : s.meanP;
-      s.snowPoints = inner * perMM3 * meanP;
-      snow += s.snowPoints;
-      fills.push(meanP);
-      if (s.maxP != null) peaks.push(s.maxP);
-    }
-    interior += inner;
-    if (s.block) params += s.block.params;
+  let frame=0,shell=0,params=0,mockCount=0;
+  L.solids.forEach(s=>{
+    const [x,y,z]=s.size,t=s.tEff,sh=s.sEff;
+    const fv=4*t*t*(x+y+z-4*t), inner=[x-2*sh,y-2*sh,z-2*sh];
+    const sv=s.kind==="mtp"?0:x*y*z-inner.reduce((a,b)=>a*b,1);
+    const core=t>sh?4*(t-sh)**2*(inner.reduce((a,b)=>a+b,0)-4*(t-sh)):0;
+    const ov=s.kind==="mtp"?0:Math.max(0,fv-core);
+    const determinant=Math.abs(s.matrix.determinant())/(x*y*z);
+    frame+=((fv-ov)*P.frameGray+ov*Math.max(P.frameGray,P.shellGray))*determinant/P.pitch**3;
+    shell+=(sv-ov)*P.shellGray*determinant/P.pitch**3;
+    params+=s.block.params||0; mockCount+=mockCache.get(s.id)?.count||0;
   });
-  const sorted = a => a.slice().sort((x, y) => x - y);
-  const fs = sorted(fills), ps = sorted(peaks);
-  const q = (arr, t) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(t * arr.length))] : 0);
-  const total = frame + shell + rod + snow, cell = P.compress * p;
-  return { grid, frame, shell, rod, snow, total, interior, params, clamped: L.clamped || 0,
-    fillMedian: q(fs, 0.5), fillP95: q(fs, 0.95), fillMax: fs.length ? fs[fs.length - 1] : 0,
-    peakLocal: ps.length ? ps[ps.length - 1] : 0,
-    densAvg: interior > 0 ? snow / (interior * perMM3) : 0,
-    densCarve: grid > 0 ? total / grid : 0,
-    wpv: interior > 0 ? params / (interior / (cell * cell * cell)) : 0,
-    minutes: total / P.speed / 60 };
+  const g=ghosts.find(g=>g.id===primaryGhost), volume=g?ghostVolume(g):0;
+  return {frame,shell,total:frame+shell,minutes:(frame+shell)/P.speed/60,
+    params,mockCount,referenceOuterVolumeMM3:volume,clamped:L.clamped,realSnowLoaded:false};
 }
 
 /* ============================================================
    绘制：框（12 根方梁）与包络面（6 块薄板）都是有毫米厚度的实体
    ============================================================ */
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
-const MAXI = 520;
+const MAXI = topo.blocks.length + topo.geometry_only.length;
 const frameMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
 const shellMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide });
 const frames = new THREE.InstancedMesh(unitBox, frameMat, MAXI * 12);
@@ -393,45 +318,50 @@ const proxies = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial({ v
 [frames, shells, proxies].forEach(m => { m.frustumCulled = false; model.add(m); });
 for (let i = 0; i < MAXI * 12; i++) frames.setColorAt(i, new THREE.Color(1, 1, 1));
 for (let i = 0; i < MAXI * 6; i++) shells.setColorAt(i, new THREE.Color(1, 1, 1));
-const rodMesh = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }));
-model.add(rodMesh);
-const hl = new THREE.LineSegments(new THREE.EdgesGeometry(unitBox), new THREE.LineBasicMaterial({ color: 0x6fd3ff }));
+const unitEdges = new THREE.EdgesGeometry(unitBox);
+const selectionGroup = new THREE.Group(); scene.add(selectionGroup);
+const selectionMat = new THREE.LineBasicMaterial({color:0x65c6fa,transparent:true,opacity:.9});
+const warningMat = new THREE.LineBasicMaterial({color:0xff7070,transparent:true,opacity:.22});
+const hl = new THREE.LineSegments(unitEdges, new THREE.LineBasicMaterial({ color: 0x6fd3ff }));
 hl.visible = false; model.add(hl);
 
-const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3();
-function put(mesh, i, cx, cy, cz, sx, sy, sz) { mesh.setMatrixAt(i, M.compose(V.set(cx, cy, cz), Q, S.set(sx, sy, sz))); }
-
 function drawStructure() {
-  let fi = 0, si = 0, pi = 0;
-  L.solids.forEach((s, idx) => {
-    const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0;
-    const cx = (s.x0 + s.x1) / 2, cy = (s.y0 + s.y1) / 2, cz = (s.z0 + s.z1) / 2;
-    put(proxies, pi++, cx, cy, cz, lx, ly, lz);
-    s.pid = pi - 1;
-    if (s.kind === "rod") {
-      rodMesh.position.set(cx, cy, cz); rodMesh.scale.set(lx, ly, lz); return;
-    }
-    const t = s.tEff, sh = s.sEff, col = roleColor(s.role, 1);
-    // 框：沿 x 的 4 根取全长，沿 y、z 的各 4 根两端各让出 t，彼此不重叠
-    for (const yy of [s.y0 + t / 2, s.y1 - t / 2]) for (const zz of [s.z0 + t / 2, s.z1 - t / 2]) { frames.setColorAt(fi, col); put(frames, fi++, cx, yy, zz, lx, t, t); }
-    for (const xx of [s.x0 + t / 2, s.x1 - t / 2]) for (const zz of [s.z0 + t / 2, s.z1 - t / 2]) { frames.setColorAt(fi, col); put(frames, fi++, xx, cy, zz, t, ly - 2 * t, t); }
-    for (const xx of [s.x0 + t / 2, s.x1 - t / 2]) for (const yy of [s.y0 + t / 2, s.y1 - t / 2]) { frames.setColorAt(fi, col); put(frames, fi++, xx, yy, cz, t, t, lz - 2 * t); }
-    if (s.kind === "mtp") return;   // U9：MTP 只画框
-    // 包络面：上下两块取全尺寸，前后两块让出上下，左右两块再让出前后，彼此不重叠
-    for (const yy of [s.y0 + sh / 2, s.y1 - sh / 2]) { shells.setColorAt(si, col); put(shells, si++, cx, yy, cz, lx, sh, lz); }
-    for (const zz of [s.z0 + sh / 2, s.z1 - sh / 2]) { shells.setColorAt(si, col); put(shells, si++, cx, cy, zz, lx, ly - 2 * sh, sh); }
-    for (const xx of [s.x0 + sh / 2, s.x1 - sh / 2]) { shells.setColorAt(si, col); put(shells, si++, xx, cy, cz, sh, ly - 2 * sh, lz - 2 * sh); }
+  let fi=0,si=0;
+  L.solids.forEach((s,idx)=>{
+    const [x,y,z]=s.size,t=s.tEff,sh=s.sEff,col=roleColor(s.role,1);
+    proxies.setMatrixAt(idx,s.matrix);s.pid=idx;
+    const basis=s.matrix.clone().multiply(new THREE.Matrix4().makeScale(1/x,1/y,1/z));
+    const piece=(mesh,index,center,size)=>{
+      mesh.setMatrixAt(index,basis.clone().multiply(new THREE.Matrix4().makeTranslation(...center)).multiply(new THREE.Matrix4().makeScale(...size)));
+      mesh.setColorAt(index,col);
+    };
+    for(const yy of [-y/2+t/2,y/2-t/2])for(const zz of [-z/2+t/2,z/2-t/2])piece(frames,fi++,[0,yy,zz],[x,t,t]);
+    for(const xx of [-x/2+t/2,x/2-t/2])for(const zz of [-z/2+t/2,z/2-t/2])piece(frames,fi++,[xx,0,zz],[t,y-2*t,t]);
+    for(const xx of [-x/2+t/2,x/2-t/2])for(const yy of [-y/2+t/2,y/2-t/2])piece(frames,fi++,[xx,yy,0],[t,t,z-2*t]);
+    if(s.kind==="mtp")return;
+    for(const yy of [-y/2+sh/2,y/2-sh/2])piece(shells,si++,[0,yy,0],[x,sh,z]);
+    for(const zz of [-z/2+sh/2,z/2-sh/2])piece(shells,si++,[0,0,zz],[x,y-2*sh,sh]);
+    for(const xx of [-x/2+sh/2,x/2-sh/2])piece(shells,si++,[xx,0,0],[sh,y-2*sh,z-2*sh]);
   });
-  frames.count = fi; shells.count = si; proxies.count = pi;
-  [frames, shells, proxies].forEach(m => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
-  applyAppearance();
+  frames.count=fi;shells.count=si;proxies.count=L.solids.length;
+  [frames,shells,proxies].forEach(m=>{m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;});
+  drawSelection();applyAppearance();
+}
+function drawSelection() {
+  selectionGroup.clear();
+  L.solids.forEach(s=>{if(selected.has(s.id)||s.outside){
+    const line=new THREE.LineSegments(unitEdges,selected.has(s.id)?selectionMat:warningMat);
+    line.matrixAutoUpdate=false;line.matrix.copy(s.matrix);selectionGroup.add(line);
+  }});
 }
 
 function applyAppearance() {
   // 预览近似：灰度显示成不透明度（成品里是点的疏密）
-  frameMat.opacity = Math.min(1, P.frameGray * 2.2); frames.visible = P.showFrames && P.frameGray > 0;
-  shellMat.opacity = Math.min(1, P.shellGray * 0.9); shells.visible = P.showShells && P.shellGray > 0;
-  rodMesh.material.opacity = Math.min(1, P.rodGray * 1.4); rodMesh.visible = P.showRod && P.rodGray > 0;
+  frameMat.opacity=P.frameGray;frames.visible=P.showFrames&&P.frameGray>0;
+  shellMat.opacity=P.shellGray;shells.visible=P.showShells&&P.shellGray>0;
+  snowPts.material.uniforms.pointSize.value=P.pointSize;
+  snowPts.material.uniforms.brightness.value=P.brightness;
+  snowPts.material.uniforms.sizeMode.value=P.grayDisplay==="size"?1:0;
   snowPts.visible = P.showSnow;
   labelGroup.visible = P.labels; plate.visible = P.plate;
   orbit.autoRotate = P.autoRotate;
@@ -445,51 +375,40 @@ const sPos = new Float32Array(MAXP * 3), sCol = new Float32Array(MAXP * 3);
 const snowGeo = new THREE.BufferGeometry();
 snowGeo.setAttribute("position", new THREE.BufferAttribute(sPos, 3));
 snowGeo.setAttribute("color", new THREE.BufferAttribute(sCol, 3));
-const snowPts = new THREE.Points(snowGeo, new THREE.PointsMaterial({ size: 0.2, vertexColors: true, transparent: true,
-  opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+const snowPts = new THREE.Points(snowGeo, new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+  uniforms:{pointSize:{value:P.pointSize},brightness:{value:1},sizeMode:{value:0},pixelScale:{value:400}},
+  vertexShader:"attribute vec3 color; varying vec3 vColor; uniform float pointSize,pixelScale,sizeMode,brightness; void main(){vec4 mv=modelViewMatrix*vec4(position,1.0); float g=max(color.r,max(color.g,color.b)); vColor=color*brightness; gl_PointSize=max(.01,pointSize*pixelScale*(sizeMode>.5?.35+g:1.0)/max(.01,-mv.z)); gl_Position=projectionMatrix*mv;}",
+  fragmentShader:"varying vec3 vColor; void main(){gl_FragColor=vec4(vColor,.88);}"}));
 snowPts.frustumCulled = false; model.add(snowPts);
 
-function fakeField(s) {
-  // 注意力类：沿层高方向有若干亮暗带（q_proj 实测像这样）；MLP 与其余：接近均匀（down_proj 实测像这样）
-  const r = mulberry32(hash(s.id)), banded = /^(attn|gdn)_/.test(s.role) || s.role === "vis_attn";
-  const nb = 8 + Math.floor(r() * 16), bands = [];
-  for (let i = 0; i < nb; i++) bands.push(r());
-  const base = 0.30 + 0.25 * r(), amp = banded ? 0.45 : 0.08;
-  return (u, v, w, n) => Math.min(1, Math.max(0, base + amp * (bands[Math.floor(v * nb) % nb] - 0.5) + 0.18 * (n - 0.5)));
+let mockSeed=P.seed,mockCounts={};
+function ensureMock(s) {
+  if(mockCache.has(s.id)||s.kind==="mtp")return;
+  const count=mockCounts[s.id]??Math.round(Math.min(1800,Math.max(95,s.slot.size.reduce((a,b)=>a*b,1)*85)));
+  mockCounts[s.id]=count;
+  const r=mulberry32(hash(topo.model.name+"|"+s.id)^mockSeed),data=new Float32Array(count*4);
+  for(let i=0;i<count;i++){
+    for(let j=0;j<3;j++)data[i*4+j]=(r()-.5)*.96;
+    data[i*4+3]=r()<.16?.48+r()*.52:.05+r()*.14;
+  }
+  mockCache.set(s.id,{count,data});
 }
-
 function buildSnow() {
-  // 这里只决定“屏幕上画哪些点”。玻璃里到底有多少个点，由 report() 按数据算，两者不是一回事。
-  // 块与块之间的抽样比例由 内部体积 x 该块灰度均值 决定，也就是数据亮的地方屏幕上点也多。
-  const blocks = L.solids.filter(s => s.kind === "block" && s.interior > 0);
-  const pOf = g => P.floor + (1 - P.floor) * Math.pow(g, P.gamma);
-  const weights = blocks.map(s => {
-    const f = fakeField(s), r = mulberry32(hash(s.id) ^ 0x9e37);
-    let m = 0, mx = 0;
-    for (let k = 0; k < 64; k++) { const q = pOf(f(r(), r(), r(), r())); m += q; mx = Math.max(mx, q); }
-    s.meanP = m / 64; s.maxP = Math.min(1, mx * 1.1);
-    return s.interior * s.meanP;
-  });
-  const sum = weights.reduce((a, b) => a + b, 0) || 1;
-  let n = 0;
-  blocks.forEach((s, k) => {
-    const want = Math.max(16, Math.round(P.displayPoints * weights[k] / sum));
-    const f = fakeField(s), r = mulberry32(hash(s.id) + 7), sh = s.sEff;
-    const x0 = s.x0 + sh, y0 = s.y0 + sh, z0 = s.z0 + sh, lx = s.x1 - s.x0 - 2 * sh, ly = s.y1 - s.y0 - 2 * sh, lz = s.z1 - s.z0 - 2 * sh;
-    let got = 0;
-    // 块与块之间的疏密由 weights 决定；块内用 p / maxP 接受，保留块内的相对疏密，同时采够点
-    for (let tries = 0; tries < want * 12 && got < want && n < MAXP; tries++) {
-      const u = r(), v = r(), w = r(), g = f(u, v, w, r());
-      if (r() * s.maxP > pOf(g)) continue;
-      sPos[n * 3] = x0 + u * lx; sPos[n * 3 + 1] = y0 + v * ly; sPos[n * 3 + 2] = z0 + w * lz;
-      const c = roleColor(s.role, 0.35 + 0.65 * g);
-      sCol[n * 3] = c.r; sCol[n * 3 + 1] = c.g; sCol[n * 3 + 2] = c.b;
-      n++; got++;
+  // 固定块内坐标缓存。重布局只映射到新空间；显示点数是抽样上限，不生成“剩余配额”。
+  L.solids.forEach(ensureMock);
+  const total=L.solids.reduce((n,s)=>n+(mockCache.get(s.id)?.count||0),0),ratio=Math.min(1,P.displayPoints/Math.max(1,total));
+  let n=0;const v=new THREE.Vector3();
+  L.solids.forEach(s=>{
+    const m=mockCache.get(s.id);if(!m)return;
+    const count=Math.floor(m.count*ratio);
+    for(let j=0;j<count&&n<MAXP;j++){
+      const i=Math.floor(j*m.count/count),a=i*4,g=m.data[a+3];
+      v.set(m.data[a],m.data[a+1],m.data[a+2]).applyMatrix4(s.matrix);
+      sPos.set([v.x,v.y,v.z],n*3);const color=roleColor(s.role,g);sCol.set([color.r,color.g,color.b],n*3);n++;
     }
   });
-  snowGeo.setDrawRange(0, n);
-  snowGeo.attributes.position.needsUpdate = true; snowGeo.attributes.color.needsUpdate = true;
-  L.displayed = n;
+  snowGeo.setDrawRange(0,n);snowGeo.attributes.position.needsUpdate=true;snowGeo.attributes.color.needsUpdate=true;
+  L.displayed=n;snowPts.material.uniforms.pixelScale.value=renderer.domElement.height/2;
 }
 
 /* ============================================================
@@ -515,24 +434,64 @@ function disposeTree(o) {
   o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
 }
 
-function drawBlank() {
-  while (blankGroup.children.length) { const c = blankGroup.children[0]; blankGroup.remove(c); disposeTree(c); }
-  const [bw, bd, bh] = P.blank, [cw, cd, ch] = carveDims();
-  const e1 = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(bw, bh, bd)),
-    new THREE.LineBasicMaterial({ color: 0x8a8f98, transparent: true, opacity: 0.55 }));
-  const e2 = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(cw, ch, cd)),
-    new THREE.LineDashedMaterial({ color: 0x5a6070, dashSize: 1.2, gapSize: 0.8, transparent: true, opacity: 0.7 }));
-  e2.computeLineDistances();
-  blankGroup.add(e1, e2);
+let ghostHitObjects=[];
+function selectedGhost(){const key=[...selected].find(id=>id.startsWith("ghost:"));return ghosts.find(g=>g.id===key?.slice(6));}
+function ghostVolume(g){return (g.shape==="box"?g.dims.reduce((a,b)=>a*b,1):Math.PI*g.radius**2*g.height)*Math.abs(new THREE.Matrix4().fromArray(g.matrix).determinant());}
+function ghostInset(g){
+  const inv=new THREE.Matrix4().fromArray(g.matrix).invert(),a=inv.elements;
+  const rows=[0,1,2].map(i=>new THREE.Vector3(a[i],a[i+4],a[i+8]));
+  const A=rows[0].lengthSq(),C=rows[2].lengthSq(),B=rows[0].dot(rows[2]);
+  const radial=Math.sqrt((A+C+Math.sqrt((A-C)**2+4*B*B))/2);
+  return {inv,dims:g.dims.map((v,i)=>v-2*g.margin*rows[i].length()),radius:g.radius-g.margin*radial,
+    height:g.height-2*g.margin*rows[1].length(),approx:g.shape==="cylinder"&&(Math.abs(A-C)>1e-6||Math.abs(B)>1e-6)};
+}
+function drawBlank(){
+  while(blankGroup.children.length){const o=blankGroup.children[0];blankGroup.remove(o);disposeTree(o);}ghostHitObjects=[];
+  ghosts.forEach(g=>{
+    const inset=ghostInset(g),group=new THREE.Group();group.matrixAutoUpdate=false;group.matrix.fromArray(g.matrix);blankGroup.add(group);
+    function shape(inner){
+      if(g.shape==="box"){const dims=inner?inset.dims:g.dims;return dims.some(x=>x<=0)?null:new THREE.BoxGeometry(...dims);}
+      const r=inner?inset.radius:g.radius,h=inner?inset.height:g.height;
+      return r<=0||h<=0?null:new THREE.CylinderGeometry(r,r,h,48);
+    }
+    for(const inner of [false,true]){
+      const geo=shape(inner);if(!geo)continue;
+      const mat=inner?new THREE.LineDashedMaterial({color:0x777c85,transparent:true,opacity:.35,dashSize:.6,gapSize:.4}):
+        new THREE.LineBasicMaterial({color:selected.has("ghost:"+g.id)?0x65c6fa:0x9a9ea6,transparent:true,opacity:.45});
+      const line=new THREE.LineSegments(new THREE.EdgesGeometry(geo),mat);if(inner)line.computeLineDistances();group.add(line);
+      if(!inner){const hit=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({transparent:true,opacity:.002,depthWrite:false,side:THREE.DoubleSide}));
+        hit.userData.ghostId=g.id;group.add(hit);ghostHitObjects.push(hit);}else geo.dispose();
+    }
+  });
+}
+function newGhost(shape){
+  const id="ghost-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6);
+  ghosts.push({id,name:"参照 "+(ghosts.length+1),shape,dims:[25,40,25],radius:12.5,height:40,margin:2.5,matrix:new THREE.Matrix4().toArray()});
+  if(!primaryGhost)primaryGhost=id;selectIds(["ghost:"+id]);schedule("all");saveSoon();
+}
+function deleteGhost(){const g=selectedGhost();if(!g){notice("先选择一个幽灵毛坯");return;}
+  ghosts=ghosts.filter(x=>x.id!==g.id);if(primaryGhost===g.id)primaryGhost=ghosts[0]?.id||null;selectIds([]);schedule("all");saveSoon();}
+function renderGhostPanel(){
+  const list=document.getElementById("ghostList"),fields=document.getElementById("ghostFields");if(!list)return;
+  list.textContent="";list.add(new Option("选择毛坯…",""));ghosts.forEach(g=>list.add(new Option(g.name+(g.id===primaryGhost?" · 主参照":""),g.id)));
+  const g=selectedGhost();list.value=g?.id||"";fields.textContent="";if(!g)return;
+  const name=document.createElement("input");name.value=g.name;name.setAttribute("aria-label","毛坯名称");
+  name.onchange=()=>{g.name=name.value;renderGhostPanel();schedule("meter");saveSoon();};fields.append(name);
+  const controls=g.shape==="box"?[["宽",0,g.dims[0]],["高",1,g.dims[1]],["深",2,g.dims[2]]]:[["半径","radius",g.radius],["高","height",g.height]];
+  controls.push(["向内预留","margin",g.margin]);
+  controls.forEach(([label,key,value])=>{const lab=document.createElement("label"),inp=document.createElement("input");
+    inp.type="number";inp.step="any";inp.value=value;inp.setAttribute("aria-label",label);lab.textContent=label+" mm ";lab.append(inp);fields.append(lab);
+    inp.onchange=()=>{const v=Number(inp.value);if(!inp.value||!Number.isFinite(v)||(key==="margin"?v<0:v<=0)){inp.value=value;notice("请输入有效的正尺寸；预留量可为零");return;}
+      if(typeof key==="number")g.dims[key]=v;else g[key]=v;schedule("all");saveSoon();};
+  });
+  const note=document.createElement("p");note.className="sub";note.textContent="Alt 单击或下拉选择毛坯后用 gumball。圆柱非等比变形时内偏移采用保守近似，未作应力预测。";fields.append(note);
 }
 
-function drawLabels() {
-  while (labelGroup.children.length) { const c = labelGroup.children[0]; labelGroup.remove(c); disposeTree(c); }
-  L.labels.forEach(l => {
-    const sp = textSprite(l.text, 1.1);
-    sp.center.set(l.right ? 0 : 1, 0.5);
-    sp.position.set(l.x, l.y, 0); labelGroup.add(sp);
-  });
+function drawLabels(){
+  while(labelGroup.children.length){const o=labelGroup.children[0];labelGroup.remove(o);disposeTree(o);}
+  const global=assembly.clone().multiply(new THREE.Matrix4().makeScale(P.scale,P.scale,P.scale));
+  L.labels.forEach(l=>{const sp=textSprite(l.text,.55*P.scale);sp.center.set(l.text.startsWith("L")?1:.5,.5);
+    sp.position.set(l.x,l.y,0).applyMatrix4(global);labelGroup.add(sp);});
 }
 
 function drawPlate() {
@@ -545,15 +504,15 @@ function drawPlate() {
   const m = topo.model;
   ["Qwen3.5-9B · " + m.precision_label,
    "text layers  : " + m.n_layers + "  (3 linear + 1 full) x 8",
-   "hidden / ffn : 4096 / 12288",
+   "hidden / ffn : " + m.hidden + " / " + m.ffn,
    "params text  : " + (m.params_text / 1e9).toFixed(3) + " B",
    "params vision: " + (m.params_vision / 1e9).toFixed(3) + " B",
    "blocks       : " + topo.blocks.length,
-   "blank        : " + P.blank.join(" x ") + " mm",
+   "config sha   : " + topo.config.sha256.slice(0,16),
    "snow         : SIMULATED (stage 1)"].forEach((t, i) => ctx.fillText(t, 26, 52 + i * 46));
   const tex = new THREE.CanvasTexture(c);
   plate = new THREE.Mesh(new THREE.PlaneGeometry(27, 12.6), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
-  plate.position.set(-P.blank[0] / 2 - 19, P.blank[2] / 2 - 8, 0);
+  plate.scale.set(.3,.3,.3);plate.position.set(-20,L.H/2+5,-5);
   plate.visible = P.plate;
   scene.add(plate);
 }
@@ -562,213 +521,232 @@ function drawPlate() {
    包含检查（经过 gumball 变换后，所有实体必须在可雕区内）
    ============================================================ */
 let outside = 0;
-function checkContainment() {
-  if (!L) return;
-  model.updateMatrixWorld(true);
-  const [cw, cd, ch] = carveDims(), m = model.matrix, v = new THREE.Vector3(), e = 1e-6;
-  outside = 0;
-  L.solids.forEach(s => {
-    let out = false;
-    for (const x of [s.x0, s.x1]) for (const y of [s.y0, s.y1]) for (const z of [s.z0, s.z1]) {
-      v.set(x, y, z).applyMatrix4(m);
-      if (Math.abs(v.x) > cw / 2 + e || Math.abs(v.y) > ch / 2 + e || Math.abs(v.z) > cd / 2 + e) out = true;
-    }
-    s.outside = out; if (out) outside++;
-  });
+function overlapsExact(a,b){
+  if(a.box.max.x<=b.box.min.x+1e-6||b.box.max.x<=a.box.min.x+1e-6||a.box.max.y<=b.box.min.y+1e-6||b.box.max.y<=a.box.min.y+1e-6||a.box.max.z<=b.box.min.z+1e-6||b.box.max.z<=a.box.min.z+1e-6)return false;
+  const edges=s=>[0,1,2].map(i=>new THREE.Vector3().setFromMatrixColumn(s.matrix,i));
+  const A=edges(a),B=edges(b),normals=e=>[e[0].clone().cross(e[1]),e[1].clone().cross(e[2]),e[2].clone().cross(e[0])];
+  const axes=[...normals(A),...normals(B),...A.flatMap(x=>B.map(y=>x.clone().cross(y)))];
+  for(const axis of axes){if(axis.lengthSq()<1e-15)continue;axis.normalize();
+    const p=a.corners.map(v=>v.dot(axis)),q=b.corners.map(v=>v.dot(axis));
+    if(Math.max(...p)<=Math.min(...q)+1e-6||Math.max(...q)<=Math.min(...p)+1e-6)return false;
+  }return true;
+}
+function checkContainment(){
+  if(!L)return;outside=0;L.solids.forEach(s=>s.outside=false);
+  ghosts.forEach(g=>{
+    const inset=ghostInset(g);g.invalidInset=g.shape==="box"?inset.dims.some(v=>v<=0):inset.radius<=0||inset.height<=0;g.outsideCount=0;
+    L.solids.forEach(s=>{const out=g.invalidInset||s.corners.some(c=>{
+      const v=c.clone().applyMatrix4(inset.inv);
+      return g.shape==="box"?v.toArray().some((x,i)=>Math.abs(x)>inset.dims[i]/2+1e-6):Math.hypot(v.x,v.z)>inset.radius+1e-6||Math.abs(v.y)>inset.height/2+1e-6;
+    });if(out){g.outsideCount++;s.outside=true;}});
+  });outside=L.solids.filter(s=>s.outside).length;
+  L.overlaps=[];for(let i=0;i<L.solids.length;i++)for(let j=i+1;j<L.solids.length;j++)
+    if(overlapsExact(L.solids[i],L.solids[j]))L.overlaps.push([L.solids[i].id,L.solids[j].id]);
 }
 
 /* ============================================================
    面板
    ============================================================ */
 const SECTIONS = [
-  ["视图 · 只影响屏幕，不进文件", [
-    ["toggles", [["showFrames", "框"], ["showShells", "包络面"], ["showRod", "残差棒"], ["showSnow", "雪花"],
-                 ["labels", "标签"], ["plate", "铭牌"], ["colorByRole", "按功能着色", "struct"], ["autoRotate", "自转"]]],
-    ["slider", "displayPoints", "显示的雪花点数", 50000, 800000, 10000, v => (v / 1e4).toFixed(0) + " 万", "snow"],
-    ["note", "显示开关只影响屏幕。要从成品里去掉某种结构件，把它的灰度调到 0。"],
-  ]],
-  ["毛坯与机台", [
-    ["blank"],
-    ["slider", "margin", "安全边距", 1, 5, 0.1, mm, "all"],
-    ["slider", "pitch", "加工点距", 0.05, 0.2, 0.005, v => v.toFixed(3) + " mm", "all"],
-    ["slider", "dotUm", "点径", 40, 80, 1, v => v + " μm", "meter"],
-    ["slider", "warnDensity", "密度告警参考线（仅报警）", 0.02, 0.5, 0.01, pct, "meter"],
-    ["note", "这条线只用来把后验数字标红，不参与生成，也不会从别的块那里夺走点。"],
-    ["slider", "speed", "打点速度", 1000, 20000, 500, v => v + " 点/秒", "meter"],
-  ]],
-  ["结构件 · 几何与灰度（进文件）", [
-    ["toggles", [["vision", "视觉塔进作品"]], "all"],
-    ["slider", "frameT", "框的粗细", 0.1, 1.0, 0.01, mm, "struct", () => P.frameT < 2 * P.pitch],
-    ["slider", "frameGray", "框的灰度（= 透明度）", 0, 1, 0.01, pct, "struct"],
-    ["slider", "shellT", "包络面厚度", 0.05, 0.5, 0.01, mm, "struct", () => P.shellT < 2 * P.pitch],
-    ["slider", "shellGray", "包络面灰度（= 透明度）", 0, 1, 0.01, pct, "struct"],
-    ["slider", "rodD", "残差棒粗细", 0.4, 3, 0.05, mm, "all"],
-    ["slider", "rodGray", "残差棒灰度", 0, 1, 0.01, pct, "struct"],
-    ["slider", "layerGap", "块间隙", 0.1, 1.0, 0.01, mm, "all"],
-    ["slider", "colOffset", "两列前后错开（深度）", 0, 10, 0.1, mm, "all"],
-    ["slider", "scale", "模型缩放", 0.3, 1.2, 0.005, v => v.toFixed(3) + " ×", "all"],
-    ["fit"],
-  ]],
-  ["雪花 · 数据（进文件）", [
-    ["slider", "compress", "降采样压缩倍数", 1, 8, 0.5, v => v + " × 点距", "meter"],
-    ["slider", "gamma", "γ（对比度）", 1, 4, 0.05, v => v.toFixed(2), "snow"],
-    ["slider", "floor", "底噪地板", 0, 0.1, 0.002, pct, "snow"],
-    ["note", "块内雪花现在是模拟数据：注意力类块有亮暗带，MLP 接近均匀，只用来看 γ 与底噪地板的作用。"],
-  ]],
-  ["Gumball · 移动 / 旋转 / 缩放", [["gumball"]]],
-  ["导出", [["export"]]],
+  ["工程",[["project"]]],
+  ["默认排布 · 4.2 配方",[
+    ["toggles",[["vision","视觉塔"]],"all"],
+    ["choice","widthMode","块宽模式",[["equal","同组等宽（默认）"],["params","按参数规模"]],"all"],
+    ["slider","squash","纵向压缩 / 胖瘦",.25,1.2,.05,v=>v.toFixed(2),"all"],
+    ["slider","depth","主体深度",.5,30,.1,mm,"all"],
+    ["slider","scale","整体缩放",.05,5,.01,v=>v.toFixed(2)+" ×","all"],
+    ["slider","layerGap","块间隙 · 相对默认增减",-.3,.3,.005,mm,"all"],
+    ["note","间隙只收缩/膨胀各块 x/y，不推动槽位中心或改变层节距。毛坯不驱动模型大小。"]]],
+  ["选择与 Gumball",[["selection"],["gumball"]]],
+  ["包络结构 · 实体与灰度",[
+    ["slider","frameT","框的粗细",.005,1,.005,mm,"struct"],
+    ["slider","frameGray","框的灰度 / 透明度",0,1,.005,pct,"struct"],
+    ["slider","shellT","包络面厚度",.005,.5,.005,mm,"struct"],
+    ["slider","shellGray","包络面灰度 / 透明度",0,1,.001,pct,"struct"],
+    ["note","薄框与薄面是匹配 4.2 的视图初始值，不是工艺安全推荐；毫米厚度不随块缩放。"]]],
+  ["视图 · 仅影响屏幕",[
+    ["views"],["toggles",[["showFrames","框"],["showShells","面"],["showSnow","雪花"],["labels","标签"],["plate","铭牌"],["colorByRole","功能着色","struct"],["autoRotate","自转"]]],
+    ["slider","displayPoints","屏幕抽样上限",10000,800000,10000,v=>fmtInt(v),"snow"],
+    ["slider","pointSize","显示点大小",.015,.2,.005,mm,"view"],
+    ["slider","brightness","显示亮度",.1,2,.05,v=>v.toFixed(2),"view"],
+    ["choice","grayDisplay","灰度显示",[["brightness","点亮度"],["size","点大小 + 亮度"]],"view"]]],
+  ["幽灵毛坯 · 只作参照",[["ghosts"]]],
+  ["雪花参数 · 待一级切片",[
+    ["toggles",[["adaptive","一级切片自适应"]],"data"],
+    ["slider","compress","合并压缩力度",1,8,.5,v=>v.toFixed(1)+" ×","data"],
+    ["slider","gamma","γ（对比度）",1,4,.05,v=>v.toFixed(2),"data"],
+    ["slider","floor","底噪地板",0,.1,.002,pct,"data"],
+    ["note","此处先保存待切片参数，不改变固定模拟样本，不读取真实权重。一级切片尚未接入。"]]],
+  ["机台与后验参考",[
+    ["slider","pitch","加工点距",.05,.2,.005,v=>v.toFixed(3)+" mm","data"],
+    ["slider","dotUm","点径",40,80,1,v=>v+" μm","meter"],
+    ["slider","speed","打点速度",1000,20000,500,v=>v+" 点/秒","meter"],
+    ["slider","warnDensity","密度告警参考线（未核实）",.02,.5,.01,pct,"meter"],
+    ["note","参考值只用于后验核对；没有点数配额，真实密度待一级切片后统计。"]]],
+  ["导出",[["export"]]]
 ];
 
-const sliders = {};
+const sliders={},toggles={},choices={};
+function button(text,fn){const b=document.createElement("button");b.textContent=text;b.onclick=fn;return b;}
+function notice(text){document.getElementById("notice").textContent=text;}
+function changeParam(key,value,level="all"){
+  if(typeof DEFAULTS[key]==="number"&&!Number.isFinite(value))return;
+  P[key]=value;if(level==="data")dirtySnow=true;
+  schedule(level==="data"?"meter":level);saveSoon();
+}
 function buildPanel() {
-  const root = document.getElementById("controls");
-  SECTIONS.forEach(([title, items]) => {
-    const sec = document.createElement("div"); sec.className = "sec";
-    sec.innerHTML = '<div class="sec-t">' + title + "</div>";
-    items.forEach(it => {
-      if (it[0] === "note") { const d = document.createElement("div"); d.className = "sub"; d.style.marginTop = "6px"; d.textContent = it[1]; sec.appendChild(d); }
-      if (it[0] === "toggles") {
-        const d = document.createElement("div"); d.className = "btns";
-        it[1].forEach(([key, text, lvl]) => {
-          const b = document.createElement("button"); b.textContent = text; b.classList.toggle("on", P[key]);
-          b.onclick = () => { P[key] = !P[key]; b.classList.toggle("on", P[key]); schedule(lvl || it[2] || "view"); };
-          d.appendChild(b);
-        });
-        sec.appendChild(d);
+  const root=document.getElementById("controls");root.textContent="";
+  SECTIONS.forEach(([title,items],idx)=>{
+    const sec=document.createElement("details");sec.className="sec";sec.open=idx<3;
+    const head=document.createElement("summary");head.textContent=title;sec.append(head);
+    items.forEach(it=>{
+      const type=it[0];
+      if(type==="note"){const d=document.createElement("p");d.className="sub";d.textContent=it[1];sec.append(d);}
+      if(type==="slider"){
+        const [,key,label,min,max,step,fmt,level]=it,row=document.createElement("div");row.className="row";
+        const lab=document.createElement("label"),out=document.createElement("span"),inp=document.createElement("input");
+        inp.type="range";inp.id="param-"+key;lab.htmlFor=inp.id;lab.textContent=label;
+        inp.min=min;inp.max=max;inp.step=step;inp.value=P[key];row.append(lab,out);
+        const show=()=>{out.textContent=fmt(P[key]);inp.value=P[key];};
+        inp.oninput=()=>changeParam(key,Number(inp.value),level);sliders[key]={inp,show};show();sec.append(row,inp);
       }
-      if (it[0] === "slider") {
-        const [, key, label, min, max, step, fmt, level, warnFn] = it;
-        const row = document.createElement("div"); row.className = "row";
-        row.innerHTML = "<label>" + label + "</label><span></span>";
-        const inp = document.createElement("input"); inp.type = "range"; inp.min = min; inp.max = max; inp.step = step; inp.value = P[key];
-        const out = row.querySelector("span");
-        const show = () => { out.textContent = fmt(P[key]); out.classList.toggle("warn", !!(warnFn && warnFn())); };
-        inp.oninput = () => { P[key] = parseFloat(inp.value); show(); schedule(level); };
-        sliders[key] = { inp, show }; show();
-        sec.appendChild(row); sec.appendChild(inp);
+      if(type==="toggles"){
+        const d=document.createElement("div");d.className="btns";
+        it[1].forEach(([key,text,level])=>{const b=button(text,()=>changeParam(key,!P[key],level||it[2]||"view"));
+          toggles[key]=b;d.append(b);});sec.append(d);
       }
-      if (it[0] === "blank") {
-        const d = document.createElement("div"); d.className = "btns"; d.style.alignItems = "center";
-        const sel = document.createElement("select");
-        BLANKS.forEach(b => { const o = document.createElement("option"); o.value = b.join(","); o.textContent = b.join(" × ") + " mm"; sel.appendChild(o); });
-        const o = document.createElement("option"); o.value = "custom"; o.textContent = "自定义"; sel.appendChild(o);
-        const nums = [0, 1, 2].map(i => { const n = document.createElement("input"); n.type = "number"; n.min = 5; n.max = 300; n.step = 0.5; n.value = P.blank[i];
-          n.onchange = () => { P.blank[i] = parseFloat(n.value); sel.value = "custom"; schedule("all"); }; return n; });
-        sel.onchange = () => { if (sel.value === "custom") return; P.blank = sel.value.split(",").map(Number); nums.forEach((n, i) => (n.value = P.blank[i])); schedule("all"); };
-        d.appendChild(sel);
-        ["宽", "深", "高"].forEach((t, i) => { const s = document.createElement("span"); s.style.fontSize = "10px"; s.style.color = "#888"; s.textContent = t; d.appendChild(s); d.appendChild(nums[i]); });
-        sec.appendChild(d);
+      if(type==="choice"){
+        const [,key,label,values,level]=it,lab=document.createElement("label"),sel=document.createElement("select");
+        lab.htmlFor="param-"+key;lab.textContent=label;sel.id=lab.htmlFor;sel.setAttribute("aria-label",label);
+        values.forEach(([value,text])=>sel.add(new Option(text,value)));sel.value=P[key];sel.onchange=()=>changeParam(key,sel.value,level);
+        choices[key]=sel;sec.append(lab,sel);
       }
-      if (it[0] === "fit") {
-        const d = document.createElement("div"); d.className = "btns";
-        const b = document.createElement("button"); b.textContent = "按可雕区适配缩放";
-        b.onclick = () => { fitToCarve(); };
-        d.appendChild(b); sec.appendChild(d);
+      if(type==="project"){
+        const d=document.createElement("div");d.className="btns";
+        const file=document.createElement("input");file.type="file";file.accept=".json";file.hidden=true;
+        file.onchange=async()=>{try{const doc=JSON.parse(await file.files[0].text());restoreProject(doc);notice("工程已打开");}catch(e){notice("打开失败："+e.message);}file.value="";};
+        d.append(button("保存工程",saveProject),button("打开工程",()=>file.click()),button("恢复默认工程",resetProject),file);sec.append(d);
       }
-      if (it[0] === "gumball") {
-        const d = document.createElement("div"); d.className = "btns";
-        [["off", "关"], ["translate", "移动 W"], ["rotate", "旋转 E"], ["scale", "缩放 R"]].forEach(([m, t]) => {
-          const b = document.createElement("button"); b.textContent = t; b.dataset.gm = m; b.onclick = () => setGumball(m); d.appendChild(b);
-        });
-        const r = document.createElement("button"); r.textContent = "重置变换";
-        r.onclick = () => { model.position.set(0, 0, 0); model.rotation.set(0, 0, 0); model.scale.set(1, 1, 1); P.scale = 1; sliders.scale.inp.value = 1; sliders.scale.show(); schedule("all"); };
-        d.appendChild(r);
-        const info = document.createElement("div"); info.id = "gminfo"; info.className = "sub"; info.style.marginTop = "6px";
-        sec.appendChild(d); sec.appendChild(info);
+      if(type==="views"){
+        const d=document.createElement("div");d.className="btns";
+        d.append(button("全景",()=>fitView()),button("正面",()=>fitView(true)),button("选中对象",()=>fitView(false,true)));sec.append(d);
       }
-      if (it[0] === "export") {
-        const d = document.createElement("div"); d.className = "btns";
-        const b = document.createElement("button"); b.textContent = "导出 layout.json（参数 + 布局 + 检查结果）"; b.onclick = exportLayout;
-        d.appendChild(b); sec.appendChild(d);
+      if(type==="selection"){
+        const d=document.createElement("div");d.className="btns";
+        const boxButton=button("框选",()=>{boxMode=!boxMode;orbit.enabled=!boxMode;gumball.enabled=!boxMode;boxButton.classList.toggle("on",boxMode);boxButton.setAttribute("aria-pressed",String(boxMode));renderGumballInfo();});boxButton.id="box-select-toggle";boxButton.setAttribute("aria-pressed","false");
+                d.append(button("全选",()=>selectIds(L.solids.map(s=>s.id))),button("清空",()=>selectIds([])),boxButton);
+        const layer=document.createElement("input");layer.type="number";layer.min=0;layer.max=topo.model.n_layers-1;layer.value=0;layer.id="select-layer";layer.setAttribute("aria-label","选择文本层号");
+        d.append(layer,button("按层选",()=>selectIds(L.solids.filter(s=>s.block.layer===Number(layer.value)).map(s=>s.id))));
+        const col=document.createElement("select");col.id="select-column";col.setAttribute("aria-label","选择功能列");
+        [["mixer","序列混合"],["ffn","FFN"],["norm1","Norm 1"],["norm2","Norm 2"],["vision","视觉塔"]].forEach(([v,t])=>col.add(new Option(t,v)));
+        d.append(col,button("按列选",()=>selectIds(L.solids.filter(s=>col.value==="vision"?s.id.startsWith("V"):s.block.slot===col.value).map(s=>s.id))),button("重置选中",resetSelected));
+        const info=document.createElement("div");info.id="selectioninfo";sec.append(d,info);
+        const sizes=document.createElement("div");sizes.id="selectionSizes";sizes.className="feature-grid";sec.append(sizes);
       }
-    });
-    root.appendChild(sec);
+      if(type==="gumball"){
+        const d=document.createElement("div");d.className="btns";
+        [["off","关闭 Q"],["translate","移动 W"],["rotate","旋转 E"],["scale","缩放 R"]].forEach(([mode,text])=>{const b=button(text,()=>setGumball(mode));b.dataset.gm=mode;d.append(b);});
+        const info=document.createElement("div");info.id="gminfo";info.className="sub";sec.append(d,info);
+        const note=document.createElement("p");note.className="sub";note.textContent="单击选块，Shift 加选。框选模式拖动矩形。Alt 单击选毛坯；选中毛坯也能使用 gumball。";sec.append(note);
+      }
+      if(type==="ghosts"){
+        const d=document.createElement("div");d.className="btns";
+        d.append(button("新建长方体",()=>newGhost("box")),button("新建圆柱",()=>newGhost("cylinder")),button("删除选中毛坯",deleteGhost));
+        const list=document.createElement("select");list.id="ghostList";list.setAttribute("aria-label","幽灵毛坯");list.onchange=()=>selectIds(list.value?["ghost:"+list.value]:[]);
+        const fields=document.createElement("div");fields.id="ghostFields";
+        sec.append(d,list,button("设为主参照",()=>{const g=selectedGhost();if(g){primaryGhost=g.id;schedule("meter");saveSoon();}}),fields);
+      }
+      if(type==="export"){
+        sec.append(button("导出 layout.json",exportLayout));
+        for(const text of ["一级切片 · 尚未接入","二级 OBJ / STL · 尚未接入"]){const b=document.createElement("button");b.textContent=text;b.disabled=true;b.title="本轮仅布局，不读取真实权重或输出加工文件";sec.append(b);}
+      }
+    });root.append(sec);
   });
-  setGumball("off");
+  syncControls();renderGhostPanel();
+}
+function syncControls(){
+  Object.values(sliders).forEach(s=>s.show());Object.entries(choices).forEach(([k,s])=>s.value=P[k]);
+  Object.entries(toggles).forEach(([k,b])=>{b.classList.toggle("on",P[k]);b.setAttribute("aria-pressed",String(P[k]));});
 }
 
-function setGumball(mode) {
-  document.querySelectorAll("[data-gm]").forEach(b => b.classList.toggle("on", b.dataset.gm === mode));
-  if (mode === "off") { gumball.detach(); } else { gumball.attach(model); gumball.setMode(mode); }
-  renderGumballInfo();
+function selectIds(ids,add=false){
+  const valid=id=>id.startsWith("ghost:")?ghosts.some(g=>"ghost:"+g.id===id):L.solids.some(s=>s.id===id);
+  if(!add||ids.some(id=>id.startsWith("ghost:"))||selectedGhost())selected.clear();
+  ids.filter(valid).forEach(id=>{if(add&&selected.has(id))selected.delete(id);else selected.add(id);});
+  syncPivot();drawSelection();drawBlank();renderGumballInfo();renderGhostPanel();
 }
-addEventListener("keydown", e => {
-  if (e.target.tagName === "INPUT") return;
-  const k = e.key.toLowerCase();
-  if (k === "w") setGumball("translate"); if (k === "e") setGumball("rotate"); if (k === "r") setGumball("scale"); if (k === "q") setGumball("off");
+function selectionBounds(){const g=selectedGhost();if(g){const G=new THREE.Matrix4().fromArray(g.matrix),r=g.radius;
+  const dims=g.shape==="box"?g.dims:[2*r,g.height,2*r];return new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(),new THREE.Vector3(...dims)).applyMatrix4(G);}
+  return boundsOf(L.solids.filter(s=>selected.has(s.id)));}
+function syncPivot(){
+  if(transformSession)return;
+  if(!selected.size||gmMode==="off"){gumball.detach();return;}
+  pivot.position.copy(selectionBounds().getCenter(new THREE.Vector3()));pivot.quaternion.identity();pivot.scale.set(1,1,1);pivot.updateMatrixWorld(true);
+  gumball.attach(pivot);gumball.setMode(gmMode);
+}
+function setGumball(mode){gmMode=mode;document.querySelectorAll("[data-gm]").forEach(b=>{b.classList.toggle("on",b.dataset.gm===mode);b.setAttribute("aria-pressed",String(b.dataset.gm===mode));});syncPivot();renderGumballInfo();}
+function beginTransform(){pivot.updateMatrixWorld(true);const g=selectedGhost();transformSession={pivot:pivot.matrixWorld.clone(),
+  solids:L.solids.filter(s=>selected.has(s.id)).map(s=>({id:s.id,world:s.matrix.clone()})),ghost:g?{id:g.id,world:new THREE.Matrix4().fromArray(g.matrix)}:null};}
+function applyTransform(){
+  if(!transformSession)return;pivot.updateMatrixWorld(true);
+  const delta=pivot.matrixWorld.clone().multiply(transformSession.pivot.clone().invert());
+  if(Math.abs(delta.determinant())<1e-12)return;
+  if(transformSession.ghost){const g=ghosts.find(g=>g.id===transformSession.ghost.id);g.matrix=delta.clone().multiply(transformSession.ghost.world).toArray();}
+  transformSession.solids.forEach(old=>{const s=L.solids.find(s=>s.id===old.id);
+    const world=delta.clone().multiply(old.world);
+    manuals[s.id]=s.anchor.clone().invert().multiply(world).multiply(new THREE.Matrix4().makeScale(...s.localSize.map(x=>1/x))).toArray();});
+  schedule("all");flush();
+}
+function onGumballEnd(){transformSession=null;syncPivot();saveSoon();renderGumballInfo();}
+function resizeSelection(axis,value){if(!selected.size||value<=0||!Number.isFinite(value)){notice("先选对象并输入正尺寸");return;}
+  const box=selectionBounds(),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3()),scale=[1,1,1];scale[axis]=value/size.getComponent(axis);
+  beginTransform();const D=new THREE.Matrix4().makeTranslation(...center.toArray()).multiply(new THREE.Matrix4().makeScale(...scale)).multiply(new THREE.Matrix4().makeTranslation(...center.toArray().map(x=>-x)));
+  pivot.matrixAutoUpdate=false;pivot.matrix.copy(D.multiply(transformSession.pivot));pivot.matrixWorld.copy(pivot.matrix);applyTransform();pivot.matrixAutoUpdate=true;onGumballEnd();}
+function resetSelected(){const g=selectedGhost();if(g)g.matrix=new THREE.Matrix4().toArray();else selected.forEach(id=>delete manuals[id]);schedule("all");saveSoon();}
+function renderGumballInfo(){
+  const el=document.getElementById("gminfo"),info=document.getElementById("selectioninfo"),sizes=document.getElementById("selectionSizes");if(!el)return;
+  info.textContent=selected.size?"已选 "+selected.size+" 个对象 · "+[...selected].slice(0,3).join(" / "):"尚未选择对象";
+  el.textContent="模式："+({off:"关闭",translate:"移动",rotate:"旋转",scale:"缩放"}[gmMode])+" · "+(boxMode?"框选开启":"拖动旋转视角")+"。框壳毫米厚度保持不变；三轴缩放分别保留。尺寸字段编辑世界轴包围盒。";
+  if(sizes.contains(document.activeElement))return;sizes.textContent="";
+  if(selected.size){const size=selectionBounds().getSize(new THREE.Vector3());["选择宽","选择高","选择深"].forEach((label,i)=>{
+    const lab=document.createElement("label"),input=document.createElement("input");lab.textContent=label;input.type="number";input.step="any";input.value=size.getComponent(i).toFixed(3);input.setAttribute("aria-label",label);
+    input.onchange=()=>resizeSelection(i,Number(input.value));lab.append(input);sizes.append(lab);
+  });}
+}
+function toggleFocus(){const on=document.body.classList.toggle("focus-view"),b=document.getElementById("focus-view");b.textContent=on?"返回编辑 F":"专注视图 F";b.setAttribute("aria-pressed",String(on));applyViewOffset();buildSnow();fitView();}
+function fitView(front=false,onlySelected=false){
+  if(!L)return;const box=onlySelected&&selected.size?selectionBounds():L.bounds,size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+  const t=Math.tan(camera.fov*Math.PI/360),distance=Math.max((size.y+8)/(2*t),(size.x+14)/(2*t*camera.aspect))*1.1+size.z;
+  const yaw=front?0:.42,elevation=front?0:.16;orbit.target.copy(center);
+  camera.position.copy(center).add(new THREE.Vector3(Math.sin(yaw)*Math.cos(elevation),Math.sin(elevation),Math.cos(yaw)*Math.cos(elevation)).multiplyScalar(distance));orbit.update();
+}
+addEventListener("keydown",e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.target.isContentEditable)return;
+  const k=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&k==="a"){e.preventDefault();selectIds(L.solids.map(s=>s.id));return;}
+  if(k==="f")toggleFocus();if(k==="escape")selectIds([]);if(k==="w")setGumball("translate");if(k==="e")setGumball("rotate");if(k==="r")setGumball("scale");if(k==="q")setGumball("off");
 });
-function onGumballEnd() {
-  // 缩放不直接缩放几何：框、壳、棒的毫米厚度必须保持物理值，所以把缩放量折算进布局后重算
-  const f = (model.scale.x + model.scale.y + model.scale.z) / 3;
-  if (Math.abs(f - 1) > 1e-6) {
-    model.scale.set(1, 1, 1);
-    P.scale = Math.min(1.5, Math.max(0.2, P.scale * f));
-    sliders.scale.inp.value = P.scale; sliders.scale.show();
-    schedule("all");
-  }
-}
-function renderGumballInfo() {
-  const el = document.getElementById("gminfo"); if (!el) return;
-  const p = model.position, r = model.rotation, d = v => (v * 180 / Math.PI).toFixed(1) + "°";
-  el.innerHTML = "位置 " + [p.x, p.y, p.z].map(v => v.toFixed(2)).join(" / ") + " mm<br>旋转 " + [r.x, r.y, r.z].map(d).join(" / ") +
-    "<br>缩放 " + P.scale.toFixed(3) + " ×（松手后折算进布局，框和壳的毫米厚度不随之缩放）<br>快捷键：W 移动、E 旋转、R 缩放、Q 关闭";
-}
 
 /* ============================================================
    用量表与悬停信息
    ============================================================ */
+function esc(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function renderMeter() {
-  const k = L.ink, W = P.warnDensity;
-  const st = (ok, a, b) => '<span class="' + (ok ? "ok" : "bad") + '">' + (ok ? a : b) + "</span>";
-  const cls = v => (v > W * 2 ? "bad" : v > W ? "mid" : "ok");
-  const share = v => (k.total > 0 ? pct(v / k.total) : "–");
-  const seg = (v, c) => '<i style="width:' + Math.min(100, v / Math.max(k.total, 1) * 100) + "%;background:" + c + '"></i>';
-  const overPeak = k.peakLocal > W, overMax = k.fillMax > W;
-  const [cw, cd, ch] = carveDims(), b = L.bbox;
-  const bw = b[1] - b[0], bh = b[3] - b[2], bd = b[5] - b[4];
-  const needScale = Math.min(cw / bw, cd / bd, ch / bh), fits = needScale >= 1;
-  document.getElementById("meter").innerHTML =
-    "<h2>后验报告</h2>" +
-    '<div class="sub">点数是算出来的结果，不是配额。超了标红，回去改前置再重算。</div>' +
-    '<div class="m-row">可雕区格点<b>' + fmtInt(k.grid) + "</b></div>" +
-    '<div class="m-row">总点数<b>' + fmtInt(k.total) + "</b></div>" +
-    '<div class="m-row">预计机时<b>' + k.minutes.toFixed(1) + " 分钟</b></div>" +
-    '<div class="bar">' + seg(k.frame, "#9ad0ff") + seg(k.shell, "#7a8cff") + seg(k.rod, "#ffd27a") + seg(k.snow, "#e8e8e8") + "</div>" +
-    '<div class="m-row"><span style="color:#9ad0ff">■ 框</span><b>' + fmtInt(k.frame) + " · " + share(k.frame) + "</b></div>" +
-    '<div class="m-row"><span style="color:#7a8cff">■ 包络面</span><b>' + fmtInt(k.shell) + " · " + share(k.shell) + "</b></div>" +
-    '<div class="m-row"><span style="color:#ffd27a">■ 残差棒</span><b>' + fmtInt(k.rod) + " · " + share(k.rod) + "</b></div>" +
-    '<div class="m-row"><span>■ 雪花</span><b>' + fmtInt(k.snow) + " · " + share(k.snow) + "</b></div>" +
-    '<div class="m-row">可雕区平均填充率<b>' + pct(k.densCarve) + "</b></div>" +
-    '<div class="m-row">块内平均填充率<b>' + pct(k.densAvg) + "</b></div>" +
-    '<div class="m-row">最密一块 · 平均<b class="' + cls(k.fillMax) + '">' + pct(k.fillMax) + "</b></div>" +
-    '<div class="m-row">最密一块 · 局部峰值<b class="' + cls(k.peakLocal) + '">' + pct(k.peakLocal) + "</b></div>" +
-    '<div class="m-row">每体素平均代表<b>' + fmtInt(k.wpv) + " 个权重</b></div>" +
-    '<div class="m-row">屏幕上画出的点<b>' + fmtInt(L.displayed || 0) + "</b></div>" +
-    '<div class="sub">屏幕上画多少点只为不卡，与玻璃里实际多少个点无关。</div>' +
-    '<div style="margin-top:6px">后验告警（参考线 ' + pct(W) + "）：" +
-    "<br>· 局部峰值密度：" + st(!overPeak, "未超", "超了 " + ((k.peakLocal / Math.max(W, 1e-9) - 1) * 100).toFixed(0) + "%，可调低 γ、调高底噪地板或加大压缩倍数，再重算看") +
-    "<br>· 最密一块平均值：" + st(!overMax, "未超", "超了，同上") +
-    "</div>" +
-    '<div style="margin-top:6px">结构检查：' +
-    "<br>· 块两两不重叠：" + st(!L.overlaps.length, "通过（" + L.solids.length + " 个实体）", L.overlaps.length + " 处重叠，如 " + L.overlaps[0]) +
-    "<br>· 包围盒：" + bw.toFixed(1) + " 宽 × " + bd.toFixed(1) + " 深 × " + bh.toFixed(1) + " 高 mm（可雕区 " +
-      cw.toFixed(1) + " × " + cd.toFixed(1) + " × " + ch.toFixed(1) + "）" +
-    "<br>· 在可雕区内：" + st(fits, "是", "超出，需再缩到 " + needScale.toFixed(2) + "×（或点“按可雕区适配缩放”）") +
-    (k.clamped ? '<br>· <span class="mid">' + k.clamped + " 个块太小，框或壳的厚度被自动收窄</span>" : "") +
-    (P.frameT < 2 * P.pitch || P.shellT < 2 * P.pitch ? '<br>· <span class="mid">框或壳薄于 2 倍点距，切出来可能断续</span>' : "") +
-    L.warns.map(w => '<br>· <span class="bad">' + w + "</span>").join("") +
-    '</div><div class="sub" style="margin-top:6px">点数的算法：结构件 = 体积 × 灰度 ÷ 点距³；雪花 = 内部体素数 × 该块灰度的均值。框与壳重叠处按较高灰度计一次。</div>';
-}
-
-function fitToCarve() {
-  // 按当前包围盒算需要再乘多少才能塞进可雕区，留 3% 余量（不顶头）
-  if (!L) return;
-  const [cw, cd, ch] = carveDims(), b = L.bbox;
-  const bw = b[1] - b[0], bh = b[3] - b[2], bd = b[5] - b[4];
-  const f = Math.min(cw / bw, cd / bd, ch / bh) * 0.97;
-  P.scale = Math.min(1.2, Math.max(0.2, P.scale * f));
-  if (sliders.scale) { sliders.scale.inp.value = P.scale; sliders.scale.show(); }
-  schedule("all");
+  const k=L.ink,size=L.bounds.getSize(new THREE.Vector3()),slotSize=L.slotBounds.getSize(new THREE.Vector3());
+  const row=(label,value)=>'<div class="m-row">'+label+'<b>'+value+'</b></div>';
+  const dims=v=>v.toArray().map(x=>x.toFixed(2)).join(" × ")+" mm";
+  document.getElementById("meter").innerHTML="<h2>布局后验报告</h2><div class='sub'>只提示，不设点数限额，不自动收缩模型。</div>"+
+    row("功能块 / 外框",L.solids.length)+row("模型尺寸 · 宽高深",dims(size))+row("槽位总体尺寸",dims(slotSize))+
+    row("模拟样本总数",fmtInt(k.mockCount))+row("屏幕显示样本",fmtInt(L.displayed))+
+    "<div class='sub'>真实雪花未加载：真实点数、密度、每格权重数和加工精度检查均待一级切片。模拟点不作为加工数据。</div>"+
+    row("框 · 估算点数",fmtInt(k.frame))+row("壳 · 估算点数",fmtInt(k.shell))+row("仅结构机时参考",k.minutes.toFixed(2)+" 分钟")+
+    "<div class='sub'>体积×灰度÷点距³仅为结构件量级估计，不是厂家切片结果；框壳交集计一次，跨块重叠尚未合并。</div>"+
+    "<div>块重叠：<span class='"+(L.overlaps.length?"bad":"ok")+"'>"+(L.overlaps.length?L.overlaps.length+" 对，示例 "+esc(L.overlaps[0].join(" / ")):"无")+"</span></div>"+
+    ghosts.map(g=>"<div>"+esc(g.name)+(g.id===primaryGhost?"（主参照）":"")+"：<span class='"+(g.outsideCount?"bad":"ok")+"'>"+
+      (g.outsideCount?g.outsideCount+" 块出界":"全部在内")+"</span>"+(g.invalidInset?" · 预留量已使内参照为空":"")+"</div>").join("")+
+    (!ghosts.length?"<div class='mid'>无幽灵毛坯，未做空间出界核对。</div>":"")+
+    (k.clamped?"<div class='mid'>"+k.clamped+" 个块厚度达到实体填满状态，有效厚度已注明。</div>":"")+
+    (P.frameT<2*P.pitch||P.shellT<2*P.pitch?"<div class='mid'>框或壳薄于 2 倍点距，仅提示，工艺需厂家核实。</div>":"")+
+    L.warns.slice(0,3).map(t=>"<div class='mid'>"+esc(t)+"</div>").join("")+
+    "<div class='sub'>待切片参数："+(dirtySnow?"已修改，尚未执行一级切片":"尚未执行一级切片")+"。密度参考线 "+pct(P.warnDensity)+" 未经工艺核实。</div>";
 }
 
 let hoveredSolid = null;
@@ -776,21 +754,20 @@ function hoverInfo(s) {
   hoveredSolid = s;
   const el = document.getElementById("hover");
   if (!s) { el.innerHTML = "<h2>悬停查看</h2>把鼠标移到任意块上，这里显示它来自哪些张量。"; hl.visible = false; return; }
-  const lx = s.x1 - s.x0, ly = s.y1 - s.y0, lz = s.z1 - s.z0;
-  hl.visible = true; hl.position.set((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, (s.z0 + s.z1) / 2); hl.scale.set(lx, ly, lz);
+  const [lx,ly,lz]=s.size;
+  hl.visible=true;hl.matrixAutoUpdate=false;hl.matrix.copy(s.matrix);
   let h = "<h2>" + s.id + (s.block ? " · " + s.block.label : "") + "</h2>";
   h += "尺寸 " + [lx, ly, lz].map(v => v.toFixed(2)).join(" × ") + " mm" + (s.outside ? ' <span class="bad">（出界）</span>' : "") + "<br>";
-  if (s.kind === "rod") h += "残差流 x：4096 维，贯穿全模型。没有权重，是纯几何（D11），来自代码里的两个 <code>+</code>。";
-  else if (s.kind === "mtp") h += "MTP 多 token 预测头。GGUF 文件里没有这部分权重，按 U9 暂时只画框。";
+  if (s.kind === "mtp") h += "MTP 多 token 预测头。权重未收录，只画框，不填模拟点。";
   else {
-    const b = s.block, cell = P.compress * P.pitch, vox = s.interior / (cell * cell * cell);
-    h += "参数 " + fmtInt(b.params) + "，块内约 " + fmtInt(vox) + " 个数据格子，每格约代表 " + fmtInt(b.params / Math.max(vox, 1)) + " 个权重<br>";
-    if (s.snowPoints != null) h += "本题案点数 " + fmtInt(s.snowPoints) + "，块内平均填充率 " + pct(s.meanP || 0) +
-      "，局部峰值 " + pct(s.maxP || 0) + "<br>";
+    const b=s.block;
+    h += "参数量 "+fmtInt(b.params)+" · 包含 "+b.tensors.length+" 个独立张量<br>";
+    h += "固定模拟样本 "+fmtInt(mockCache.get(s.id)?.count||0)+"；真实格数与压缩统计尚未生成。<br>";
     if (b.fold) h += "二维→三维（D13）：" + (b.fold.basis === "structure" && b.fold.factors ? "按" + (b.fold.axis === "cols" ? "列" : "行") + "拆成 " + b.fold.factors.join(" × ") + "（" + b.fold.labels.join(" / ") + "）" : b.fold.note || b.fold.basis) + "<br>";
     h += "张量：";
     b.tensors.forEach(t => {
-      h += "<br>· <code>" + t.gguf + (t.rows ? "[" + t.rows[0] + ":" + t.rows[1] + "]" : "") + "</code> [" + t.shape.join(", ") + "] " + t.qtype;
+      h += "<br>· <code>" + esc(t.gguf) + "</code> [" + (t.shape||[]).join(", ") + "] " + esc(t.qtype||"未绑定");
+      if(t.fold)h += "<br>　独立折叠：" + esc(t.fold.factors?.join(" × ")||t.fold.basis);
       if (t.hf) h += "<br>　HF：<code>" + t.hf.replace("model.language_model.", "") + "</code>";
       if (t.restore) h += "<br>　还原（U10）：<code>" + t.restore + "</code>";
     });
@@ -799,8 +776,37 @@ function hoverInfo(s) {
 }
 
 const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
-let hoverDirty = false;
-renderer.domElement.addEventListener("pointermove", e => { mouse.x = e.clientX / innerWidth * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; hoverDirty = true; });
+let hoverDirty=false;
+function pointerMouse(e){const r=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);hoverDirty=true;}
+function pick(e){pointerMouse(e);scene.updateMatrixWorld(true);ray.setFromCamera(mouse,camera);
+  if(e.altKey){const hit=ray.intersectObjects(ghostHitObjects,false)[0];return hit?"ghost:"+hit.object.userData.ghostId:null;}
+  const hit=ray.intersectObject(proxies,false)[0];return hit?L.solids[hit.instanceId]?.id:null;
+}
+renderer.domElement.addEventListener("pointerdown",e=>{
+  if(e.button!==0||gumball.dragging||(gumball.axis&&gmMode!=="off"&&!boxMode))return;
+  gesture={x:e.clientX,y:e.clientY,box:boxMode||e.shiftKey,add:e.shiftKey,id:e.pointerId};
+  if(gesture.box){e.stopImmediatePropagation();orbit.enabled=false;renderer.domElement.setPointerCapture(e.pointerId);}
+},true);
+renderer.domElement.addEventListener("pointermove",e=>{
+  pointerMouse(e);if(!gesture?.box)return;e.stopImmediatePropagation();
+  const rect=document.getElementById("boxselect");rect.style.display="block";
+  rect.style.left=Math.min(gesture.x,e.clientX)+"px";rect.style.top=Math.min(gesture.y,e.clientY)+"px";
+  rect.style.width=Math.abs(gesture.x-e.clientX)+"px";rect.style.height=Math.abs(gesture.y-e.clientY)+"px";
+},true);
+renderer.domElement.addEventListener("pointerup",e=>{
+  if(!gesture)return;const g=gesture;gesture=null;document.getElementById("boxselect").style.display="none";
+  orbit.enabled=!boxMode;if(g.box)e.stopImmediatePropagation();
+  if(Math.hypot(e.clientX-g.x,e.clientY-g.y)<5){const id=pick(e);selectIds(id?[id]:[],g.add);return;}
+  if(!g.box)return;
+  const r=renderer.domElement.getBoundingClientRect(),x0=Math.min(g.x,e.clientX),x1=Math.max(g.x,e.clientX),y0=Math.min(g.y,e.clientY),y1=Math.max(g.y,e.clientY);
+  camera.updateMatrixWorld(true);
+  const ids=L.solids.filter(s=>{const p=s.corners.map(v=>v.clone().project(camera));if(p.every(v=>v.z>1||v.z<-1))return false;
+    const xs=p.map(v=>r.left+(v.x+1)*r.width/2),ys=p.map(v=>r.top+(1-v.y)*r.height/2);
+    return Math.max(...xs)>=x0&&Math.min(...xs)<=x1&&Math.max(...ys)>=y0&&Math.min(...ys)<=y1;
+  }).map(s=>s.id);selectIds(ids,g.add);
+},true);
+renderer.domElement.addEventListener("pointercancel",()=>{gesture=null;document.getElementById("boxselect").style.display="none";orbit.enabled=!boxMode;});
+orbit.addEventListener("change",()=>{hoverDirty=true;});
 function updateHover() {
   if (!hoverDirty || !L) return; hoverDirty = false;
   ray.setFromCamera(mouse, camera);
@@ -808,42 +814,82 @@ function updateHover() {
   hoverInfo(hit ? L.solids.find(s => s.pid === hit.instanceId) : null);
 }
 
-function exportLayout() {
-  const data = { tool: "snowglass_editor stage1", topo_model: topo.model, policy: topo.policy, params: P,
-    carve_mm: carveDims(), transform: { position: model.position.toArray(), rotation_euler_rad: [model.rotation.x, model.rotation.y, model.rotation.z] },
-    ink: L.ink, checks: { overlaps: L.overlaps, outside_count: outside, warnings: L.warns },
-    solids: L.solids.map(s => ({ id: s.id, kind: s.kind, role: s.role, aabb_mm: [s.x0, s.y0, s.z0, s.x1, s.y1, s.z1], frame_t: s.tEff, shell_t: s.sEff })) };
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
-  a.download = "layout.json"; a.click();
+function layoutData(){return {schema_version:2,units:"mm",topology_id:topo.topology_id,config:topo.config,model:topo.model,
+  params:{...P},ghosts:JSON.parse(JSON.stringify(ghosts)),primaryGhost,realSnowLoaded:false,
+  checks:{overlaps:L.overlaps,outside_count:outside,warnings:L.warns},report:L.ink,
+  solids:L.solids.map(s=>({id:s.id,kind:s.kind,role:s.role,slot:s.slot,matrix_mm:s.matrix.toArray(),
+    aabb_mm:[s.x0,s.y0,s.z0,s.x1,s.y1,s.z1],frame_t:s.tEff,shell_t:s.sEff,tensors:s.block.tensors}))};}
+function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:"application/json"}));
+  const a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
+function stamp(){return new Date().toISOString().replace(/[-:]/g,"").replace("T","-").slice(0,15);}
+function exportLayout(){flush();download(layoutData(),"layout_"+stamp()+".json");}
+function captureProject(){return {schema_version:2,kind:"snowglass.preweights",topology_id:topo.topology_id,params:{...P},
+  manuals:JSON.parse(JSON.stringify(manuals)),assembly:assembly.toArray(),ghosts:JSON.parse(JSON.stringify(ghosts)),primaryGhost,
+  mock:{seed:mockSeed,counts:{...mockCounts},generation:mockGeneration},dirtySnow,
+  camera:{position:camera.position.toArray(),target:orbit.target.toArray()}};}
+let saveTimer=null;
+function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(captureProject()));}catch(e){notice("本地自动保存失败，请用保存工程："+e.message);}},300);}
+function saveProject(){flush();download(captureProject(),"snowglass_"+stamp()+".snowglass.json");}
+function checkedMatrix(a){if(!Array.isArray(a)||a.length!==16||a.some(x=>typeof x!=="number"||!Number.isFinite(x)))throw new Error("变换矩阵无效");
+  const m=new THREE.Matrix4().fromArray(a);if(Math.abs(m.determinant())<1e-12||Math.abs(a[3])+Math.abs(a[7])+Math.abs(a[11])>1e-8||Math.abs(a[15]-1)>1e-8)throw new Error("只支持非退化仿射变换");return m;}
+function validateProject(doc){
+  if(doc.schema_version!==2||doc.kind!=="snowglass.preweights")throw new Error("不是本版 snowglass 工程");
+  if(doc.topology_id!==topo.topology_id)throw new Error("拓扑或源配置已改变，不能把旧工程静默套到新分组");
+  const p={...DEFAULTS};for(const k of Object.keys(DEFAULTS)){if(!(k in doc.params))continue;const value=doc.params[k];
+    if(typeof value!==typeof DEFAULTS[k]||(typeof value==="number"&&!Number.isFinite(value)))throw new Error("参数类型无效："+k);p[k]=value;}
+  for(const k of ["scale","squash","depth","pitch","speed","pointSize","compress","gamma"])if(p[k]<=0)throw new Error("参数必须为正："+k);
+  for(const k of ["frameT","shellT","brightness","dotUm"])if(p[k]<0)throw new Error("参数不能为负："+k);
+  for(const k of ["frameGray","shellGray","floor","warnDensity"])if(p[k]<0||p[k]>1)throw new Error("灰度或参考值须在0–1之间");
+  if(!["equal","params"].includes(p.widthMode)||!["brightness","size"].includes(p.grayDisplay))throw new Error("布局或显示模式无效");
+  const delta={};for(const [id,a] of Object.entries(doc.manuals||{})){if(!blockById[id]&&id!=="mtp")throw new Error("未知块："+id);delta[id]=checkedMatrix(a).toArray();}
+  const gs=doc.ghosts;if(!Array.isArray(gs)||gs.length>100)throw new Error("毛坯列表无效");const ids=new Set();
+  gs.forEach(g=>{if(typeof g.id!=="string"||ids.has(g.id)||typeof g.name!=="string"||g.name.length>200||!["box","cylinder"].includes(g.shape))throw new Error("毛坯身份无效");ids.add(g.id);
+    if(!Array.isArray(g.dims)||g.dims.length!==3||[...g.dims,g.radius,g.height].some(x=>!Number.isFinite(x)||x<=0)||!Number.isFinite(g.margin)||g.margin<0)throw new Error("毛坯尺寸无效");checkedMatrix(g.matrix);});
+  if(doc.primaryGhost!==null&&!ids.has(doc.primaryGhost))throw new Error("主参照不存在");checkedMatrix(doc.assembly);
+  if(!Number.isFinite(doc.mock?.seed))throw new Error("模拟种子无效");
+  for(const [id,n] of Object.entries(doc.mock.counts||{}))if(!blockById[id]||!Number.isInteger(n)||n<0||n>1800)throw new Error("模拟样本记录无效");
+  if(doc.camera)for(const a of [doc.camera.position,doc.camera.target])if(!Array.isArray(a)||a.length!==3||a.some(x=>!Number.isFinite(x)))throw new Error("视角无效");
+  return {p,delta,gs:JSON.parse(JSON.stringify(gs))};
 }
+function restoreProject(doc){
+  const v=validateProject(doc);Object.assign(P,v.p);manuals=v.delta;assembly=checkedMatrix(doc.assembly);ghosts=v.gs;primaryGhost=doc.primaryGhost;
+  mockSeed=doc.mock.seed;mockCounts={...doc.mock.counts};mockGeneration=doc.mock.generation||0;mockCache.clear();dirtySnow=!!doc.dirtySnow;
+  selected.clear();transformSession=null;schedule("all");flush();renderGhostPanel();
+  if(doc.camera){camera.position.fromArray(doc.camera.position);orbit.target.fromArray(doc.camera.target);orbit.update();}else fitView();saveSoon();
+}
+function resetProject(){Object.assign(P,DEFAULTS);manuals={};assembly.identity();ghosts=[{id:"ghost-1",name:"参照毛坯 1",shape:"box",dims:[25,80,25],radius:12.5,height:80,margin:2.5,matrix:new THREE.Matrix4().toArray()}];
+  primaryGhost="ghost-1";selected.clear();mockCache.clear();mockCounts={};mockSeed=P.seed;mockGeneration++;dirtySnow=false;transformSession=null;boxMode=false;orbit.enabled=true;gumball.enabled=true;setGumball("off");
+    const boxButton=document.getElementById("box-select-toggle");boxButton.classList.remove("on");boxButton.setAttribute("aria-pressed","false");
+  schedule("all");flush();renderGhostPanel();fitView();saveSoon();notice("已恢复默认排布与参照对象");}
 
 /* ============================================================
-   重算调度：all（重布局）> struct（重画结构）> snow（重采雪花）> meter > view
+   更新调度：all（重排）> struct（结构）> snow（映射固定样本）> meter > view
    ============================================================ */
 const RANK = { view: 0, meter: 1, snow: 2, struct: 3, all: 4 };
-let pending = -1;
-function schedule(level) { pending = Math.max(pending, RANK[level] ?? 4); }
-function flush() {
-  if (pending < 0) return;
-  const lv = pending; pending = -1;
-  if (lv >= 4) { L = layout(); hoveredSolid = null; drawBlank(); drawLabels(); drawPlate(); }
-  if (lv >= 3) { prepare(); drawStructure(); }
-  if (lv >= 2) buildSnow();
-  if (lv >= 1) { L.ink = report(); checkContainment(); renderMeter(); }
-  applyAppearance();
-  Object.values(sliders).forEach(s => s.show());
-  // 参数变了但鼠标没动时，悬停卡片里的点数/填充率也要跟着重算
-  if (hoveredSolid && L.ink) hoverInfo(hoveredSolid);
+let pending=-1,flushTimer=null;
+function schedule(level){pending=Math.max(pending,RANK[level]??4);if(!flushTimer)flushTimer=setTimeout(()=>{flushTimer=null;flush();},16);}
+function flush(){
+  if(pending<0)return;const lv=pending;pending=-1;const hoverId=hoveredSolid?.id;
+  if(lv>=4){L=layout();selected=new Set([...selected].filter(id=>id.startsWith("ghost:")?ghosts.some(g=>"ghost:"+g.id===id):L.solids.some(s=>s.id===id)));drawBlank();drawLabels();drawPlate();}
+  if(lv>=3){prepare();checkContainment();drawStructure();}
+  if(lv>=2)buildSnow();
+  if(lv>=1){L.ink=report();checkContainment();drawSelection();renderMeter();}
+  syncControls();applyAppearance();syncPivot();renderGumballInfo();
+  if(hoverId)hoverInfo(L.solids.find(s=>s.id===hoverId)||null);else if(lv>=4)hoverInfo(null);
 }
-
-buildPanel();
-schedule("all");
-flush();
-orbit.target.set(0, 0, 0);
-
-addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); applyViewOffset(); });
-(function loop() { requestAnimationFrame(loop); flush(); updateHover(); orbit.update(); renderer.render(scene, camera); })();
+buildPanel();schedule("all");flush();fitView();
+try{const saved=localStorage.getItem(STORAGE_KEY);if(saved){restoreProject(JSON.parse(saved));notice("已恢复本地工程");}}catch(e){notice("本地工程未恢复："+e.message);}
+document.getElementById("configinfo").textContent="4.2 默认排布 · 1 单位＝1 mm · config SHA "+topo.config.sha256.slice(0,12)+" · 清单覆盖 "+topo.coverage.text_tensors+" + "+topo.coverage.vision_tensors;
+// 同一套接口供工程检查与浏览器控制台复现，不另写第二套布局算法。
+document.getElementById("loading").remove();
+document.getElementById("focus-view").onclick=toggleFocus;
+window.snowglass={getLayout:()=>{flush();return layoutData();},getProject:captureProject,restoreProject,resetProject,
+  select:selectIds,setParam:changeParam,resizeSelection,newGhost,deleteGhost,flush,fitView,
+  mockDigest:id=>{const m=mockCache.get(id);if(!m)return null;let h=0;for(let i=0;i<m.data.length;i++)h=(Math.imul(h,31)+Math.round(m.data[i]*1e6))|0;return {count:m.count,hash:h};},
+  projectSelection:()=>[...selected],projectScreen:id=>{const s=L.solids.find(s=>s.id===id),r=renderer.domElement.getBoundingClientRect();if(!s)return null;const v=s.center.clone().project(camera);return {x:r.left+(v.x+1)*r.width/2,y:r.top+(1-v.y)*r.height/2};}};
+addEventListener("resize",()=>{applyViewOffset();buildSnow();fitView();});
+addEventListener("beforeunload",()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(captureProject()));}catch(e){console.warn("工程自动保存失败",e);}});
+(function loop(){requestAnimationFrame(loop);flush();updateHover();orbit.update();renderer.render(scene,camera);})();
 }
 })();
 </script>

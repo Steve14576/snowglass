@@ -89,8 +89,17 @@ def parse_config(doc: dict) -> dict:
            "conv": positive(text, "linear_conv_kernel_dim"), "tie_embeddings": bool(text.get("tie_word_embeddings", doc.get("tie_word_embeddings", False))),
            "mtp_layers": text.get("mtp_num_hidden_layers", 0), "vision_layers": vision.get("depth", 0),
            "vision_hidden": vision.get("hidden_size", 0), "vision_ffn": vision.get("intermediate_size", 0)}
-    if cfg["vision_layers"] and (cfg["vision_hidden"] <= 0 or cfg["vision_ffn"] <= 0):
-        raise ValueError("视觉配置维度不完整")
+    if vision:
+        for key in ("depth", "hidden_size", "intermediate_size", "patch_size", "in_channels", "num_position_embeddings",
+                    "spatial_merge_size", "out_hidden_size", "temporal_patch_size"):
+            positive(vision, key)
+        if vision["temporal_patch_size"] != 2:
+            raise ValueError("当前 mmproj 命名适配器仅核实过 temporal_patch_size=2 的双 patch 权重")
+    gate = text.get("attn_output_gate", True)
+    if not isinstance(gate, bool):
+        raise ValueError("attn_output_gate 必须是布尔值")
+    cfg["_q_multiplier"] = 2 if gate else 1
+    cfg["_vision"] = vision
     return cfg
 
 
@@ -102,7 +111,7 @@ def expected_text_shape(name: str, c: dict) -> list[int] | None:
     shapes = {"token_embd.weight": [c["vocab"], h], "output.weight": [c["vocab"], h], "output_norm.weight": [h],
               "attn_norm.weight": [h], "post_attention_norm.weight": [h],
               "ffn_gate.weight": [f, h], "ffn_up.weight": [f, h], "ffn_down.weight": [h, f],
-              "attn_q.weight": [2 * c["heads"] * d, h], "attn_k.weight": [c["kv_heads"] * d, h],
+              "attn_q.weight": [c["_q_multiplier"] * c["heads"] * d, h], "attn_k.weight": [c["kv_heads"] * d, h],
               "attn_v.weight": [c["kv_heads"] * d, h], "attn_output.weight": [h, c["heads"] * d],
               "attn_q_norm.weight": [d], "attn_k_norm.weight": [d],
               "attn_qkv.weight": [2 * qk + v, h], "attn_gate.weight": [v, h],
@@ -110,6 +119,24 @@ def expected_text_shape(name: str, c: dict) -> list[int] | None:
               "ssm_conv1d.weight": [2 * qk + v, c["conv"]], "ssm_a": [c["value_heads"]],
               "ssm_dt.bias": [c["value_heads"]], "ssm_norm.weight": [c["value_dim"]], "ssm_out.weight": [h, v]}
     return shapes.get(short)
+
+def expected_vision_shape(name: str, c: dict) -> list[int] | None:
+    v = c["_vision"]
+    if not v:
+        return None
+    d, f, patch = v["hidden_size"], v["intermediate_size"], v["patch_size"]
+    if name.startswith("v.blk."):
+        short = name.split(".", 3)[-1]
+        return {"ln1.weight": [d], "ln1.bias": [d], "ln2.weight": [d], "ln2.bias": [d],
+                "attn_qkv.weight": [3*d, d], "attn_qkv.bias": [3*d], "attn_out.weight": [d, d], "attn_out.bias": [d],
+                "ffn_up.weight": [f, d], "ffn_up.bias": [f], "ffn_down.weight": [d, f], "ffn_down.bias": [d]}.get(short)
+    merged = d * v["spatial_merge_size"]**2
+    return {"v.patch_embd.weight": [d, v["in_channels"], patch, patch],
+            "v.patch_embd.weight.1": [d, v["in_channels"], patch, patch], "v.patch_embd.bias": [d],
+            "v.position_embd.weight": [v["num_position_embeddings"], d], "v.post_ln.weight": [d], "v.post_ln.bias": [d],
+            "mm.0.weight": [merged, merged], "mm.0.bias": [merged],
+            "mm.2.weight": [v["out_hidden_size"], merged], "mm.2.bias": [v["out_hidden_size"]]}.get(name)
+
 
 # GGUF 名 -> HF 名（文本部分；对照表见 docs/qwen35_9b_facts.md 第 4 节）
 HF_LAYER = {
@@ -184,8 +211,9 @@ class Builder:
             if name not in self.inv:
                 raise KeyError(f"清单里没有张量 {name}（{self.source}）")
             t = self.inv[name]
-            if expected and t["shape"] != expected:
-                raise ValueError(f"配置与清单形状冲突：{name}，预期 {expected}，清单 {t['shape']}")
+            checked = expected if self.source == "text" else expected_vision_shape(name, self.cfg)
+            if checked and t["shape"] != checked:
+                raise ValueError(f"配置与清单形状冲突：{name}，预期 {checked}，清单 {t['shape']}")
         key = name if rows is None else f"{name}[{rows[0]}:{rows[1]}]"
         if key in self.used:
             raise ValueError(f"{key} 被重复归入 {self.used[key]} 与 {block_id}")
@@ -249,7 +277,7 @@ def build_text(bt: Builder) -> list[dict]:
         layers.append({"index": i, "kind": "full" if full else "gdn", "type": typ})
         bt.add(f"{tag}.attn_norm", layer=i, slot="norm1", role="norm", label="Input RMSNorm",
                tensors=[p + "attn_norm.weight"], fold=FOLD_1D)
-        names = [(["attn_q.weight", "attn_q_norm.weight"], "Q / Gate", "attn_q"),
+        names = [(["attn_q.weight", "attn_q_norm.weight"], "Q / Gate" if c["_q_multiplier"] == 2 else "Q", "attn_q"),
                  (["attn_k.weight", "attn_v.weight", "attn_k_norm.weight"], "K / V", "attn_k"),
                  (["attn_output.weight"], "输出投影", "attn_o")] if full else [
                  (["attn_qkv.weight"], "输入投影 q / k / v", "gdn_q"),
@@ -291,17 +319,27 @@ def build_vision(bv: Builder) -> None:
 
 def load_inv(path: Path) -> tuple[dict, dict]:
     d = json.loads(path.read_text(encoding="utf-8"))
-    return {t["name"]: t for t in d["tensors"]}, d
+    inv = {t["name"]: t for t in d["tensors"]}
+    if len(inv) != len(d["tensors"]):
+        raise ValueError(f"清单包含重名张量：{path}")
+    return inv, d
 
 
 def main() -> int:
-    inv_t, meta_t = load_inv(INV_TEXT)
-    inv_v, meta_v = load_inv(INV_VIS)
-
-    bt = Builder(inv_t, "text")
+    ap = argparse.ArgumentParser(description="只读配置和清单，生成 4.2 功能分组，不加载权重")
+    ap.add_argument("--config", type=Path, default=CONFIG)
+    ap.add_argument("--architecture-only", action="store_true", help="不绑定张量清单，输出未绑定架构")
+    ap.add_argument("--output", type=Path, default=OUT)
+    args = ap.parse_args()
+    doc, provenance = load_config(args.config.resolve())
+    cfg = parse_config(doc)
+    inv_t, meta_t = (None, {}) if args.architecture_only else load_inv(INV_TEXT)
+    inv_v, meta_v = (None, {}) if args.architecture_only or not cfg["vision_layers"] else load_inv(INV_VIS)
+    bt = Builder(inv_t, "text", cfg)
     layers = build_text(bt)
-    bv = Builder(inv_v, "vision")
-    build_vision(bv)
+    bv = Builder(inv_v, "vision", cfg)
+    if cfg["vision_layers"]:
+        build_vision(bv)
 
     miss_t, miss_v = bt.coverage(), bv.coverage()
     if miss_t or miss_v:
@@ -311,54 +349,77 @@ def main() -> int:
         return 1
 
     blocks = bt.blocks + bv.blocks
-    geometry_only = [
-        {"id": "residual_rod", "role": "residual_rod", "label": "残差流 x（4096 维，贯穿全模型）",
-         "source": "code", "note": "D11：无权重，表示代码里 x = x + attn(norm(x)); x = x + mlp(norm(x)) 的 x"},
-        {"id": "mtp", "role": "mtp", "label": "MTP 多 token 预测头", "source": "missing",
-         "note": "U9（暂按提议执行）：GGUF 没有这部分权重，只画框，不填雪花"},
-    ]
+    geometry_only = [{"id": "mtp", "role": "mtp", "label": "MTP 辅助预测 · 权重未收录", "source": "missing",
+                      "note": "只画框，不生成模拟或真实雪花"}] if cfg["mtp_layers"] else []
+    for b in blocks:
+        for t in b["tensors"]:
+            short = t["gguf"].split(".", 2)[-1]
+            if t["file"] != "text":
+                continue
+            h = cfg["hidden"]
+            if short == "attn_q.weight":
+                t["fold"] = fold_heads(cfg["heads"], cfg["_q_multiplier"] * cfg["head_dim"], h)
+            elif short in ("attn_k.weight", "attn_v.weight"):
+                t["fold"] = fold_heads(cfg["kv_heads"], cfg["head_dim"], h)
+            elif short in ("attn_gate.weight", "ssm_out.weight"):
+                t["fold"] = fold_heads(cfg["value_heads"], cfg["value_dim"], h,
+                                       axis="cols" if short == "ssm_out.weight" else "rows")
+            elif short == "attn_output.weight":
+                t["fold"] = fold_heads(cfg["heads"], cfg["head_dim"], h, axis="cols")
+            elif short == "attn_qkv.weight":
+                k, v = cfg["key_heads"] * cfg["key_dim"], cfg["value_heads"] * cfg["value_dim"]
+                t["fold"] = {"basis": "segments", "segments": [
+                    {"name": "q", "rows": [0, k], "factors": [cfg["key_heads"], cfg["key_dim"], h]},
+                    {"name": "k", "rows": [k, 2 * k], "factors": [cfg["key_heads"], cfg["key_dim"], h]},
+                    {"name": "v", "rows": [2 * k, 2 * k + v], "factors": [cfg["value_heads"], cfg["value_dim"], h]}]}
 
     text_params = sum(b["params"] for b in bt.blocks)
     vis_params = sum(b["params"] for b in bv.blocks)
-    if text_params != sum(t["n_elements"] for t in inv_t.values()):
+    if inv_t is not None and text_params != sum(t["n_elements"] for t in inv_t.values()):
         print("参数总数对不上（文本）")
         return 1
-    if vis_params != sum(t["n_elements"] for t in inv_v.values()):
+    if inv_v is not None and vis_params != sum(t["n_elements"] for t in inv_v.values()):
         print("参数总数对不上（视觉）")
         return 1
 
     out = {
-        "model": {
-            "name": "Qwen3.5-9B",
-            "precision_label": "Q4_K_M",
-            "n_layers": N_LAYERS,
-            "full_attention_interval": FULL_EVERY,
-            "hidden": 4096,
-            "vision_layers": N_VLAYERS,
-            "params_text": text_params,
-            "params_vision": vis_params,
-            "sources": {"text": meta_t["file"], "vision": meta_v["file"]},
-        },
+        "schema_version": 2,
+        "config": provenance,
+        "model": {**{k:v for k,v in cfg.items() if not k.startswith("_")}, "precision_label": "未绑定权重" if args.architecture_only else "Q4_K_M",
+                  "params_text": text_params, "params_vision": vis_params,
+                  "sources": {"text": meta_t.get("file"), "vision": meta_v.get("file")}},
+        "coverage": {"status": "unbound" if args.architecture_only else "verified",
+                     "text_tensors": len(inv_t or {}), "vision_tensors": len(inv_v or {}),
+                     "source": "config_only" if args.architecture_only else "config_and_inventory"},
         "policy": {
             "U9_mtp": "frame_only",
             "U10_restore_hf_conventions": True,
-            "fold_rules": "D13",
+            "fold_rules": "D13", "layout_reference": "real_config4.2", "unit_mm": 1,
+            "tensor_processing": "independent", "residual_rod": False,
         },
         "layers": layers,
         "blocks": blocks,
         "geometry_only": geometry_only,
     }
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    out["topology_id"] = hashlib.sha256(json.dumps(out, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    target = args.output.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    temp.replace(target)
 
     by_role: dict[str, int] = {}
     for b in blocks:
         by_role[b["role"]] = by_role.get(b["role"], 0) + 1
     print(f"blocks           : {len(blocks)}（文本 {len(bt.blocks)}，视觉 {len(bv.blocks)}）+ 纯几何 {len(geometry_only)}")
-    print(f"tensors covered  : 文本 {len(inv_t)}/{len(inv_t)}，视觉 {len(inv_v)}/{len(inv_v)}")
-    print(f"params           : 文本 {text_params/1e9:.3f} B，视觉 {vis_params/1e9:.3f} B（与清单总数一致）")
+    print(f"config sha256    : {provenance['sha256']}")
+    print(f"coverage         : {out['coverage']}")
+    if args.architecture_only:
+        print(f"params           : 文本形状估算 {text_params/1e9:.3f} B；视觉未绑定，不宣称参数量已核实")
+    else:
+        print(f"params           : 文本 {text_params/1e9:.3f} B，视觉 {vis_params/1e9:.3f} B（与清单总数一致）")
     print("blocks by role   : " + ", ".join(f"{k}={v}" for k, v in sorted(by_role.items())))
-    print(f"wrote {OUT}  ({OUT.stat().st_size/1e3:.0f} KB)")
+    print(f"wrote {target}  ({target.stat().st_size/1e3:.0f} KB)")
     return 0
 
 
