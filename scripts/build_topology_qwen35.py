@@ -9,7 +9,9 @@
 放在 prototype/data/ 下是为了让编辑器能用同目录相对路径读它，无论服务根是项目根还是
 prototype/ 都能打开（前端没有构建步骤，只能靠相对路径）。
 
-规则来源：docs/decisions.md 的 D11（切片 + 残差棒）、D13（二维怎么拆三维）、U9（MTP 只画框）、U10（还原 HF 约定）。
+规则来源：docs/decisions.md 的 D11（4.2 排布、不画棒）、D13（独立张量分区）、U9 / U10。
+配置独立驱动架构；现有张量清单绑定实际形状与格式。--architecture-only 可只凭 config 出架构。
+首次运行只获取官方小配置，不读取权重数值。
 事实来源：docs/qwen35_9b_facts.md。
 
 硬检查（不通过就报错退出，不出文件）：
@@ -22,8 +24,12 @@ prototype/ 都能打开（前端没有构建步骤，只能靠相对路径）。
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
+import math
 import sys
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,9 +37,79 @@ INV_TEXT = ROOT / "out" / "inventory" / "Qwen3.5-9B-Q4_K_M.tensors.json"
 INV_VIS = ROOT / "out" / "inventory" / "mmproj-BF16.tensors.json"
 OUT = ROOT / "prototype" / "data" / "qwen35_9b.topo.json"
 
-N_LAYERS = 32
-FULL_EVERY = 4
-N_VLAYERS = 27
+CONFIG = ROOT / "data" / "configs" / "Qwen3.5-9B.config.json"
+CONFIG_URL = "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/main/config.json"
+
+
+def load_config(path: Path) -> tuple[dict, dict]:
+    """只获取 KB 级配置，不导入 gguf，也不读取权重文件。已有本地配置不覆盖。"""
+    if not path.exists():
+        if path != CONFIG:
+            raise FileNotFoundError(path)
+        with urllib.request.urlopen(CONFIG_URL, timeout=30) as response:
+            raw = response.read(1_048_577)
+        if len(raw) > 1_048_576:
+            raise ValueError("配置超过 1 MB，拒绝将它当作小配置加载")
+        json.loads(raw)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    raw = path.read_bytes()
+    doc = json.loads(raw.decode("utf-8"))
+    return doc, {"path": str(path), "url": CONFIG_URL if path == CONFIG else None,
+                 "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def parse_config(doc: dict) -> dict:
+    text = doc.get("text_config", doc)
+    if text.get("model_type") != "qwen3_5_text":
+        raise ValueError("本轮适配器仅支持 qwen3_5_text，不凭相似字段猜测其他架构")
+    def positive(obj, key):
+        value = obj.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"配置字段 {key} 必须是正整数")
+        return value
+    count = positive(text, "num_hidden_layers")
+    interval = text.get("full_attention_interval", 4)
+    types = text.get("layer_types")
+    if types is None:
+        if not isinstance(interval, int) or interval <= 0:
+            raise ValueError("full_attention_interval 必须为正整数")
+        types = ["full_attention" if (i + 1) % interval == 0 else "linear_attention" for i in range(count)]
+    if len(types) != count or any(t not in ("linear_attention", "full_attention") for t in types):
+        raise ValueError("layer_types 必须逐层列出受支持的类型，长度与层数一致")
+    vision = doc.get("vision_config", {})
+    cfg = {"name": "Qwen3.5-9B" if count == 32 and text.get("hidden_size") == 4096 else "Qwen3.5 配置实例",
+           "n_layers": count, "layer_types": types, "full_attention_interval": interval,
+           "hidden": positive(text, "hidden_size"), "ffn": positive(text, "intermediate_size"),
+           "vocab": positive(text, "vocab_size"), "heads": positive(text, "num_attention_heads"),
+           "kv_heads": positive(text, "num_key_value_heads"), "head_dim": positive(text, "head_dim"),
+           "key_heads": positive(text, "linear_num_key_heads"),
+           "value_heads": positive(text, "linear_num_value_heads"),
+           "key_dim": positive(text, "linear_key_head_dim"), "value_dim": positive(text, "linear_value_head_dim"),
+           "conv": positive(text, "linear_conv_kernel_dim"), "tie_embeddings": bool(text.get("tie_word_embeddings", doc.get("tie_word_embeddings", False))),
+           "mtp_layers": text.get("mtp_num_hidden_layers", 0), "vision_layers": vision.get("depth", 0),
+           "vision_hidden": vision.get("hidden_size", 0), "vision_ffn": vision.get("intermediate_size", 0)}
+    if cfg["vision_layers"] and (cfg["vision_hidden"] <= 0 or cfg["vision_ffn"] <= 0):
+        raise ValueError("视觉配置维度不完整")
+    return cfg
+
+
+def expected_text_shape(name: str, c: dict) -> list[int] | None:
+    short = name.split(".", 2)[-1] if name.startswith("blk.") else name
+    h, f, d = c["hidden"], c["ffn"], c["head_dim"]
+    qk = c["key_heads"] * c["key_dim"]
+    v = c["value_heads"] * c["value_dim"]
+    shapes = {"token_embd.weight": [c["vocab"], h], "output.weight": [c["vocab"], h], "output_norm.weight": [h],
+              "attn_norm.weight": [h], "post_attention_norm.weight": [h],
+              "ffn_gate.weight": [f, h], "ffn_up.weight": [f, h], "ffn_down.weight": [h, f],
+              "attn_q.weight": [2 * c["heads"] * d, h], "attn_k.weight": [c["kv_heads"] * d, h],
+              "attn_v.weight": [c["kv_heads"] * d, h], "attn_output.weight": [h, c["heads"] * d],
+              "attn_q_norm.weight": [d], "attn_k_norm.weight": [d],
+              "attn_qkv.weight": [2 * qk + v, h], "attn_gate.weight": [v, h],
+              "ssm_alpha.weight": [c["value_heads"], h], "ssm_beta.weight": [c["value_heads"], h],
+              "ssm_conv1d.weight": [2 * qk + v, c["conv"]], "ssm_a": [c["value_heads"]],
+              "ssm_dt.bias": [c["value_heads"]], "ssm_norm.weight": [c["value_dim"]], "ssm_out.weight": [h, v]}
+    return shapes.get(short)
 
 # GGUF 名 -> HF 名（文本部分；对照表见 docs/qwen35_9b_facts.md 第 4 节）
 HF_LAYER = {
@@ -93,16 +169,23 @@ def hf_name(gguf: str) -> str | None:
 
 
 class Builder:
-    def __init__(self, inv: dict[str, dict], source: str):
+    def __init__(self, inv: dict[str, dict] | None, source: str, cfg: dict):
         self.inv = inv
         self.source = source
+        self.cfg = cfg
         self.used: dict[str, str] = {}
         self.blocks: list[dict] = []
 
     def ref(self, name: str, rows: tuple[int, int] | None = None, block_id: str = "") -> dict:
-        if name not in self.inv:
-            raise KeyError(f"清单里没有张量 {name}（{self.source}）")
-        t = self.inv[name]
+        expected = expected_text_shape(name, self.cfg) if self.source == "text" else None
+        if self.inv is None:
+            t = {"shape": expected, "qtype": None, "n_elements": math.prod(expected) if expected else 0}
+        else:
+            if name not in self.inv:
+                raise KeyError(f"清单里没有张量 {name}（{self.source}）")
+            t = self.inv[name]
+            if expected and t["shape"] != expected:
+                raise ValueError(f"配置与清单形状冲突：{name}，预期 {expected}，清单 {t['shape']}")
         key = name if rows is None else f"{name}[{rows[0]}:{rows[1]}]"
         if key in self.used:
             raise ValueError(f"{key} 被重复归入 {self.used[key]} 与 {block_id}")
@@ -120,6 +203,8 @@ class Builder:
             "qtype": t["qtype"],
             "params": n,
             "restore": RESTORE.get(short) if self.source == "text" else None,
+            "binding": "inventory" if self.inv is not None else "config_unbound",
+            "fold": FOLD_1D if expected and len(expected) == 1 else FOLD_ASPECT,
         }
 
     def add(self, bid: str, **kw) -> dict:
@@ -131,7 +216,7 @@ class Builder:
 
     def coverage(self) -> list[str]:
         missing = []
-        for name, t in self.inv.items():
+        for name, t in (self.inv or {}).items():
             if name in self.used:
                 continue
             # 被按行段拆开的张量：检查各段是否覆盖了全部行
@@ -154,59 +239,36 @@ FOLD_1D = {"basis": "aspect_1d", "note": "一维张量按长度因式分解成�
 
 
 def build_text(bt: Builder) -> list[dict]:
-    layers = []
-    bt.add("embed", group="end", role="embed", label="Token Embedding",
+    c = bt.cfg
+    bt.add("embed", group="end", slot="embed", role="embed", label="Token Embedding",
            tensors=["token_embd.weight"], fold=FOLD_ASPECT)
-    for i in range(N_LAYERS):
-        full = (i % FULL_EVERY) == FULL_EVERY - 1
-        p = f"blk.{i}."
-        L = f"L{i:02d}"
-        kind = "full" if full else "gdn"
-        layers.append({"index": i, "kind": kind})
-        # 注意力一侧：从残差棒向外排
-        bt.add(f"{L}.attn_norm", layer=i, side="attn", order=0, role="norm", label="input RMSNorm",
+    layers = []
+    for i, typ in enumerate(c["layer_types"]):
+        full = typ == "full_attention"
+        p, tag = f"blk.{i}.", f"L{i:02d}"
+        layers.append({"index": i, "kind": "full" if full else "gdn", "type": typ})
+        bt.add(f"{tag}.attn_norm", layer=i, slot="norm1", role="norm", label="Input RMSNorm",
                tensors=[p + "attn_norm.weight"], fold=FOLD_1D)
-        if full:
-            bt.add(f"{L}.q", layer=i, side="attn", order=1, role="attn_q", label="Q（含输出门控）",
-                   tensors=[p + "attn_q.weight"], fold=fold_heads(16, 512, 4096))
-            bt.add(f"{L}.k", layer=i, side="attn", order=2, role="attn_k", label="K",
-                   tensors=[p + "attn_k.weight"], fold=fold_heads(4, 256, 4096))
-            bt.add(f"{L}.v", layer=i, side="attn", order=3, role="attn_v", label="V",
-                   tensors=[p + "attn_v.weight"], fold=fold_heads(4, 256, 4096))
-            bt.add(f"{L}.qk_norm", layer=i, side="attn", order=4, role="norm", label="QK norm",
-                   tensors=[p + "attn_q_norm.weight", p + "attn_k_norm.weight"], fold=FOLD_1D)
-            bt.add(f"{L}.o", layer=i, side="attn", order=5, role="attn_o", label="O",
-                   tensors=[p + "attn_output.weight"], fold=fold_heads(16, 256, 4096, axis="cols"))
-        else:
-            qkv = p + "attn_qkv.weight"
-            bt.add(f"{L}.q", layer=i, side="attn", order=1, role="gdn_q", label="q",
-                   tensors=[(qkv, (0, 2048))], fold=fold_heads(16, 128, 4096))
-            bt.add(f"{L}.k", layer=i, side="attn", order=2, role="gdn_k", label="k",
-                   tensors=[(qkv, (2048, 4096))], fold=fold_heads(16, 128, 4096))
-            bt.add(f"{L}.v", layer=i, side="attn", order=3, role="gdn_v", label="v",
-                   tensors=[(qkv, (4096, 8192))], fold=fold_heads(32, 128, 4096))
-            bt.add(f"{L}.z", layer=i, side="attn", order=4, role="gdn_gate", label="输出门控 z",
-                   tensors=[p + "attn_gate.weight"], fold=fold_heads(32, 128, 4096))
-            bt.add(f"{L}.ctrl", layer=i, side="attn", order=5, role="gdn_ctrl",
-                   label="递推控制（α β 卷积 A dt norm）",
-                   tensors=[p + "ssm_alpha.weight", p + "ssm_beta.weight", p + "ssm_conv1d.weight",
-                            p + "ssm_a", p + "ssm_dt.bias", p + "ssm_norm.weight"],
-                   fold={"basis": "structure", "note": "α、β 每个 value 头一行；卷积按通道；其余为一维"})
-            bt.add(f"{L}.out", layer=i, side="attn", order=6, role="gdn_out", label="输出投影",
-                   tensors=[p + "ssm_out.weight"], fold=fold_heads(32, 128, 4096, axis="cols"))
-        # MLP 一侧：从残差棒向外排
-        bt.add(f"{L}.post_norm", layer=i, side="mlp", order=0, role="norm", label="post RMSNorm",
+        names = [(["attn_q.weight", "attn_q_norm.weight"], "Q / Gate", "attn_q"),
+                 (["attn_k.weight", "attn_v.weight", "attn_k_norm.weight"], "K / V", "attn_k"),
+                 (["attn_output.weight"], "输出投影", "attn_o")] if full else [
+                 (["attn_qkv.weight"], "输入投影 q / k / v", "gdn_q"),
+                 (["attn_gate.weight", "ssm_alpha.weight", "ssm_beta.weight", "ssm_conv1d.weight", "ssm_a", "ssm_dt.bias", "ssm_norm.weight"],
+                  "门控 / Conv / 递推控制", "gdn_ctrl"), (["ssm_out.weight"], "输出投影", "gdn_out")]
+        for j, (ts, label, role) in enumerate(names):
+            bt.add(f"{tag}.mix{j}", layer=i, slot="mixer", order=j, role=role,
+                   label=("Full Attention · " if full else "Gated DeltaNet · ") + label,
+                   tensors=[p + n for n in ts], fold={"basis": "per_tensor", "note": "各张量独立处理后分区填充"})
+        bt.add(f"{tag}.post_norm", layer=i, slot="norm2", role="norm", label="Post RMSNorm",
                tensors=[p + "post_attention_norm.weight"], fold=FOLD_1D)
-        bt.add(f"{L}.gate", layer=i, side="mlp", order=1, role="mlp_gate", label="gate",
-               tensors=[p + "ffn_gate.weight"], fold=FOLD_ASPECT)
-        bt.add(f"{L}.up", layer=i, side="mlp", order=2, role="mlp_up", label="up",
-               tensors=[p + "ffn_up.weight"], fold=FOLD_ASPECT)
-        bt.add(f"{L}.down", layer=i, side="mlp", order=3, role="mlp_down", label="down",
-               tensors=[p + "ffn_down.weight"], fold=FOLD_ASPECT)
-    bt.add("final_norm", group="end", role="norm", label="final RMSNorm",
+        for j, part in enumerate(("gate", "up", "down")):
+            bt.add(f"{tag}.{part}", layer=i, slot="ffn", order=j, role="mlp_" + part,
+                   label="MLP · " + part, tensors=[p + f"ffn_{part}.weight"], fold=FOLD_ASPECT)
+    bt.add("final_norm", group="end", slot="final_norm", role="norm", label="Final RMSNorm",
            tensors=["output_norm.weight"], fold=FOLD_1D)
-    bt.add("lm_head", group="end", role="lm_head", label="LM Head",
-           tensors=["output.weight"], fold=FOLD_ASPECT)
+    if not c["tie_embeddings"]:
+        bt.add("lm_head", group="end", slot="lm_head", role="lm_head", label="LM Head",
+               tensors=["output.weight"], fold=FOLD_ASPECT)
     return layers
 
 
@@ -214,14 +276,14 @@ def build_vision(bv: Builder) -> None:
     bv.add("V.patch", group="vision_end", role="vis_patch", label="视觉 patch 嵌入 + 位置编码",
            tensors=["v.patch_embd.weight", "v.patch_embd.weight.1", "v.patch_embd.bias",
                     "v.position_embd.weight"], fold=FOLD_ASPECT)
-    for i in range(N_VLAYERS):
+    for i in range(bv.cfg["vision_layers"]):
         p = f"v.blk.{i}."
-        bv.add(f"V{i:02d}.attn", vlayer=i, side="vattn", role="vis_attn", label="视觉注意力",
-               tensors=[p + "ln1.weight", p + "ln1.bias", p + "attn_qkv.weight", p + "attn_qkv.bias",
-                        p + "attn_out.weight", p + "attn_out.bias"], fold=FOLD_ASPECT)
-        bv.add(f"V{i:02d}.mlp", vlayer=i, side="vmlp", role="vis_mlp", label="视觉 MLP",
-               tensors=[p + "ln2.weight", p + "ln2.bias", p + "ffn_up.weight", p + "ffn_up.bias",
-                        p + "ffn_down.weight", p + "ffn_down.bias"], fold=FOLD_ASPECT)
+        for slot, role, names in (("norm1", "norm", ["ln1.weight", "ln1.bias"]),
+                                  ("attn", "vis_attn", ["attn_qkv.weight", "attn_qkv.bias", "attn_out.weight", "attn_out.bias"]),
+                                  ("norm2", "norm", ["ln2.weight", "ln2.bias"]),
+                                  ("mlp", "vis_mlp", ["ffn_up.weight", "ffn_up.bias", "ffn_down.weight", "ffn_down.bias"])):
+            bv.add(f"V{i:02d}.{slot}", vlayer=i, slot="v_" + slot, role=role, label="视觉 · " + slot,
+                   tensors=[p + n for n in names], fold={"basis": "per_tensor", "note": "各张量独立处理"})
     bv.add("V.merger", group="vision_end", role="vis_merger", label="视觉投影器（2×2 合并 → 4096）",
            tensors=["v.post_ln.weight", "v.post_ln.bias", "mm.0.weight", "mm.0.bias",
                     "mm.2.weight", "mm.2.bias"], fold=FOLD_ASPECT)
