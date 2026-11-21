@@ -1,0 +1,28 @@
+/* 使用已有科学小样的语义颜色，类型清单与分区观察独立扩展。 */
+:root { --survey-gap: 20px; --survey-line: 220 10% 20%; }
+.survey-layout { display: grid; grid-template-columns: 260px minmax(0,1fr); gap: var(--survey-gap); }
+.sidebar { padding: 16px; background: hsl(var(--panel)); border: 1px solid hsl(var(--border)); border-radius: var(--radius); align-self: start; }
+.sidebar select, .sidebar input { width: 100%; }
+#blocks { max-height: 620px; overflow-y: auto; margin-top: 16px; }
+.block-button { display: block; width: 100%; text-align: left; font-size: 12px; padding: 10px; margin: 4px 0; }
+.block-button[aria-pressed='true'] { border-color: hsl(var(--accent)); background: hsl(var(--support-panel)); }
+.block-button small { display:block; color:hsl(var(--muted)); }
+.survey-content { min-width: 0; }
+.survey-content .primary-controls label { display:flex; flex-direction:column; max-width:100%; min-width:0; }
+.survey-content select { max-width:100%; }
+#status { overflow-wrap:anywhere; }
+#pieces { font-size: 12px; margin: 16px 0; border: 1px solid hsl(var(--border)); padding: 12px 16px; border-radius: var(--radius); }
+#pieces li { margin: 6px 0; overflow-wrap: anywhere; }
+.survey-slice { margin: 6px 0; }
+.survey-slice figcaption { font-size: 11px; color: hsl(var(--muted)); }
+.survey-slice canvas { display:block; width:100%; height:110px; image-rendering:pixelated; background:hsl(var(--black)); object-fit:contain; }
+.survey-card-stats { padding:12px; font-size:12px; color:hsl(var(--muted)); }
+.survey-source { overflow-wrap:anywhere; font-size:12px; color:hsl(var(--muted)); }
+#find { background:hsl(var(--surface)); color:hsl(var(--ink)); padding:8px; border:1px solid hsl(var(--border)); border-radius:6px; font:inherit; }
+#find:focus-visible { outline:none; box-shadow:var(--focus); }
+#block-title { font-size:21px; margin-bottom:8px; }
+#manifest-info { white-space:pre-wrap; overflow-wrap:anywhere; }
+#catalog-count { font-size:12px; }
+.survey-legend { color:hsl(var(--muted)); font-size:12px; }
+@media (max-width:1000px) { .survey-layout{grid-template-columns:1fr;} #blocks{max-height:200px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;} }
+@media (max-width:700px) { #blocks{grid-template-columns:1fr;} .survey-content .parameters{grid-template-columns:repeat(2,minmax(100px,1fr));} }

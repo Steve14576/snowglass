@@ -1,0 +1,10 @@
+/* 仅新副本：窗口范围展示和可读切面。 */
+:root { --window-surface: 190 12% 11%; }
+#pieces { background:hsl(var(--window-surface)); }
+#pieces li { margin:10px 0; line-height:1.7; }
+#pieces .range { color:hsl(var(--accent)); font-variant-numeric:tabular-nums; }
+#status { color:hsl(var(--warning)); }
+.survey-slice canvas { height:150px; }
+.viewport { height:340px; }
+.survey-card-stats { border-top:1px solid hsl(var(--border)); }
+@media(max-width:700px) { .viewport {height:300px;} }

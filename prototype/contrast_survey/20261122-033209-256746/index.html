@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>全类型灰度展开 · 独立副本</title>
+<meta name="description" content="124个真实张量逐通道灰度展开，旧标尺与实际范围并排观察。原数据、旧页面独立保留，不重算SVD，不筛掉位置。">
+<link rel="stylesheet" href="assets/base.css"><link rel="stylesheet" href="assets/layout.css"><link rel="stylesheet" href="assets/contrast.css"></head>
+<body>
+<header><div class="eyebrow">SNOWGLASS / CONTRAST STUDY — INDEPENDENT COPY</div>
+<h1>把已有差异，真正展开看清</h1>
+<p class="muted">65 个功能组 · 124 个张量 · 369 个可用幅度通道。原始统计逐字复制，灰度独立展开，不重新计算权重或 SVD。</p>
+<nav><a href="http://localhost:8126" target="_blank" rel="noopener">原全类型探路</a><a href="http://localhost:8124" target="_blank" rel="noopener">原编辑器</a><a href="contrast_summary.json" target="_blank" rel="noopener">独立展开记录</a><a href="verification-20261122-033717/gallery.html" target="_blank" rel="noopener">全部 130 张新截图</a></nav></header>
+<main><p id="status" role="status">正在加载独立数据……</p><div class="survey-layout">
+<aside class="sidebar" aria-label="功能组清单"><label>模型部分<select id="family"><option value="all">全部</option><option value="full">全注意力</option><option value="gdn">GDN</option><option value="vision">视觉塔</option><option value="end">文本首尾／MTP</option></select></label>
+<label>查找块<input id="find" type="search" placeholder="L16、down、norm" autocomplete="off"></label><p id="catalog-count" class="muted"></p><div id="blocks"></div></aside>
+<section class="survey-content" aria-label="灰度对照"><h2 id="block-title">请选择功能组</h2><p id="block-source" class="survey-source"></p>
+<section class="toolbar" aria-label="观察设置"><div class="primary-controls">
+<label>显示范围<select id="part"><option value="all">完整功能组</option></select></label>
+<label>同一数据通道<select id="channel"><option value="full">完整权重幅度（含全部权重）</option><option value="feature">谱特征／不适用处直接幅度</option><option value="rowcol">行列强度／不适用处直接幅度</option><option value="residual">谱残差幅度／不适用处直接幅度</option></select></label>
+<label>观察方式<select id="mode"><option value="opaque">不透明（检查强弱）</option><option value="additive">透明叠加（可能再次过亮）</option></select></label>
+<label>右列窗口<select id="window"><option value="range">实际最小值—最大值</option><option value="robust">0.5%—99.5%（裁切极值）</option></select></label></div>
+<div class="parameters">
+<label class="control"><span>右列黑端相对偏移<output id="black-out" for="black">0.00</output></span><input id="black" type="range" min="-0.5" max="0.9" step="0.01" value="0"></label>
+<label class="control"><span>右列白端相对偏移<output id="white-out" for="white">1.00</output></span><input id="white" type="range" min="0.1" max="1.5" step="0.01" value="1"></label>
+<label class="control"><span>右列幂次 γ<output id="gamma-out" for="gamma">1.00</output></span><input id="gamma" type="range" min="0.25" max="3" step="0.05" value="1"></label>
+<label class="control"><span>旧列曝光（不改展开列）<output id="oldgain-out" for="oldgain">2.00</output></span><input id="oldgain" type="range" min="0.25" max="3" step="0.05" value="2"></label>
+<label class="control"><span>等大小块边长<output id="size-out" for="size">0.45</output></span><input id="size" type="range" min="0.15" max="0.8" step="0.05" value="0.45"></label>
+<label class="control"><span>切面方向<select id="axis"><option value="0">x</option><option value="1" selected>y</option><option value="2">z</option></select></span></label>
+<label class="control"><span>切面位置<output id="slice-out" for="slice">0.50</output></span><input id="slice" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+<label><input id="slab" type="checkbox">三维也只看当前单层</label></div>
+<div class="actions"><button id="reset">恢复展开基线</button><button id="camera">重置视角</button><button id="save">保存当前独立灰度结果</button></div>
+<p class="survey-legend">没有位置筛选。黑色＝窗口下端，不代表原权重为空；恒定／零数组不造纹理。每张量每通道各自定窗，各子区共用，不据黑白程度比较模型重要性。</p></section>
+<ol id="pieces"></ol>
+<section class="comparison" aria-label="同一通道的三种灰度映射">
+<article class="card"><div class="card-heading"><h2>01 / 原固定标尺</h2><p>复现先前曝光与饱和，同一数据，不作位置门槛。</p></div><div class="viewport" aria-label="原标尺三维"></div><div class="slices"></div><div class="survey-card-stats"></div></article>
+<article class="card"><div class="card-heading"><h2>02 / 全范围展开</h2><p>实际最小值到最大值 → 黑到白。展示全部既有变化。</p></div><div class="viewport" aria-label="展开灰度三维"></div><div class="slices"></div><div class="survey-card-stats"></div></article>
+<article class="card"><div class="card-heading"><h2>03 / 可调窗口</h2><p>显式调黑白端与幂次，区间和放大倍数在下面列明。</p></div><div class="viewport" aria-label="可调窗口三维"></div><div class="slices"></div><div class="survey-card-stats"></div></article>
+</section><details><summary>来源、窗口、谱限制与副本证明</summary><pre id="manifest-info"></pre></details></section></div></main>
+<footer>展开的是压缩后仍然存在的差异，不恢复已丢失的信息。残差、完整幅度和谱特征可以分别看；不把纹理称作已提纯知识。主编辑器与 UX 清单没有改动。</footer>
+<script src="assets/base_scene.js"></script><script src="assets/scene.js"></script><script src="assets/math.js"></script><script src="assets/app.js"></script>
+</body></html>

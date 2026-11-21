@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>全类型权重探路 · snowglass</title>
+<meta name="description" content="Qwen3.5-9B 全类型与前中后代表层的真实灰度小样，查看完整功能组的独立张量与分区、谱适用性和筛选限制。">
+<link rel="stylesheet" href="gray_samples.css"><link rel="stylesheet" href="type_survey.css">
+</head>
+<body>
+<header><div class="eyebrow">SNOWGLASS / TYPE SURVEY</div>
+<h1>全类型、前中后：这些块实际有什么？</h1>
+<p class="muted">65 个功能组 · 124 个真实张量。这里是方法探路，不是“有用知识提纯”，也不是最终加工仿真。</p>
+<nav><a href="gray_samples.html?study=support">原两块筛选对照</a><a href="http://localhost:8124/prototype/snowglass_editor.html" target="_blank" rel="noopener">原编辑器（不改工程）</a></nav></header>
+<main><p id="status" role="status">正在读取本次探路结果……</p>
+<div class="survey-layout">
+<aside class="sidebar" aria-label="功能组清单">
+<label>模型部分<select id="family"><option value="all">全部</option><option value="full">文本 · 全注意力</option><option value="gdn">文本 · GDN</option><option value="vision">视觉塔</option><option value="end">文本首尾与 MTP</option></select></label>
+<label>查找块或层<input id="find" type="search" placeholder="如 mix1、L16、norm" autocomplete="off"></label>
+<p id="catalog-count" class="muted"></p><div id="blocks"></div>
+</aside>
+<section class="survey-content" aria-label="选中功能组">
+<h2 id="block-title">请选择功能组</h2><p id="block-source" class="survey-source"></p>
+<section class="toolbar" aria-label="观察参数">
+<div class="primary-controls"><label>显示范围<select id="part"><option value="all">完整功能组（分区展示）</option></select></label>
+<label>特征通道<select id="channel"><option value="feature">谱特征／不适用处直接幅度</option><option value="full">直接幅度</option><option value="rowcol">行列强度／不适用处直接幅度</option></select></label>
+<label>观察方式<select id="mode"><option value="opaque">不透明 · 检查空间分布</option><option value="additive">透明叠加 · 仅示意</option></select></label></div>
+<div class="parameters">
+<label class="control"><span>筛选门槛（显影前）<output id="cutoff-out" for="cutoff">0.250</output></span><input id="cutoff" type="range" min="0" max="1" step="0.001" value="0.25"></label>
+<label class="control"><span>共用曝光<output id="gain-out" for="gain">2.00</output></span><input id="gain" type="range" min="0.25" max="8" step="0.05" value="2"></label>
+<label class="control"><span>共用幂次 γ<output id="gamma-out" for="gamma">1.00</output></span><input id="gamma" type="range" min="0.25" max="3" step="0.05" value="1"></label>
+<label class="control"><span>等大块边长／格距<output id="size-out" for="size">0.45</output></span><input id="size" type="range" min="0.15" max="0.8" step="0.05" value="0.45"></label>
+<label class="control"><span>切面方向</span><select id="axis"><option value="0">x</option><option value="1" selected>y</option><option value="2">z</option></select></label>
+<label class="control"><span>切面相对位置<output id="slice-out" for="slice">0.50</output></span><input id="slice" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+<label><input id="slab" type="checkbox">三维只显示当前切面</label>
+</div>
+<div class="actions"><button id="reset">恢复观察基线</button><button id="camera">重置视角</button><button id="save">保存本次观察设置</button></div>
+<p class="survey-legend">一个分区只对应一个独立张量／子段，按下面编号从左到右、从上到下排列；相同格距与小块边长，不按重要性分体积。切面逐区显示。门槛不减灰度，曝光不改筛选位置。</p>
+</section>
+<ol id="pieces"></ol>
+<section class="comparison" aria-label="完整幅度、特征与筛选对照">
+<article class="card"><div class="card-heading"><h2>01 / 完整幅度</h2><p>还原约定后的真实权重，绝对值均值合并。</p></div><div class="viewport" aria-label="完整幅度三维"></div><div class="slices"></div><div class="survey-card-stats"></div></article>
+<article class="card"><div class="card-heading"><h2>02 / 选定特征</h2><p>全部位置，不筛选。小张量不假称做了谱分解。</p></div><div class="viewport" aria-label="选定特征三维"></div><div class="slices"></div><div class="survey-card-stats"></div></article>
+<article class="card"><div class="card-heading"><h2>03 / 特征选区内灰度</h2><p>只选幅度超过门槛的位置，保留连续灰度。</p></div><div class="viewport" aria-label="筛选特征三维"></div><div class="slices"></div><div class="survey-card-stats"></div></article>
+</section>
+<details><summary>处理方法、来源与未完成项</summary><pre id="manifest-info"></pre></details>
+</section></div></main>
+<footer>原始权重、谱特征和行列强度不是同一量。各张量使用原始幅度均值两倍作为白值，不宣称跨张量绝对亮度可比。对象树、局部覆盖、gumball 与标签 UX 仍在 docs/editor_spec.md 第15节；本页不替这些需求拍板。</footer>
+<script src="gray_samples_scene.js"></script><script src="type_survey_scene.js"></script><script src="type_survey.js"></script>
+</body></html>
