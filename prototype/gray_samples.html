@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>真实权重灰度小样 · snowglass</title>
+  <meta name="description" content="两张真实权重矩阵的全幅度、仅谱特征与弱残差对照。连续灰度小块、同步三维视角、逐层切面；不是爆点模拟。">
+  <link rel="stylesheet" href="gray_samples.css">
+</head>
+<body>
+<header>
+  <div class="eyebrow">SNOWGLASS / MATERIAL STUDY 01</div>
+  <h1 id="study-title">保留什么，才能看清真实权重？</h1>
+  <p class="muted" id="study-intro">两张真实矩阵，三种呈现。每个小块携带连续灰度；没有随机删点，也没有大小编码。</p>
+  <nav><a id="study-switch" href="?study=support">打开区域选取对照</a><a href="http://localhost:8124/prototype/snowglass_editor.html" target="_blank" rel="noopener">打开原编辑器（保留原端口的工程状态）</a></nav>
+</header>
+<main>
+  <p id="status" role="status">正在读取本次实验……</p>
+  <section class="toolbar" aria-label="对照参数">
+    <div class="primary-controls">
+      <label>真实张量 <select id="tensor"><option value="attention">L3 · 注意力投影</option><option value="mlp">L0 · MLP 输出投影</option></select></label>
+      <label>压缩尺度 <select id="resolution"><option value="fine">16 × 16 × 32 · 8192 格</option><option value="coarse">8 × 8 × 16 · 1024 格</option></select></label>
+      <label>三维观察 <select id="render-mode"><option value="additive">透明叠加（仅示意）</option><option value="opaque">不透明（检查遮挡）</option></select></label>
+    </div>
+    <div class="parameters">
+      <label class="control"><span>统一曝光倍率 <output for="gain" id="gain-value">1.00</output></span><input id="gain" type="range" min="0.25" max="8" step="0.05" value="1"></label>
+      <label class="control"><span>统一幂次 γ <output for="gamma" id="gamma-value">1.00</output></span><input id="gamma" type="range" min="0.25" max="3" step="0.05" value="1"></label>
+      <label class="control" data-original><span>统一零灰度门槛 <output for="threshold" id="threshold-value">0.00</output></span><input id="threshold" type="range" min="0" max="0.8" step="0.01" value="0"></label>
+      <label class="control" data-original><span>第三版残差系数 <output for="residue" id="residue-value">0.15</output></span><input id="residue" type="range" min="0" max="1" step="0.01" value="0.15"></label>
+      <label class="control" data-support hidden><span>区域门槛 τ（曝光前）<output for="cutoff" id="cutoff-value">0.25</output></span><input id="cutoff" type="range" min="0" max="0.4" step="0.001" value="0.25"></label>
+      <label class="control"><span>等大小块／格间距 <output for="size" id="size-value">0.45</output></span><input id="size" type="range" min="0.15" max="0.8" step="0.05" value="0.45"></label>
+      <label class="control"><span>切面方向</span><select id="axis"><option value="0">x · 分段方向</option><option value="1">y · 行组方向</option><option value="2">z · 列组方向</option></select></label>
+      <label class="control"><span>切面位置 <output for="slice" id="slice-value">8</output></span><input id="slice" type="range" min="0" max="15" step="1" value="8"></label>
+      <label class="control"><span>三维剖切</span><span><input id="slab" type="checkbox">三维也只显示当前切面</span></label>
+    </div>
+    <div class="actions">
+      <button id="reset" type="button">恢复共同基线</button>
+      <button id="reveal" type="button">共同显影：×3 / γ0.7</button>
+      <button id="camera" type="button">重置视角</button>
+      <button id="export" type="button">保存当前小样设置</button>
+    </div>
+    <p class="muted" id="mode-hint">拖动任一三维视图可同步旋转，滚轮缩放。曲线设置三版共用；灰度为零才隐藏。小块尺寸是观察单位，不是毫米工艺参数。</p>
+  </section>
+  <p id="source" class="muted"></p>
+  <section id="support-summary" class="support-summary" aria-label="区域分布与相邻门槛稳定性" data-support hidden></section>
+  <section class="comparison" aria-label="三版对照">
+    <article class="card" data-variant="full">
+      <div class="card-heading"><h2>01 / 完整幅度</h2><p>原始权重的绝对值均值。没有先筛掉谱残差。</p></div>
+      <div class="viewport" aria-label="完整幅度三维视图"></div>
+      <div class="slices"><span class="muted">同一标尺 · 单层切面</span><canvas class="slice" aria-label="完整幅度二维切面"></canvas></div>
+      <div class="stats"></div>
+    </article>
+    <article class="card" data-variant="spectral">
+      <div class="card-heading"><h2>02 / 仅谱特征</h2><p>仅保留本轮求得的界外谱模式。不是“有用知识”的证明。</p></div>
+      <div class="viewport" aria-label="仅谱特征三维视图"></div>
+      <div class="slices"><span class="muted">同一标尺 · 单层切面</span><canvas class="slice" aria-label="仅谱特征二维切面"></canvas></div>
+      <div class="stats"></div>
+    </article>
+    <article class="card" data-variant="blend">
+      <div class="card-heading"><h2>03 / 弱残差合成</h2><p>谱特征幅度 + 系数 × 残差幅度。系数为 1 也不等于原始幅度。</p></div>
+      <div class="viewport" aria-label="弱残差三维视图"></div>
+      <div class="slices"><span class="muted">同一标尺 · 单层切面</span><canvas class="slice" aria-label="弱残差二维切面"></canvas></div>
+      <div class="stats"></div>
+    </article>
+  </section>
+  <details>
+    <summary>来源、算法边界与操作说明</summary>
+    <p data-original>灰度公式：<code>clip((曝光 × 值 / 参考白值 − 门槛) / (1 − 门槛), 0, 1)^γ</code>。参考白值固定为本张量原始幅度均值的两倍，三版和两档网格共享；不同张量不是绝对亮度对比。</p>
+    <p data-support hidden>区域对照只使用现有谱幅度，令 x＝谱幅度／原始参考白值。先按 x &gt; τ 选位置，再保留 clip(曝光 × x, 0, 1)^γ。门槛不从灰度中扣除，曝光不改变筛选位置。中间白色列只是位置掩膜，右侧才是保留连续数值的结果。</p>
+    <p data-support hidden>这里的门槛是可调观察参数，不是统计显著性或模型重要性判据。六邻接、逐层计数和相邻门槛重合率只描述当前几何折叠，不做平滑、不强留最大块，也不保证一定出现片状结果。</p>
+    <p>这里的“剩余部分”不是训练前初始化。谱模式由最终权重和一个统计参照得到；若达到方向上限，会明确警告。低秩不等于空间稀疏，纯谱版也可能每格非零。</p>
+    <p>透明叠加不是玻璃物理仿真。不透明模式也不是厂家加工模拟；两者只帮助区分灰度分布与遮挡问题。若默认太暗，可以共同显影，不会各版偷偷自动拉伸。</p>
+    <p>主编辑器的对象树、框选打组、局部覆盖、gumball 数值联动、标签等需求仍在 <code>docs/editor_spec.md 第 15 节</code>；本页不是这些功能的交付。</p>
+    <pre id="runinfo"></pre>
+  </details>
+</main>
+<footer>真实统计与代码：scripts/compare_gray_samples.py · 方法与结果：docs/weight_sample_comparison.md · 无随机出点 / 无灰度地板 / 不改主编辑器</footer>
+<script src="gray_samples_scene.js"></script>
+<script src="gray_support.js"></script>
+<script src="gray_samples.js"></script>
+</body>
+</html>
