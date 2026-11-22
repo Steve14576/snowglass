@@ -50,7 +50,12 @@
       const results=[];
       for(const id of model.leaves(ids).filter(id=>model.nodes.get(id).type==='block')){
         const r=await this.evaluate(id,model);
-        results.push({id,status:r.status,include_in_work:model.resolve(id,'include').value,matrix_mm:model.world(id).toArray(),snow_size_mm:model.resolve(id,'snowSize').value,
+        const node=model.nodes.get(id),center=model.bounds([id]).getCenter(new THREE.Vector3()).toArray();
+        const label={text:model.resolve(id,'labelText').value||node.name,font:model.resolve(id,'labelFont').value,
+          size_mm:model.resolve(id,'labelSize').value,offset_mm:[model.resolve(id,'labelDx').value,model.resolve(id,'labelDy').value,model.resolve(id,'labelDz').value],
+          anchor_world_mm:center,output:model.resolve(id,'labelOutput').value,screen_only:!model.resolve(id,'labelOutput').value,
+          orientation:'屏幕贴片朝镜头；导出需固定朝向，未核实',glyph_geometry:'未接入'};
+        results.push({id,status:r.status,include_in_work:model.resolve(id,'include').value,label,matrix_mm:model.world(id).toArray(),snow_size_mm:model.resolve(id,'snowSize').value,
           statistics_source:this.manifest.source_run,settings:r.settings||null,
           pieces:r.pieces.map(p=>({tensor:p.key,name:p.name,channel:p.used,grid:p.grid,region:p.region,gray:Array.from(p.gray),mask:Array.from(p.mask),
             counts:p.counts,window:p.window,reference_white:p.reference,data_sha256:p.data_sha256}))});
@@ -58,6 +63,7 @@
       return {kind:'snowglass.ux-gray-mapping.v1',created_at:new Date().toISOString(),source_run:this.manifest.source_run,
         topology_sha256:model.provenance.topology_sha256,manifest_sha256:model.provenance.manifest_sha256,
         approximation:{lut_size:4097,lookup:'linear',note:'贝塞尔数值映射使用查找表近似；预览与此文件共用同一求值规则'},
+        label_pipeline:'文字定义已随结果输出；字形几何、固定朝向与厂家读取契约尚未接入，本文件不是可加工文字。',
         disclaimer:'这是统计与灰度映射记录，不是已核实的厂家加工文件；未计算块没有补模拟数据。',results};
     }
   }

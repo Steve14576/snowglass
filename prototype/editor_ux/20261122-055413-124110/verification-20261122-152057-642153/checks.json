@@ -1,0 +1,219 @@
+{
+  "phase": "full",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "sidebar_right": 420,
+        "view_left": 425,
+        "tree_y": 48,
+        "properties_y": 353,
+        "slice_disabled": true
+      }
+    },
+    {
+      "name": "inherit_group_and_sparse_overrides",
+      "result": {
+        "group": "group-1",
+        "overrides": {
+          "frameGray": 0.3
+        }
+      }
+    },
+    {
+      "name": "fixed_mm_transform_and_reparent",
+      "result": {
+        "side": 0.012,
+        "retained_raw": 8192
+      }
+    },
+    {
+      "name": "ungroup_two_modes_and_undo",
+      "result": true
+    },
+    {
+      "name": "ghosts_and_global_only_fields",
+      "result": {
+        "ghost": "ghost-mwricxxa-3"
+      }
+    },
+    {
+      "name": "project_roundtrip_and_invalid_trees",
+      "result": true
+    },
+    {
+      "name": "curve_math_insert_inverse_and_lut",
+      "result": {
+        "splitError": 6.731904078627338e-08,
+        "lutError": 8.074897883680876e-08,
+        "lut_size": 4097
+      }
+    },
+    {
+      "name": "actual_curve_click_add_drag_single_undo",
+      "result": true
+    },
+    {
+      "name": "gray_export_same_as_preview_no_mutation",
+      "result": {
+        "saved_count": 8192
+      }
+    },
+    {
+      "name": "actual_inspector_global_ghost_sparse_edit",
+      "result": true
+    },
+    {
+      "name": "all_cached_types_and_missing_layers",
+      "result": {
+        "groups": 65,
+        "tensors": 124,
+        "missing": "该层尚未计算",
+        "mtp": "权重未收录"
+      }
+    },
+    {
+      "name": "rendered_snow_contributes_pixels",
+      "result": {
+        "pixels": 21620,
+        "instances": 8192
+      }
+    },
+    {
+      "name": "mobile_panels_no_overflow",
+      "result": {
+        "width": 390,
+        "scroll": 390,
+        "tree": 110,
+        "props": 199
+      }
+    },
+    {
+      "name": "visual_tree_identity_and_invalid_window",
+      "result": true
+    },
+    {
+      "name": "geometry_recipe_change_during_reparent_preserves_world",
+      "result": true
+    },
+    {
+      "name": "actual_tree_shift_group_default_ungroup",
+      "result": true
+    },
+    {
+      "name": "actual_global_curve_keeps_reference_feedback",
+      "result": true
+    },
+    {
+      "name": "save_buttons_capture_matching_payload",
+      "result": {
+        "project_kind": "snowglass.editor-ux.v1",
+        "mapping_kind": "snowglass.ux-gray-mapping.v1",
+        "count": 8192
+      }
+    },
+    {
+      "name": "actual_open_project_roundtrip",
+      "result": true
+    },
+    {
+      "name": "four_cached_channels_and_independent_mask",
+      "result": {
+        "group_channel_cases": 260,
+        "mask_independent": true
+      }
+    },
+    {
+      "name": "gumball_events_update_shared_numeric_state",
+      "result": {
+        "delta": 0.6999999999999993,
+        "numeric": 0.7,
+        "stored": 0.6999999999999993
+      }
+    },
+    {
+      "name": "actual_numeric_transform_input",
+      "result": {
+        "delta": 1.0
+      }
+    },
+    {
+      "name": "tree_ctrl_toggle_and_shift_range",
+      "result": [
+        "L16.down",
+        "L16.gate",
+        "L16.up"
+      ]
+    },
+    {
+      "name": "sidebar_width_keyboard_resize",
+      "result": {
+        "before": 420,
+        "after": 460
+      }
+    },
+    {
+      "name": "property_panel_fixed_position",
+      "result": [
+        0,
+        353,
+        419
+      ]
+    },
+    {
+      "name": "gumball_follows_object_orientation_and_survives_camera",
+      "result": {
+        "angle": 0,
+        "highlights": 3
+      }
+    },
+    {
+      "name": "actual_shift_drag_box_select",
+      "result": [
+        "L10.down",
+        "L11.down",
+        "L12.down",
+        "L13.down",
+        "L14.down",
+        "L15.down",
+        "L16.down",
+        "L17.down",
+        "L18.down"
+      ]
+    },
+    {
+      "name": "file_protocol_shows_actionable_banner",
+      "result": "这个页面要用本地服务打开，不能双击文件"
+    }
+  ],
+  "source_unchanged": true,
+  "assets_sha256": {
+    "index.html": "c9051a3bf21d9907aa811f0baebdacfb30d46d2f70b83c7c89803dfd7e47228a",
+    "assets\\app.js": "33731d7dcd894ce4a819fca52aa3a372763d012cae50ffd4f601def73b54a037",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "59beffdfc5c13935ade7c8f5eed9880d693094b222e9b0e163c8c5347f05dc0a",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "e19c6f92b1a7afaee9c5350bafa685a1c524a3a19d108df7f250021d3d284ab5",
+    "assets\\editor.css": "4122527181dea151135bed6f9a65938213fe24da472cc5e405c5013599326db7",
+    "assets\\inspector.js": "e9f44be6dedca2ae4b7aac291b8639e8b01cc93bbd92210b2b55c5828eaa4b9b",
+    "assets\\layout.js": "b6e78479bbfbb275f61af486a7cda4377d0aae108e80c83f36007d72a66a4573",
+    "assets\\model.js": "a351cfe2837d4f1d56040c00d817bd551910f9dd43fd87087b6d52c15a80cc82",
+    "assets\\scene.js": "ec4e6507b0e88c42b824724eccb0ed72bc650f1714f6a991aa69bc3e8e9d2fe4",
+    "assets\\tree.js": "ee55aab46979ceba66d4e9423b02d2ff8efb248b477d43db364a0510ded19d18"
+  },
+  "test_sha256": "03106c31397bafbb32bbb09a58b60ab298cd534f1d55819689441c5fc451794a",
+  "seconds": 63.546999999991385
+}

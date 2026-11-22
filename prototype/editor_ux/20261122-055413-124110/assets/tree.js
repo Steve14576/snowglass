@@ -2,14 +2,15 @@
 (() => {
   'use strict';
   class Tree {
-    constructor(model,data,select,reparent){this.model=model;this.data=data;this.select=select;this.reparent=reparent;this.open=new Set(['project','work','text','layer-16','refs']);this.selected=[];
+    constructor(model,data,select,reparent){this.model=model;this.data=data;this.select=select;this.reparent=reparent;this.open=new Set();this.selected=[];this.flat=[];this.anchor=null;this.reveal=false;
       this.element=document.getElementById('tree');document.getElementById('tree-search').oninput=()=>this.render();}
     render(){
       const M=this.model,query=document.getElementById('tree-search').value.trim().toLowerCase(),shown=new Set();
       if(query)for(const n of M.nodes.values()){const source=M.topo.blocks.find(b=>b.id===n.sourceId);if((n.id+' '+n.name+' '+JSON.stringify(source?.tensors||[])).toLowerCase().includes(query)){shown.add(n.id);M.ancestors(n.id).forEach(id=>shown.add(id));}}
-      const scroll=this.element.scrollTop;this.element.textContent='';
+      const scroll=this.element.scrollTop;this.element.textContent='';this.flat=[];
       const append=(id,depth)=>{
         if(query&&!shown.has(id))return;const n=M.nodes.get(id),children=M.children(id),row=document.createElement('div');
+        this.flat.push(id);
         row.className='tree-row'+(this.selected.includes(id)?' selected':'');row.dataset.id=id;row.setAttribute('role','treeitem');row.setAttribute('aria-selected',String(this.selected.includes(id)));row.setAttribute('aria-level',String(depth+1));row.tabIndex=this.selected.includes(id)?0:-1;row.style.paddingLeft=depth*13+'px';
         const expanded=query||this.open.has(id);if(children.length)row.setAttribute('aria-expanded',String(!!expanded));
         const disclose=document.createElement('button');disclose.className='disclose';disclose.textContent=children.length?(expanded?'▾':'▸'):'';disclose.tabIndex=-1;disclose.setAttribute('aria-label','展开／折叠 '+n.name);
@@ -18,17 +19,19 @@
         const name=document.createElement('span');name.className='tree-name';name.textContent=n.name;name.title=n.id;row.append(name);
         if(n.type==='global'||n.type==='group'||n.type==='ghost'){const tag=document.createElement('span');tag.className='tree-kind';tag.textContent={global:'全局',group:'组',ghost:'毛坯'}[n.type];row.append(tag);}
         const count=Object.keys(n.overrides).length;if(count||M.primaryGhost===id){const tag=document.createElement('span');tag.className='tree-badge';tag.textContent=M.primaryGhost===id?'主参照':count+'项覆盖';row.append(tag);}
-        row.onclick=e=>this.select([id],e.shiftKey||e.ctrlKey);row.ondblclick=()=>{this.open.has(id)?this.open.delete(id):this.open.add(id);this.render();};
+        row.onclick=e=>{e.stopPropagation();this.reveal=true;const mode=e.ctrlKey||e.metaKey?'toggle':e.shiftKey?'range':'replace';this.select([id],mode);};row.ondblclick=()=>{this.open.has(id)?this.open.delete(id):this.open.add(id);this.render();};
         row.draggable=!['project','global','work','text','vision','refs'].includes(id);
         row.ondragstart=e=>{e.dataTransfer.setData('text/plain',JSON.stringify(this.selected.includes(id)?M.roots(this.selected):[id]));e.dataTransfer.effectAllowed='move';};
         row.ondragover=e=>{if(['root','tower','layer','group','reference'].includes(n.type)){e.preventDefault();row.classList.add('dragover');}};
         row.ondragleave=()=>row.classList.remove('dragover');row.ondrop=e=>{e.preventDefault();row.classList.remove('dragover');try{this.reparent(JSON.parse(e.dataTransfer.getData('text/plain')),id);}catch(error){document.getElementById('status').textContent=error.message;}};
         row.onkeydown=e=>{const rows=[...this.element.querySelectorAll('.tree-row')],i=rows.indexOf(row);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();rows[Math.max(0,Math.min(rows.length-1,i+(e.key==='ArrowDown'?1:-1)))].focus();}
-          if(e.key==='Enter'||e.key===' '){e.preventDefault();this.select([id],e.shiftKey);}if(e.key==='ArrowRight'){this.open.add(id);this.render();}if(e.key==='ArrowLeft'){this.open.delete(id);this.render();}};
+          if(e.key==='Enter'||e.key===' '){e.preventDefault();this.select([id],e.shiftKey?'range':(e.ctrlKey||e.metaKey)?'toggle':'replace');}if(e.key==='ArrowRight'){this.open.add(id);this.render();}if(e.key==='ArrowLeft'){this.open.delete(id);this.render();}};
         this.element.append(row);if(children.length&&expanded)children.forEach(c=>append(c.id,depth+1));
       };append('project',0);this.element.scrollTop=scroll;
     }
-    selection(ids){this.selected=ids;ids.forEach(id=>this.model.ancestors(id).forEach(a=>this.open.add(a)));this.render();if(ids.length===1)this.element.querySelector(`[data-id="${CSS.escape(ids[0])}"]`)?.scrollIntoView({block:'nearest'});}
+    selection(ids){this.selected=ids;if(ids.length&&!ids.includes(this.anchor))this.anchor=ids[0];if(this.reveal)ids.forEach(id=>this.model.ancestors(id).forEach(a=>this.open.add(a)));this.render();if(ids.length===1&&this.reveal)this.element.querySelector(`[data-id="${CSS.escape(ids[0])}"]`)?.scrollIntoView({block:'nearest'});}
+    revealTo(ids){this.reveal=true;ids.forEach(id=>this.model.ancestors(id).forEach(a=>this.open.add(a)));this.render();}
+    rangeTo(id){const a=this.flat.indexOf(this.anchor),b=this.flat.indexOf(id);if(a<0||b<0)return [id];return this.flat.slice(Math.min(a,b),Math.max(a,b)+1);}
   }
   window.UXTree=Tree;
 })();

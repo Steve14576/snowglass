@@ -1,0 +1,26 @@
+{
+  "phase": "full",
+  "passed": false,
+  "failure": "Page.evaluate: Error: 对象树不应默认展开\n    at eval (eval at evaluate (:370:30), <anonymous>:8:76)\n    at UtilityScript.evaluate (<anonymous>:377:18)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [],
+  "source_unchanged": true,
+  "assets_sha256": {
+    "index.html": "c9051a3bf21d9907aa811f0baebdacfb30d46d2f70b83c7c89803dfd7e47228a",
+    "assets\\app.js": "7d09fd4d160f0790e72a7dc64bb1bb4e372ea8c6eb847048e1735c1994d7a119",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "59beffdfc5c13935ade7c8f5eed9880d693094b222e9b0e163c8c5347f05dc0a",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "e19c6f92b1a7afaee9c5350bafa685a1c524a3a19d108df7f250021d3d284ab5",
+    "assets\\editor.css": "4122527181dea151135bed6f9a65938213fe24da472cc5e405c5013599326db7",
+    "assets\\inspector.js": "e9f44be6dedca2ae4b7aac291b8639e8b01cc93bbd92210b2b55c5828eaa4b9b",
+    "assets\\layout.js": "b6e78479bbfbb275f61af486a7cda4377d0aae108e80c83f36007d72a66a4573",
+    "assets\\model.js": "a351cfe2837d4f1d56040c00d817bd551910f9dd43fd87087b6d52c15a80cc82",
+    "assets\\scene.js": "ec4e6507b0e88c42b824724eccb0ed72bc650f1714f6a991aa69bc3e8e9d2fe4",
+    "assets\\tree.js": "4ff4c11d2bcd000afa93e2f562b3d3bd78e3d0ec333c4336da9556f015623d03"
+  },
+  "test_sha256": "f4e8a5e01b10ab33179cc1ced43de96b32d214fd1ebc046b6662146732fcaaae",
+  "seconds": 4.625
+}

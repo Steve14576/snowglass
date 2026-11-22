@@ -1,8 +1,24 @@
 /* 独立UX启动与联动。旧工程键、旧缓存和服务不修改。 */
 (async()=>{
   'use strict';
-  const $=id=>document.getElementById(id),storageKey='snowglass.editor-ux.20261122-055413-124110';
+  const $=id=>document.getElementById(id),storageKey='snowglass.editor-ux.20261122-055413-124110.v2';
+  const kindName={global:'全局配置',root:'模型根',tower:'塔',layer:'层',group:'操作组',block:'权重功能块',ghost:'幽灵毛坯',reference:'参照集合',project:'工程'};
   const message=text=>$('status').textContent=text;
+  function bootFail(title,body,hint,cmd){
+    const box=$('boot-error');if(!box)return;
+    $('boot-title').textContent=title;$('boot-body').textContent=body;$('boot-hint').textContent=hint;
+    const pre=$('boot-cmd');pre.textContent=cmd||'';pre.hidden=!cmd;
+    box.hidden=false;document.body.classList.add('boot-failed');
+  }
+  // 文件协议下浏览器不会让页面 fetch 同目录数据，提前拦下而不是伪装成“统计缺失”。
+  if(location.protocol==='file:'){
+    message('未启动：当前以文件方式打开，无法读取统计。');
+    bootFail('这个页面要用本地服务打开，不能双击文件',
+      '当前地址是 file:// 开头。浏览器把同目录的拓扑和 124 份张量统计当成跨源请求拦掉，所以你看到空白和一串 403。数据文件都在，代码也没坏。',
+      '换成下面这条本机地址即可；服务没开时先在项目根执行框里的命令。',
+      'http://127.0.0.1:8128/\n\nuv run --no-project python -m http.server 8128 --bind 127.0.0.1 --directory prototype/editor_ux/20261122-055413-124110');
+    return;
+  }
   async function json(path){const r=await fetch(path,{cache:'no-store'});if(!r.ok)throw Error(path+' HTTP '+r.status);return r.json();}
   async function libraries(){
     for(const path of ['build/three.min.js','examples/js/controls/OrbitControls.js','examples/js/controls/TransformControls.js']){
@@ -19,7 +35,7 @@
   function confirmAction(title,text){const d=$('confirm-dialog');$('confirm-title').textContent=title;$('confirm-body').textContent=text;d.returnValue='';return new Promise(resolve=>{d.addEventListener('close',()=>resolve(d.returnValue==='ok'),{once:true});d.showModal();});}
   try{
     const [topo,manifest,provenance]=await Promise.all([json('data/topology.json'),json('data/manifest.json'),json('provenance.json')]);await libraries();
-    const model=new UXModel.Model(topo,provenance),data=new UXData.Data(manifest);let selected=['L16.down'],preview=['L16.down'],results=[],serial=0,saveTimer,inspector,tree,scene;
+    const model=new UXModel.Model(topo,provenance),data=new UXData.Data(manifest);let selected=['L16.down'],preview=['L16.down'],results=[],serial=0,saveTimer,inspector,tree,scene,dataTimer=null,structPending=false;
     const observed=()=>selected.length===1&&selected[0]==='global'?preview:selected;
     const snapshot=()=>({...model.snapshot(),view:{selected:selected.slice(),preview:preview.slice(),isolate:scene.isolate,exposure:scene.exposure,camera:scene.camera.position.toArray(),target:scene.orbit.target.toArray(),open:[...tree.open]}});
     const safe=fn=>{try{return fn();}catch(e){message(e.message);}};
@@ -49,14 +65,57 @@
       model.layoutWarnings.forEach(line);line('轴向间距不是全部跨块近邻检查。没有厂家灰阶标定，不据点距宣称可加工；爆点数、工时、灰度容量未核实。');
     }
     function refresh(transient=false){
-      selected=selected.filter(id=>model.nodes.has(id));preview=preview.filter(id=>model.nodes.has(id));scene.observation=observed();scene.select(selected);
-      if(transient){inspector.updateTransform();inspector.curveUI?.redraw();}
-      else{const curveState=inspector.curveUI?{index:inspector.curveUI.index,handles:inspector.curveUI.handles}:null;inspector.ids=selected;inspector.render();if(curveState&&inspector.curveUI){Object.assign(inspector.curveUI,curveState);inspector.curveUI.redraw();}tree.selected=selected;tree.render();
+      selected=selected.filter(id=>model.nodes.has(id));preview=preview.filter(id=>model.nodes.has(id));scene.observation=observed();scene.select(selected);renderIdentity();
+      if(transient){
+        inspector.updateTransform();inspector.curveUI?.redraw();
+        if(!structPending){structPending=true;requestAnimationFrame(()=>{structPending=false;scene.structure();scene.render();});}
+        clearTimeout(dataTimer);dataTimer=setTimeout(()=>refreshData(),50);
+        return;
+      }
+      {const curveState=inspector.curveUI?{index:inspector.curveUI.index,handles:inspector.curveUI.handles}:null;inspector.ids=selected;inspector.render();if(curveState&&inspector.curveUI){Object.assign(inspector.curveUI,curveState);inspector.curveUI.redraw();}tree.selected=selected;tree.render();
         clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(storageKey,JSON.stringify(snapshot()));}catch(e){message('自动保存失败，请保存工程文件');}},400);}
       scene.structure();refreshData();renderReport();$('undo').disabled=!model.history.length;$('redo').disabled=!model.future.length;
     }
-    function select(ids,add=false){
-      if(add){const set=new Set(selected);ids.forEach(id=>set.has(id)?set.delete(id):set.add(id));selected=[...set];}else selected=ids.filter(id=>model.nodes.has(id));
+    function renderIdentity(){
+      const el=$('identity');el.textContent='';
+      if(!selected.length){el.hidden=true;return;}
+      el.hidden=false;const row=text=>{const p=document.createElement('p');p.className='id-row';p.textContent=text;el.append(p);};
+      const h=document.createElement('h3');
+      if(selected.length>1){
+        h.textContent=`已选 ${selected.length} 个对象`;el.append(h);
+        row(selected.slice(0,8).join('、')+(selected.length>8?' …':''));return;
+      }
+      const n=model.nodes.get(selected[0]);h.textContent=n.name+' · '+n.id;el.append(h);
+      const kind=document.createElement('p');kind.className='id-kind';kind.textContent=kindName[n.type]||n.type;el.append(kind);
+      if(n.type==='block'){
+        const src=topo.blocks.find(b=>b.id===n.sourceId)||(topo.geometry_only||[]).find(b=>b.id===n.sourceId);
+        if(src){
+          row(`源层 ${src.layer!=null?'L'+src.layer:src.vlayer!=null?'V'+src.vlayer:'—'} · 槽位 ${src.slot||'—'} · ${(src.tensors||[]).length} 个张量`);
+          for(const t of src.tensors||[]){
+            const box=document.createElement('div');box.className='id-tensor';
+            box.textContent=`${t.gguf}\n${t.shape.join('×')} · ${t.qtype||'—'}${t.restore?' · 已按HF约定还原':''}`;el.append(box);
+          }
+        }else row('没有源张量（空框或权重未收录）');
+        const real=data.groups.has(n.sourceId),st=document.createElement('p');
+        st.className='id-state'+(real?'':' muted');st.textContent=real?'统计状态：已有真实缓存':'统计状态：未计算／权重未收录';el.append(st);
+        const size=model.bounds([n.id]).getSize(new THREE.Vector3());
+        row('包络 '+size.toArray().map(v=>v.toFixed(3)).join(' × ')+' mm');
+      }else if(n.type==='ghost'){
+        const d=n.data;row(`形状 ${d.shape==='box'?'长方体':'圆柱'} · 向内预留 ${d.margin} mm${model.primaryGhost===n.id?' · 主参照':''}`);
+      }else if(n.type==='group'){
+        row(`操作组 · 成员 ${model.descendants(n.id).length} 个节点 · 覆盖 ${Object.keys(n.overrides).length} 项`);
+      }else if(n.type==='global'){
+        row('全局配置对象 · 没有空间变换');
+      }else if(n.type==='layer'||n.type==='tower'){
+        row(`包含 ${model.descendants(n.id).length} 个节点`);
+      }
+    }
+    function select(ids,mode='replace'){
+      ids=ids.filter(id=>model.nodes.has(id));
+      if(mode==='toggle'){const set=new Set(selected);ids.forEach(id=>set.has(id)?set.delete(id):set.add(id));selected=[...set];if(ids.length)tree.anchor=ids[ids.length-1];}
+      else if(mode==='range'){const last=ids[ids.length-1],scope=tree.rangeTo(last);selected=scope.filter(id=>model.nodes.has(id));tree.anchor=tree.anchor||last;}
+      else{selected=ids;tree.anchor=ids[ids.length-1]||null;}
+      renderIdentity();
       if(selected.length===1&&selected[0]==='global'){
         if(!model.leaves(preview).some(id=>model.nodes.get(id).type==='block'))preview=[...model.nodes.values()].filter(n=>n.type==='block'&&data.groups.has(n.id)).slice(0,1).map(n=>n.id);
       }else preview=selected.slice();
@@ -71,7 +130,7 @@
     function hover(id,event){const card=$('hover-card');if(!id){card.hidden=true;return;}const n=model.nodes.get(id),source=topo.blocks.find(b=>b.id===n.sourceId);card.textContent=n.name+' · '+n.id+'\n'+(source?.tensors||[]).map(t=>t.gguf+' '+t.shape.join('×')).join('\n');
       const r=$('view').getBoundingClientRect();card.style.left=Math.max(8,Math.min(event.clientX-r.left+15,r.width-370))+'px';card.style.top=Math.max(8,Math.min(event.clientY-r.top+15,r.height-100))+'px';card.hidden=false;}
     tree=new UXTree(model,data,select,reparent);inspector=new UXInspector(model,message);
-    scene=new UXScene($('view'),model,select,hover,()=>inspector.updateTransform());model.listeners.push(refresh);
+    scene=new UXScene($('view'),model,(ids,mode)=>{tree.reveal=true;select(ids,mode);},hover,()=>inspector.updateTransform());model.listeners.push(refresh);
     async function group(){try{const ids=model.roots(selected),parents=ids.map(id=>model.ancestors(id));if(!ids.length)throw Error('先多选或框选对象');
       const parent=parents[0].find(p=>parents.every(a=>a.includes(p))),changes=ids.flatMap(id=>model.changes(id,parent));
       if(changes.length&&!await confirmAction('打组将改变部分继承参数','成员移动到共同上级下的新组，以下参数的继承来源将变化：\n'+[...new Set(changes)].join('、')+'\n世界变换保留；不会复制整套参数。'))return;
@@ -88,29 +147,65 @@
     $('select-layer').onclick=()=>select(topo.blocks.filter(b=>b.layer===+$('layer-number').value&&!b.id.startsWith('V')&&model.nodes.has(b.id)).map(b=>b.id));
     $('select-column').onclick=()=>select(topo.blocks.filter(b=>model.nodes.has(b.id)&&($('slot').value==='vision'?b.id.startsWith('V'):!b.id.startsWith('V')&&b.slot===$('slot').value)).map(b=>b.id));
     const mode=value=>{scene.setMode(value);document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===value));};document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>mode(b.dataset.mode));
-    $('box-select').onclick=()=>{scene.boxMode=!scene.boxMode;$('box-select').classList.toggle('active',scene.boxMode);};
+    const boxButton=$('box-select'),syncBox=()=>{boxButton.classList.toggle('active',scene.boxMode);boxButton.setAttribute('aria-pressed',String(scene.boxMode));};
+    boxButton.onclick=()=>{scene.boxMode=!scene.boxMode;syncBox();};
     const isolation=value=>{scene.isolate=value;$('isolate-view').classList.toggle('active',value);scene.structure();scene.render();refreshData();};
     $('isolate-view').onclick=()=>isolation(!scene.isolate);
     $('fit-all').onclick=()=>{isolation(false);scene.fit(['work']);};$('fit-selected').onclick=()=>scene.fit(observed());$('front-view').onclick=()=>scene.fit(observed().length?observed():['work'],true);
     $('exposure').oninput=()=>{scene.exposure=+$('exposure').value;$('exposure-out').textContent=scene.exposure.toFixed(2);scene.drawSnow(results);};
+    for(const [id,text] of [['slice-1','首批未接入真实统计与网格重算；统计生成设置改变后才需要这一步。'],['slice-2','首批未接入厂家加工导出；不会把灰度映射冒充可加工文件。']])
+      $(id).addEventListener('pointerdown',()=>message(text));
     $('report-toggle').onclick=()=>{$('report').hidden=!$('report').hidden;renderReport();};$('focus-toggle').onclick=()=>{document.body.classList.toggle('focus');scene.resize();};
     $('save-project').onclick=()=>download(snapshot(),'snowglass_ux_'+stamp()+'.json');$('open-project').onclick=()=>$('project-file').click();
     $('project-file').onchange=async()=>{try{const doc=JSON.parse(await $('project-file').files[0].text());model.load(doc);if(doc.view?.camera&&doc.view.camera.length===3&&[...doc.view.camera,...doc.view.target].every(Number.isFinite)){scene.camera.position.fromArray(doc.view.camera);scene.orbit.target.fromArray(doc.view.target);scene.orbit.update();}
-        if(Array.isArray(doc.view?.open))tree.open=new Set(doc.view.open);preview=(doc.view?.preview||['L16.down']).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??true;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);
+        if(Array.isArray(doc.view?.open))tree.open=new Set(doc.view.open);preview=(doc.view?.preview||['L16.down']).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);
         select((doc.view?.selected||['work']).filter(id=>model.nodes.has(id)));message('新版工程已恢复，继承关系与覆盖项保留');}catch(e){message('打开失败：'+e.message);}finally{$('project-file').value='';}};
     $('save-mapping').onclick=async()=>{if(!selected.length){message('先选择有真实统计的块或组');return;}const button=$('save-mapping');button.disabled=true;
       try{const frozen=new UXModel.Model(topo,provenance);frozen.restore(model.snapshot());const scope=selected.length===1&&selected[0]==='global'?['work']:selected.slice();const doc=await data.mapping(scope,frozen);if(!doc.results.some(r=>r.pieces.length))throw Error('所选范围没有真实统计，不输出空白冒充成功');doc.project=frozen.snapshot();download(doc,'gray_mapping_'+stamp()+'.json');message('灰度映射已保存为新文件；未生成厂家加工文件');}
       catch(e){message(e.message);}finally{button.disabled=false;refreshData();}};
-    const splitter=$('splitter');let start=null;splitter.onpointerdown=e=>{start={y:e.clientY,height:document.querySelector('.tree-panel').clientHeight};splitter.setPointerCapture(e.pointerId);};
-    splitter.onpointermove=e=>{if(!start)return;document.documentElement.style.setProperty('--tree-height',Math.max(140,Math.min($('sidebar').clientHeight-220,start.height+e.clientY-start.y))+'px');};splitter.onpointerup=()=>start=null;
-    splitter.onkeydown=e=>{if(['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const h=document.querySelector('.tree-panel').clientHeight;document.documentElement.style.setProperty('--tree-height',Math.max(140,Math.min($('sidebar').clientHeight-220,h+(e.key==='ArrowDown'?20:-20)))+'px');}};
-    document.addEventListener('keydown',e=>{if(e.target.closest('input,select,textarea')||$('confirm-dialog').open)return;const key=e.key.toLowerCase();
-      if(e.ctrlKey&&key==='z'){e.preventDefault();e.shiftKey?model.redo():model.undo();return;}if(e.ctrlKey&&key==='g'){e.preventDefault();group();return;}
-      if(!e.ctrlKey){if({w:'translate',e:'rotate',r:'scale',q:'off'}[key])mode({w:'translate',e:'rotate',r:'scale',q:'off'}[key]);if(key==='b')$('box-select').click();if(key==='f')$('focus-toggle').click();}
+    // 侧栏宽度与树／属性高度：各拖各的，不互相挤掉。
+    const root=document.documentElement,resizer=$('sidebar-resizer'),treeSplit=$('tree-splitter');
+    const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+    const dragResize=(handle,onMove,axis)=>{
+      handle.addEventListener('pointerdown',e=>{e.preventDefault();handle.setPointerCapture(e.pointerId);handle.dataset.drag='1';handle.dataset.start=String(axis==='x'?e.clientX:e.clientY);
+        handle.dataset.base=axis==='x'?String(parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-width'))||420):String(document.querySelector('.tree-panel').clientHeight);});
+      handle.addEventListener('pointermove',e=>{if(handle.dataset.drag!=='1')return;onMove(Number(handle.dataset.base),axis==='x'?e.clientX:e.clientY,Number(handle.dataset.start));});
+      const stop=()=>{handle.dataset.drag='0';};handle.addEventListener('pointerup',stop);handle.addEventListener('pointercancel',stop);
+      handle.addEventListener('keydown',e=>{const sign=e.key==='ArrowRight'||e.key==='ArrowDown'?1:e.key==='ArrowLeft'||e.key==='ArrowUp'?-1:0;if(!sign)return;e.preventDefault();
+        if(axis==='x'){const base=parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-width'))||420;root.style.setProperty('--sidebar-width',clamp(base+sign*20,260,innerWidth-360)+'px');}
+        else{const base=document.querySelector('.tree-panel').clientHeight;root.style.setProperty('--tree-height',clamp(base+sign*20,120,$('sidebar').clientHeight-180)+'px');}
+        scene.resize();});
+    };
+    dragResize(resizer,(base,now,start)=>{
+      root.style.setProperty('--sidebar-width',clamp(base+(now-start),260,innerWidth-360)+'px');scene.resize();
+    },'x');
+    dragResize(treeSplit,(base,now,start)=>{
+      root.style.setProperty('--tree-height',clamp(base+(now-start),120,$('sidebar').clientHeight-180)+'px');
+    },'y');
+    document.addEventListener('keydown',e=>{
+      const typing=!!e.target.closest('input,select,textarea');
+      if($('confirm-dialog').open)return;
+      const key=e.key.toLowerCase();
+      if(e.ctrlKey&&key==='z'){e.preventDefault();e.shiftKey?model.redo():model.undo();return;}
+      if(e.ctrlKey&&key==='y'){e.preventDefault();model.redo();return;}
+      if(e.ctrlKey&&key==='g'){e.preventDefault();group();return;}
+      if(typing)return;
+      if(e.ctrlKey&&key==='a'){e.preventDefault();select([...model.nodes.values()].filter(n=>n.type==='block').map(n=>n.id));return;}
+      if(!e.ctrlKey&&!e.altKey){
+        if({w:'translate',e:'rotate',r:'scale',q:'off'}[key])mode({w:'translate',e:'rotate',r:'scale',q:'off'}[key]);
+        if(key==='b')boxButton.click();
+        if(key==='f')$('focus-toggle').click();
+        if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();$('remove').click();}
+      }
     });
-    try{const stored=localStorage.getItem(storageKey);if(stored){const doc=JSON.parse(stored);model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??true;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
-    window.uxEditor={model,data,scene,tree,inspector,select,get selected(){return selected;},get results(){return results;},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,
+    try{const stored=localStorage.getItem(storageKey);if(stored){const doc=JSON.parse(stored);model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
+    window.uxEditor={model,data,scene,tree,inspector,select,get selected(){return selected;},get results(){return results;},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,renderIdentity,
       loadProject:doc=>{model.load(doc);select(['work']);},mapping:ids=>data.mapping(ids.length===1&&ids[0]==='global'?['work']:ids,model),storageKey};
     $('coverage').textContent='65组 / 124张量已有统计 · 不跑新权重';select(selected);mode('translate');scene.fit(selected);message('独立新版已就绪：未计算块留结构，不填模拟纹理。');
-  }catch(e){message('启动失败：'+e.message);console.error(e);}
+  }catch(e){
+    message('启动失败：'+e.message);console.error(e);
+    bootFail('启动失败',e.message,
+      '先确认地址是 http://127.0.0.1:8128/ 而不是 file://，再看状态栏和浏览器网络面板里的具体请求。',
+      'http://127.0.0.1:8128/');
+  }
 })();

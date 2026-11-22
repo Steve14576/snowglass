@@ -4,13 +4,17 @@
   const clone=CurveMath.copy,I=()=>new THREE.Matrix4(),arr=m=>m.toArray(),matrix=a=>new THREE.Matrix4().fromArray(a);
   const DEFAULTS={channel:'full',windowMode:'range',black:0,white:1,curve:CurveMath.linear(),filter:false,cutoff:.25,
     frameT:.04,shellT:.02,frameGray:.18,shellGray:.024,snowSize:.012,gap:0,widthMode:'equal',visible:true,include:true,
-    labels:false,labelSize:.7,labelDx:0,labelDy:0,labelDz:0,squash:.55,depth:6.2,pitch:.08,dotUm:60,speed:4500};
+    labels:false,labelText:'',labelFont:'Microsoft YaHei',labelOutput:true,labelSize:.7,labelDx:0,labelDy:0,labelDz:0,squash:.55,depth:6.2,pitch:.08,dotUm:60,speed:4500};
   const LOCAL=Object.keys(DEFAULTS).filter(k=>!['squash','depth','pitch','dotUm','speed'].includes(k));
   function validParam(key,v){
     if(!Object.hasOwn(DEFAULTS,key))throw Error('未知参数 '+key);
     if(key==='curve')return CurveMath.validate(v);
+    if(key==='labelText'){if(typeof v!=='string'||v.length>80)throw Error('标签文字需为不超过80字的字符串');return true;}
+    if(key==='labelFont'){if(typeof v!=='string'||!v.trim()||v.length>60)throw Error('字体名不能为空且不超过60字');return true;}
     if(typeof v!==typeof DEFAULTS[key]||(typeof v==='number'&&!Number.isFinite(v)))throw Error('参数类型无效');
-    if(['frameT','shellT','snowSize','labelSize','squash','depth','pitch','dotUm','speed'].includes(key)&&v<=0)throw Error('尺寸与精度必须为正');
+    // 框／壳厚度允许 0：语义是“没有这个结构件”，与灰度0（几何仍在但不显影）不同。
+    if(['frameT','shellT','frameGray','shellGray'].includes(key)&&v<0)throw Error('厚度与灰度不能为负；0 表示没有该结构件／不显影');
+    if(['snowSize','labelSize','squash','depth','pitch','dotUm','speed'].includes(key)&&v<=0)throw Error('尺寸与精度必须为正');
     if(['frameGray','shellGray','cutoff'].includes(key)&&(v<0||v>1))throw Error('灰度／门槛范围是0–1');
     if(key==='channel'&&!['full','feature','rowcol','residual'].includes(v))throw Error('统计通道无效');
     if(key==='windowMode'&&!['range','reference'].includes(v))throw Error('窗口模式无效');
@@ -92,6 +96,20 @@
     delta(ids,delta){for(const id of this.roots(ids)){const n=this.nodes.get(id);if(['project','global','reference'].includes(n.type))continue;
       const parent=this.chain(n.parent);n.local=arr(parent.clone().invert().multiply(delta).multiply(parent).multiply(matrix(n.local)));}}
     transform(ids,delta){this.commit(()=>this.delta(ids,delta));}
+    /** 相对默认位置的参数化变换：偏移(mm)、旋转(弧度)、缩放倍数。 */
+    localTRS(id){
+      const m=matrix(this.nodes.get(id).local),t=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();m.decompose(t,q,s);
+      const e=new THREE.Euler().setFromQuaternion(q,'XYZ');return {t:t.toArray(),r:[e.x,e.y,e.z],s:s.toArray()};
+    }
+    setLocalTRS(id,trs){
+      const n=this.nodes.get(id);if(!n)throw Error('对象不存在');
+      if(['project','global','reference'].includes(n.type))throw Error('此对象没有空间变换');
+      const t=trs.t.slice(),r=trs.r.slice(),s=trs.s.slice();
+      if([...t,...r,...s].some(v=>!Number.isFinite(v)))throw Error('变换数值无效');
+      if(s.some(v=>Math.abs(v)<1e-6))throw Error('缩放不能为0');
+      const m=new THREE.Matrix4().compose(new THREE.Vector3(...t),new THREE.Quaternion().setFromEuler(new THREE.Euler(...r,'XYZ')),new THREE.Vector3(...s));
+      this.commit(()=>n.local=m.toArray());
+    }
     move(id,parent){
       const n=this.nodes.get(id),target=this.nodes.get(parent);if(!n)throw Error('对象不存在');
       if(['project','global','work','text','vision','refs'].includes(id)||!target||!['root','tower','layer','group','reference'].includes(target.type))throw Error('不能迁移到这个节点');

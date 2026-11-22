@@ -39,9 +39,23 @@ def main():
                 const a=uxEditor,m=a.model,size=m.bounds(['work']).getSize(new THREE.Vector3()).toArray(),old=SnowLayout(m.topo).bounds.getSize(new THREE.Vector3()).toArray();
                 if(size.some((v,i)=>Math.abs(v-old[i])>1e-9))throw Error('未保持4.2默认排布');
                 if(a.results[0].count!==8192||a.scene.renderedSnow!==8192)throw Error('真实格数错误');
-                const t=document.querySelector('.tree-panel').getBoundingClientRect(),p=document.querySelector('.property-panel').getBoundingClientRect();
-                if(t.x<innerWidth/2||p.y<t.bottom-1)throw Error('不是右上树／右下属性');
-                return {nodes:m.nodes.size,blocks:[...m.nodes.values()].filter(n=>n.type==='block').length,real_count:a.results[0].count,dimensions:size,tree_y:t.y,properties_y:p.y};
+                const sb=document.getElementById('sidebar').getBoundingClientRect(),v=document.getElementById('view').getBoundingClientRect(),t=document.querySelector('.tree-panel').getBoundingClientRect(),p=document.querySelector('.property-panel').getBoundingClientRect();
+                if(sb.right>v.left+1||t.y>=p.y)throw Error('侧栏不在左侧或属性不在下方 '+JSON.stringify({sb:[sb.x,sb.y,sb.width,sb.height],v:[v.x,v.y,v.width,v.height],t:[t.x,t.y,t.width,t.height],p:[p.x,p.y,p.width,p.height]}));
+                if(!document.getElementById('sidebar-resizer'))throw Error('缺少宽度拖拽条');
+                if(document.querySelectorAll('.tree-row').length!==1)throw Error('对象树不应默认展开');
+                const idn=document.getElementById('identity');
+                if(idn.hidden||!idn.textContent.includes('L16.down'))throw Error('选中后没有身份卡');
+                if(idn.getBoundingClientRect().right<innerWidth*0.6)throw Error('身份卡不在编辑区右侧');
+                document.getElementById('report-toggle').click();
+                const rep=document.getElementById('report').getBoundingClientRect();
+                if(rep.right<innerWidth*0.6||rep.top>160)throw Error('后验报告不在右上');
+                document.getElementById('report-toggle').click();
+                const accent=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),hue=parseFloat(accent);
+                if(hue>=90&&hue<=180)throw Error('强调色仍偏绿：'+accent);
+                if(document.getElementById('isolate-view').classList.contains('active'))throw Error('默认不应隔离隐藏其它对象');
+                const saveBtn=document.getElementById('save-project').getBoundingClientRect(),sliceBtn=document.getElementById('slice-1').getBoundingClientRect();
+                if(saveBtn.left>innerWidth/2||sliceBtn.left<innerWidth*0.45)throw Error('文件／切片按钮没有分置左上与右上');
+                return {nodes:m.nodes.size,blocks:[...m.nodes.values()].filter(n=>n.type==='block').length,real_count:a.results[0].count,dimensions:size,sidebar_right:sb.right,view_left:v.left,tree_y:t.y,properties_y:p.y,slice_disabled:document.getElementById('slice-1').disabled};
             }''')
             cases.append({'name':'startup_real_geometry_and_layout','result':baseline})
             print(json.dumps({'baseline':baseline,'errors':errors},ensure_ascii=False),flush=True)
@@ -130,8 +144,10 @@ def main():
                 page.get_by_text('框、壳与雪花几何',exact=True).click();page.locator('#field-frameGray').fill('0.27');page.locator('#field-frameGray').press('Tab')
                 page.wait_for_function('uxEditor.model.resolve("L16.down","frameGray").value===.27')
                 assert page.evaluate('() => Object.keys(uxEditor.model.nodes.get("L16.down").overrides).join()')=='frameGray'
+                page.evaluate('() => uxEditor.tree.revealTo(["global"])')
                 page.locator('[data-id="global"]').click();assert page.locator('#property-kind').inner_text()=='全局配置'
-                assert not page.locator('[data-transform]').count()
+                assert not page.locator('[data-trs]').count()
+                page.evaluate('() => uxEditor.tree.revealTo(["ghost-1"])')
                 page.locator('[data-id="ghost-1"]').click();assert not page.locator('#curve-add').count()
                 page.get_by_text('毛坯基本特征与参照',exact=True).click() if not page.locator('[data-ghost-key="0"]').is_visible() else None
                 page.locator('[data-ghost-key="0"]').fill('30');page.locator('[data-ghost-key="0"]').press('Tab')
@@ -165,7 +181,9 @@ def main():
                     ids.forEach((id,i)=>{if(m.world(id).toArray().some((v,k)=>Math.abs(v-before[i][k])>1e-8))throw Error('配方切换时迁组世界变换不稳');});return true;
                 }''')
                 page.evaluate('(s)=>{uxEditor.model.load(s);uxEditor.select(["L16.down"]);}',initial)
+                page.evaluate('() => uxEditor.tree.revealTo(["L16.up","L16.down","L16.gate"])')
                 page.locator('[data-id="L16.up"]').click();page.locator('[data-id="L16.down"]').click(modifiers=['Shift'])
+                page.wait_for_function('uxEditor.selected.length===2')
                 page.locator('#group').click();page.wait_for_function('uxEditor.selected.length===1&&uxEditor.model.nodes.get(uxEditor.selected[0]).type==="group"')
                 gid=page.evaluate('() => uxEditor.selected[0]')
                 page.get_by_text('框、壳与雪花几何',exact=True).click() if not page.locator('#field-frameGray').is_visible() else None
@@ -174,6 +192,7 @@ def main():
                 assert not page.evaluate('() => Object.hasOwn(uxEditor.model.nodes.get("L16.down").overrides,"frameGray")')
                 cases.append({'name':'actual_tree_shift_group_default_ungroup','result':True})
                 page.evaluate('() => uxEditor.select(["L16.down"])');page.wait_for_function('uxEditor.results[0]?.id==="L16.down"')
+                page.evaluate('() => uxEditor.tree.revealTo(["global"])')
                 page.locator('[data-id="global"]').click();page.wait_for_function('uxEditor.selected[0]==="global"&&uxEditor.results[0]?.id==="L16.down"')
                 before_gray=page.evaluate('() => Array.from(uxEditor.results[0].pieces[0].gray.slice(0,10))')
                 page.locator('#curve-preset').select_option('reverse');page.locator('#apply-preset').click();page.wait_for_function('uxEditor.results[0].settings.curve.nodes[0].y===1')
@@ -208,15 +227,106 @@ def main():
                     const a=uxEditor,s=a.scene,m=a.model,before=m.bounds(['L16.down']).getCenter(new THREE.Vector3()).x,count=m.history.length;
                     s.syncPivot();s.pivot.updateMatrixWorld(true);s.gumball.dispatchEvent({type:'dragging-changed',value:true});s.gumball.dragging=true;
                     s.pivot.position.x+=.7;s.pivot.updateMatrixWorld(true);s.gumball.dispatchEvent({type:'objectChange'});s.gumball.dragging=false;s.gumball.dispatchEvent({type:'dragging-changed',value:false});
-                    const after=m.bounds(['L16.down']).getCenter(new THREE.Vector3()).x,input=document.querySelector('[data-transform="position"][data-axis="0"]');
-                    if(Math.abs(after-before-.7)>1e-8||Math.abs(+input.value-after)>1e-4||m.history.length!==count+1)throw Error('手柄和数值未共用状态／撤销不是单步');return {delta:after-before,numeric:+input.value};
+                    const after=m.bounds(['L16.down']).getCenter(new THREE.Vector3()).x,input=document.querySelector('[data-trs="t"][data-axis="0"]'),stored=m.localTRS('L16.down').t[0];
+                    if(Math.abs(after-before-.7)>1e-8||Math.abs(+input.value-stored)>1e-4||m.history.length!==count+1)throw Error('手柄和数值未共用状态／撤销不是单步');return {delta:after-before,numeric:+input.value,stored};
                 }''')
-                page.get_by_text('变换与实际尺寸',exact=True).click() if not page.locator('[data-transform="position"][data-axis="0"]').is_visible() else None
-                x=page.evaluate('() => uxEditor.model.bounds(["L16.down"]).getCenter(new THREE.Vector3()).x')
-                page.locator('[data-transform="position"][data-axis="0"]').fill(str(x+1));page.locator('[data-transform="position"][data-axis="0"]').press('Tab')
-                actual=page.evaluate('() => uxEditor.model.bounds(["L16.down"]).getCenter(new THREE.Vector3()).x')
+                page.get_by_text('变换 · 相对默认位置',exact=True).click() if not page.locator('[data-trs="t"][data-axis="0"]').is_visible() else None
+                x=page.evaluate('() => uxEditor.model.localTRS("L16.down").t[0]')
+                page.locator('[data-trs="t"][data-axis="0"]').fill(str(x+1));page.locator('[data-trs="t"][data-axis="0"]').press('Tab')
+                actual=page.evaluate('() => uxEditor.model.localTRS("L16.down").t[0]')
                 assert abs(actual-x-1)<1e-6
                 cases.append({'name':'actual_numeric_transform_input','result':{'delta':actual-x}})
+                page.evaluate('(s)=>{uxEditor.model.load(s);uxEditor.select(["L16.down"]);}',initial)
+                page.wait_for_function('uxEditor.selected[0]==="L16.down"')
+                check('param_slider_and_number_are_paired','''()=>{
+                    const m=uxEditor.model;
+                    const el=document.getElementById('field-frameT'),wrap=el.closest('.prop-inputs');
+                    if(!wrap)throw Error('数值参数没有滑块');
+                    const rng=wrap.querySelector('input[type=range]');if(!rng)throw Error('缺滑块');
+                    rng.value='0.2';rng.dispatchEvent(new Event('input',{bubbles:true}));
+                    if(Math.abs(m.resolve('L16.down','frameT').value-.2)>1e-9)throw Error('滑块未改参数');
+                    if(Math.abs(+document.getElementById('field-frameT').value-.2)>1e-6)throw Error('数字框未跟随滑块');
+                    const num=document.getElementById('field-frameT');num.value='0.05';num.dispatchEvent(new Event('change',{bubbles:true}));
+                    if(Math.abs(m.resolve('L16.down','frameT').value-.05)>1e-9)throw Error('数字框未改参数');
+                    const rng2=document.getElementById('field-frameT').closest('.prop-inputs').querySelector('input[type=range]');
+                    if(Math.abs(+rng2.value-.05)>1e-6)throw Error('滑块未跟随数字框');
+                    return {frameT:m.resolve('L16.down','frameT').value};
+                }''')
+                check('zero_thickness_means_no_structure','''()=>{
+                    const m=uxEditor.model,s=uxEditor.scene;
+                    m.set('L16.down','frameT',.04);m.set('L16.down','shellT',.02);s.structure();const f0=s.frames.count,h0=s.shells.count;
+                    m.set('L16.down','frameT',0);s.structure();const f1=s.frames.count;
+                    m.set('L16.down','shellT',0);s.structure();const h1=s.shells.count;
+                    if(f0-f1!==12)throw Error('框厚0没有移除12根方梁');
+                    if(h0-h1!==6)throw Error('壳厚0没有移除6块板');
+                    let rejected=false;try{m.set('L16.down','frameT',-.1);}catch(e){rejected=true;}if(!rejected)throw Error('负厚度未拒绝');return {frames:[f0,f1],shells:[h0,h1]};
+                }''')
+                check('label_text_is_per_object','''()=>{
+                    const m=uxEditor.model,s=uxEditor.scene;
+                    m.set('L16.down','labels',true);m.set('L16.down','labelText','自定义标签');s.structure();
+                    if(s.labels.children.length<1)throw Error('标签未绘制');
+                    const own=m.resolve('L16.down','labelText').own;
+                    if(!own)throw Error('文字未建立局部覆盖');
+                    if(m.resolve('L16.up','labelText').value!=='')throw Error('其他对象不应该跟着改');return {labels:s.labels.children.length};
+                }''')
+                check('label_is_part_of_output_contract','''async()=>{
+                    const m=uxEditor.model;m.set('L16.down','labelText','冻结的模型');m.set('L16.down','labelOutput',true);
+                    const doc=await uxEditor.mapping(['L16.down']),r=doc.results.find(x=>x.id==='L16.down');
+                    if(!r.label||r.label.text!=='冻结的模型'||r.label.output!==true)throw Error('文字未进入导出定义');
+                    if(!Array.isArray(r.label.anchor_world_mm)||r.label.anchor_world_mm.length!==3)throw Error('缺锚点位置');
+                    if(!Array.isArray(r.label.offset_mm)||r.label.offset_mm.length!==3)throw Error('缺偏移');
+                    if(!doc.label_pipeline)throw Error('缺管线边界说明');
+                    m.set('L16.down','labelOutput',false);const off=await uxEditor.mapping(['L16.down']);
+                    if(off.results[0].label.output!==false||off.results[0].label.screen_only!==true)throw Error('关闭输出未生效');
+                    return {text:r.label.text,font:r.label.font,size_mm:r.label.size_mm,output:r.label.output};
+                }''')
+                page.evaluate('(s)=>{uxEditor.model.load(s);uxEditor.select(["L16.down"]);}',initial)
+                page.wait_for_function('uxEditor.selected[0]==="L16.down"')
+                page.evaluate('() => uxEditor.tree.revealTo(["L16.up","L16.down","L16.gate"])')
+                page.locator('[data-id="L16.up"]').click();page.locator('[data-id="L16.down"]').click(modifiers=['Control'])
+                page.wait_for_function('uxEditor.selected.length===2')
+                page.locator('[data-id="L16.gate"]').click(modifiers=['Shift'])
+                span=page.evaluate('() => uxEditor.selected.slice().sort()')
+                assert span==['L16.down','L16.gate','L16.up'],span
+                page.locator('[data-id="L16.up"]').click(modifiers=['Control'])
+                assert page.evaluate('() => uxEditor.selected.includes("L16.up")') is False
+                cases.append({'name':'tree_ctrl_toggle_and_shift_range','result':span})
+                before_w=page.evaluate('() => document.getElementById("sidebar").getBoundingClientRect().width')
+                page.locator('#sidebar-resizer').focus();page.keyboard.press('ArrowRight');page.keyboard.press('ArrowRight')
+                after_w=page.evaluate('() => document.getElementById("sidebar").getBoundingClientRect().width')
+                assert after_w>before_w+30,(before_w,after_w)
+                cases.append({'name':'sidebar_width_keyboard_resize','result':{'before':before_w,'after':after_w}})
+                page.evaluate('() => {document.documentElement.style.removeProperty("--sidebar-width");uxEditor.scene.resize();}')
+                prop_before=page.evaluate('() => {const r=document.querySelector(".property-panel").getBoundingClientRect();return [r.x,r.y,r.width];}')
+                page.locator('[data-id="L16.down"]').click()
+                prop_after=page.evaluate('() => {const r=document.querySelector(".property-panel").getBoundingClientRect();return [r.x,r.y,r.width];}')
+                assert prop_before==prop_after,(prop_before,prop_after)
+                cases.append({'name':'property_panel_fixed_position','result':prop_after})
+                check('gumball_follows_object_orientation_and_survives_camera','''()=>{
+                    const m=uxEditor.model,s=uxEditor.scene;m.setLocalTRS('L16.down',{t:[0,0,0],r:[0,0,.7],s:[1,1,1]});
+                    s.select(['L16.down']);s.syncPivot();const q=new THREE.Quaternion();m.world('L16.down').decompose(new THREE.Vector3(),q,new THREE.Vector3());
+                    if(s.pivot.quaternion.angleTo(q)>1e-6)throw Error('手柄姿态没有跟随对象旋转');
+                    const pos=s.pivot.position.clone();s.camera.position.x+=6;s.orbit.update();s.render();
+                    if(s.pivot.position.distanceTo(pos)>1e-9||s.pivot.quaternion.angleTo(q)>1e-6)throw Error('视角变化重置了手柄');
+                    s.structure();if(s.highlights.children.length!==3)throw Error('选中高亮层数不对');return {angle:s.pivot.quaternion.angleTo(q),highlights:s.highlights.children.length};
+                }''')
+                page.evaluate('(s)=>{uxEditor.model.load(s);uxEditor.select(["L16.down"]);uxEditor.scene.fit(["L16.down"]);}',initial)
+                page.wait_for_timeout(150)
+                vb=page.locator('#view').bounding_box()
+                page.mouse.move(vb['x']+vb['width']*.40,vb['y']+vb['height']*.30)
+                page.keyboard.down('Shift');page.mouse.down();page.mouse.move(vb['x']+vb['width']*.96,vb['y']+vb['height']*.94,steps=10);page.mouse.up();page.keyboard.up('Shift')
+                page.wait_for_timeout(120)
+                boxed=page.evaluate('() => uxEditor.selected.slice()')
+                assert 'L16.down' in boxed,boxed
+                cases.append({'name':'actual_shift_drag_box_select','result':boxed})
+                filepage=browser.new_page(viewport={'width':1200,'height':800})
+                filepage.goto((bundle/'index.html').as_uri(),wait_until='domcontentloaded',timeout=15000)
+                filepage.wait_for_selector('#boot-error:not([hidden])',timeout=5000)
+                boot=filepage.locator('#boot-error').inner_text()
+                assert '本地服务' in boot and 'http://127.0.0.1:8128/' in boot,boot
+                assert 'file://' in boot
+                cases.append({'name':'file_protocol_shows_actionable_banner','result':boot.splitlines()[0]})
+                filepage.close()
                 assert not errors,errors;browser.close()
     except Exception as e:
         failure=str(e)
