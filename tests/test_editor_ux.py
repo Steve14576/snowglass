@@ -18,10 +18,15 @@ def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','full'],default='full');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','full'],default='full');parser.add_argument('--url',default='http://127.0.0.1:8128/');args=parser.parse_args()
     bundle=args.folder.resolve();provenance=json.loads((bundle/'provenance.json').read_text(encoding='utf-8'))
-    before={name:sha(ROOT/name) for name in provenance['source_hashes']};assert before==provenance['source_hashes']
-    output=bundle/('verification-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f'));output.mkdir(exist_ok=False)
+    # 归档只改路径、不改内容：按 provenance.archived_paths 解析新位置，仍是同一份哈希。
+    moved=provenance.get('archived_paths',{})
+    def source_path(name):return ROOT/moved.get(name,name)
+    missing=[name for name in provenance['source_hashes'] if not source_path(name).exists()]
+    assert not missing,'原件缺失（既不在原路径也不在归档路径）：'+', '.join(missing)
+    before={name:sha(source_path(name)) for name in provenance['source_hashes']};assert before==provenance['source_hashes']
+    output=bundle/'verification'/('run-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f'));(bundle/'verification').mkdir(exist_ok=True);output.mkdir(exist_ok=False)
     assets=[bundle/'index.html',*list((bundle/'assets').glob('*'))];asset_hashes={str(p.relative_to(bundle)):sha(p) for p in assets}
     cases=[];errors=[];pending=set();diagnostic={};start=time.monotonic();failure=None
     try:
@@ -30,15 +35,21 @@ def main():
             page=browser.new_page(viewport={'width':1600,'height':1050});page.on('pageerror',lambda e:errors.append(str(e)))
             page.on('request',lambda r:pending.add(r.url));page.on('requestfinished',lambda r:pending.discard(r.url));page.on('requestfailed',lambda r:pending.discard(r.url))
             try:
-                page.goto('http://127.0.0.1:8128/',wait_until='domcontentloaded',timeout=15000)
-                page.wait_for_function('window.uxEditor && uxEditor.results.length && uxEditor.scene.renderedSnow>0',timeout=45000)
+                page.goto(args.url,wait_until='domcontentloaded',timeout=15000)
+                page.wait_for_function('window.uxEditor && uxEditor.results.length && uxEditor.results[0].count===8192',timeout=45000)
+                assert page.evaluate('()=>uxEditor.model.resolve("global","sourceConvention").value')=='gguf'
+                assert page.evaluate('()=>uxEditor.model.resolve("global","extraDiagnostics").value') is False
+                # 后续原有科学缓存回归明确选择其HF约定，不把旧缓存冒充新默认原值。
+                page.evaluate('()=>uxEditor.model.set("global","sourceConvention","hf")')
+                page.wait_for_function('uxEditor.results[0].settings.sourceConvention==="hf"')
             except Exception:
                 diagnostic={'status':page.locator('#status').inner_text(timeout=1000),'pending':sorted(pending)}
                 raise
             baseline=page.evaluate('''()=>{
                 const a=uxEditor,m=a.model,size=m.bounds(['work']).getSize(new THREE.Vector3()).toArray(),old=SnowLayout(m.topo).bounds.getSize(new THREE.Vector3()).toArray();
                 if(size.some((v,i)=>Math.abs(v-old[i])>1e-9))throw Error('未保持4.2默认排布');
-                if(a.results[0].count!==8192||a.scene.renderedSnow!==8192)throw Error('真实格数错误');
+                if(a.results[0].count!==8192)throw Error('真实格数错误');
+                if(a.scene.renderedSnow!==0)throw Error('准备视图不应画雪花');
                 const sb=document.getElementById('sidebar').getBoundingClientRect(),v=document.getElementById('view').getBoundingClientRect(),t=document.querySelector('.tree-panel').getBoundingClientRect(),p=document.querySelector('.property-panel').getBoundingClientRect();
                 if(sb.right>v.left+1||t.y>=p.y)throw Error('侧栏不在左侧或属性不在下方 '+JSON.stringify({sb:[sb.x,sb.y,sb.width,sb.height],v:[v.x,v.y,v.width,v.height],t:[t.x,t.y,t.width,t.height],p:[p.x,p.y,p.width,p.height]}));
                 if(!document.getElementById('sidebar-resizer'))throw Error('缺少宽度拖拽条');
@@ -52,7 +63,7 @@ def main():
                 document.getElementById('report-toggle').click();
                 const accent=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),hue=parseFloat(accent);
                 if(hue>=90&&hue<=180)throw Error('强调色仍偏绿：'+accent);
-                const cs=getComputedStyle(document.documentElement),sat=v=>parseFloat((v||'').trim().split(/\s+/)[1]);
+                const cs=getComputedStyle(document.documentElement),sat=v=>parseFloat((v||'').trim().split(/[ \t]+/)[1]);
                 if(sat(cs.getPropertyValue('--local'))<25)throw Error('本地覆盖色被去色');
                 if(sat(cs.getPropertyValue('--danger'))<25)throw Error('报红色被去色');
                 if(sat(cs.getPropertyValue('--info'))<25)throw Error('文件操作色被去色');
@@ -71,7 +82,7 @@ def main():
                     const s=uxEditor.scene,r=s.renderer,g=r.getContext(),w=g.drawingBufferWidth,h=g.drawingBufferHeight;
                     function compare(){const on=new Uint8Array(w*h*4),off=new Uint8Array(w*h*4);s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,on);s.snow.visible=false;s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,off);s.snow.visible=true;
                         let count=0,max=0;for(let i=0;i<on.length;i+=4){if(on[i]!==off[i]||on[i+1]!==off[i+1]||on[i+2]!==off[i+2])count++;max=Math.max(max,on[i],on[i+1],on[i+2]);}return {pixels:count,max};}
-                    s.fit(['L16.down']);const normal=compare();s.frames.material.needsUpdate=true;s.shells.material.needsUpdate=true;const recompiled=compare();const objects=[s.frames,s.shells,s.proxy,s.ghosts,s.highlights,s.labels,s.gumball];const old=objects.map(o=>o.visible);objects.forEach(o=>o.visible=false);const isolated=compare();objects.forEach((o,i)=>o.visible=old[i]);s.render();
+                    s.drawSnow(uxEditor.results);s.fit(['L16.down']);const normal=compare();s.frames.material.needsUpdate=true;s.shells.material.needsUpdate=true;const recompiled=compare();const objects=[s.frames,s.shells,s.proxy,s.ghosts,s.highlights,s.labels,s.gumball];const old=objects.map(o=>o.visible);objects.forEach(o=>o.visible=false);const isolated=compare();objects.forEach((o,i)=>o.visible=old[i]);s.render();
                     const mesh=s.snow.children[0],mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);return {normal,recompiled,isolated,gl_error:g.getError(),lost:g.isContextLost(),buffer:[w,h],meshes:s.snow.children.length,count:s.renderedSnow,first_matrix:mat.toArray(),first_colors:Array.from(mesh.instanceColor.array.slice(0,9)),camera:s.camera.position.toArray()};
                 }''')
                 print(json.dumps({'render_probe':diag},ensure_ascii=False),flush=True);cases.append({'name':'render_probe','result':diag});browser.close()
@@ -79,6 +90,40 @@ def main():
                 initial=page.evaluate('() => uxEditor.model.snapshot()')
                 def check(name,script):
                     result=page.evaluate(script);cases.append({'name':name,'result':result});print(json.dumps({'case':name,'status':'pass'},ensure_ascii=False),flush=True)
+                check('optional_channel_cache_and_convention_isolation','''async()=>{
+                    const ref={file:'test',gguf:'tiny'},key='test:tiny',grid=[2,2,2];
+                    const status=()=>({full:'ready',feature:'not_generated',residual:'not_generated',rowcol:'not_generated'});
+                    const b={id:'test',tensors:[ref]},fullIndex={key,url:'/synthetic/full',data_sha256:'full',grid,sourceConvention:'gguf',extraDiagnostics:false,channel_status:status(),packed_sha256:'same'};
+                    const d=new UXData.Data({source_run:'synthetic',blocks:[b],tensors:[fullIndex]});
+                    const params={channel:'full',sourceConvention:'gguf',extraDiagnostics:false,gridX:2,gridY:2,gridZ:2,windowMode:'range',black:0,white:1,curve:CurveMath.linear(),filter:false,cutoff:0};
+                    const model={resolve:(id,k)=>({value:params[k]})};
+                    const window={low:0,high:1,constant:false};
+                    const payload=(channels,convention='gguf')=>({key,name:'tiny',packed_sha256:'same',sourceConvention:convention,reference_white:1,
+                      spectral:{method:'spectral',rank_capped:false},windows:{full:window,feature:window,residual:window,rowcol:window},
+                      parts:[{name:'main',grid,counts:Array(8).fill(1),full:Array(8).fill(.3),feature:channels.includes('feature')?Array(8).fill(.2):null,residual:channels.includes('residual')?Array(8).fill(.1):null,rowcol:channels.includes('rowcol')?Array(8).fill(.8):null}]});
+                    d.cache.set(fullIndex.url,payload(['full']));if(!d.fresh('test',model))throw Error('full缓存不可用');
+                    params.channel='feature';if(d.fresh('test',model))throw Error('未算谱被当成已算');
+                    let refused=false;try{await d.evaluate('test',model);}catch(e){refused=e.message.includes('尚未生成');}if(!refused)throw Error('未生成通道偷偷回退full');
+                    const spectralIndex={...fullIndex,url:'/synthetic/spectral',data_sha256:'spectral',channel_status:{...status(),feature:'ready',residual:'ready'}};
+                    d.merge({source_run:'spectral',blocks:[b],tensors:[spectralIndex]});d.cache.set(spectralIndex.url,payload(['feature','residual']));
+                    const rowIndex={...fullIndex,url:'/synthetic/rowcol',data_sha256:'rowcol',channel_status:{...status(),rowcol:'ready'}};
+                    d.merge({source_run:'rowcol',blocks:[b],tensors:[rowIndex]});d.cache.set(rowIndex.url,payload(['rowcol']));
+                    const r=await d.evaluate('test',model);if(r.pieces[0].used!=='feature'||r.pieces[0].data_sha256!=='spectral')throw Error('补rowcol丢掉谱缓存');
+                    params.sourceConvention='hf';if(d.fresh('test',model))throw Error('GGUF缓存被冒充HF');
+                    const hfIndex={...fullIndex,url:'/synthetic/hf',data_sha256:'hf',sourceConvention:'hf'};
+                    d.merge({source_run:'hf',blocks:[b],tensors:[hfIndex]});d.cache.set(hfIndex.url,payload(['full'],'hf'));params.channel='full';
+                    if(!d.fresh('test',model))throw Error('HF缓存不可用');params.sourceConvention='gguf';if(!d.fresh('test',model))throw Error('切回GGUF缓存丢失');
+                    return {missing_refused:refused,channel_preserved:true,conventions_isolated:true};
+                }''')
+                check('legacy_project_keeps_convention_and_new_switches_inherit','''()=>{
+                    const n=new UXModel.Model(uxEditor.model.topo,uxEditor.model.provenance),before=n.world('L16.down').toArray(),old=n.snapshot();
+                    const values=old.nodes.find(v=>v.id==='global').values;delete values.sourceConvention;delete values.extraDiagnostics;
+                    n.load(old);if(n.resolve('global','sourceConvention').value!=='hf'||n.resolve('global','extraDiagnostics').value!==false)throw Error('旧约定被静默改变');
+                    if(n.world('L16.down').toArray().some((v,i)=>Math.abs(v-before[i])>1e-9))throw Error('选项改动影响排布');
+                    n.set('global','extraDiagnostics',true);n.lock('L16.down','extraDiagnostics');n.set('global','extraDiagnostics',false);
+                    if(!n.resolve('L16.down','extraDiagnostics').value||n.resolve('L16.up','extraDiagnostics').value)throw Error('新增选项继承／锁失效');
+                    return {legacy_hf:true,geometry_unchanged:true,sparse_override:true};
+                }''')
                 check('inherit_group_and_sparse_overrides','''()=>{
                     const m=uxEditor.model,ids=['L16.down','L16.up'];window.uxInitial=m.snapshot();
                     const matrices=ids.map(id=>m.world(id).toArray()),g=m.group(ids);window.testGroup=g;
@@ -95,7 +140,7 @@ def main():
                 check('fixed_mm_transform_and_reparent','''async()=>{
                     const a=uxEditor,m=a.model,g=testGroup;await a.data.evaluate('L16.down',m);const raw=a.data.evaluated.get('L16.down').pieces[0].raw.slice();
                     m.transform([g],new THREE.Matrix4().makeTranslation(2,3,4).multiply(new THREE.Matrix4().makeRotationZ(.3)).multiply(new THREE.Matrix4().makeScale(1.3,.8,1.1)));
-                    a.select([g]);await a.refreshData();const mesh=a.scene.snow.children[0],mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);
+                    a.select([g]);await a.refreshData();a.scene.drawSnow(a.results);const mesh=a.scene.snow.children[0],mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);
                     const side=m.resolve('L16.down','snowSize').value;for(let i=0;i<3;i++)if(Math.abs(new THREE.Vector3().setFromMatrixColumn(mat,i).length()-side)>1e-6)throw Error('小块随包络缩放');
                     const actual=a.results.find(r=>r.id==='L16.down');if(!actual||raw.some((v,i)=>v!==actual.pieces[0].raw[i]))throw Error('变换改了源值');
                     const next=m.group(['L00.up']);window.nextGroup=next;m.set(next,'frameGray',.7);m.set('L16.down','frameGray',.6);
@@ -145,7 +190,7 @@ def main():
                     const a=uxEditor;await a.refreshData();const r=a.results[0],old=r.pieces[0].gray.slice();a.scene.exposure=2;a.scene.drawSnow(a.results);
                     if(old.some((v,i)=>v!==r.pieces[0].gray[i]))throw Error('屏幕曝光改变输出');const saved=await a.mapping(['L16.down']);
                     if(saved.results[0].pieces[0].gray.some((v,i)=>v!==r.pieces[0].gray[i]))throw Error('保存与预览灰度不一致');
-                    a.scene.exposure=1;a.scene.drawSnow(a.results);return {saved_count:saved.results[0].pieces[0].gray.length};
+                    a.scene.exposure=1;a.scene.drawSnow([]);return {saved_count:saved.results[0].pieces[0].gray.length};
                 }''')
                 page.get_by_text('框、壳与雪花几何',exact=True).click();page.locator('#field-frameGray').fill('0.27');page.locator('#field-frameGray').press('Tab')
                 page.wait_for_function('uxEditor.model.resolve("L16.down","frameGray").value===.27')
@@ -167,8 +212,8 @@ def main():
                 page.evaluate('() => uxEditor.select(["L16.down"])');page.wait_for_function('uxEditor.results[0]?.id==="L16.down"')
                 check('rendered_snow_contributes_pixels','''()=>{
                     const s=uxEditor.scene,r=s.renderer,g=r.getContext(),w=g.drawingBufferWidth,h=g.drawingBufferHeight,on=new Uint8Array(w*h*4),off=new Uint8Array(w*h*4);
-                    s.fit(['L16.down']);s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,on);s.snow.visible=false;s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,off);s.snow.visible=true;s.render();
-                    let count=0;for(let i=0;i<on.length;i+=4)if(on[i]!==off[i]||on[i+1]!==off[i+1]||on[i+2]!==off[i+2])count++;if(!count)throw Error('真实雪花未贡献像素');return {pixels:count,instances:s.renderedSnow};
+                    s.drawSnow(uxEditor.results);s.fit(['L16.down']);s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,on);s.snow.visible=false;s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,off);s.snow.visible=true;s.render();
+                    let count=0;for(let i=0;i<on.length;i+=4)if(on[i]!==off[i]||on[i+1]!==off[i+1]||on[i+2]!==off[i+2])count++;if(!count)throw Error('真实雪花未贡献像素');const instances=s.renderedSnow;s.drawSnow([]);return {pixels:count,instances};
                 }''')
                 page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(250)
                 mobile=page.evaluate('() => ({width:innerWidth,scroll:document.documentElement.scrollWidth,tree:document.querySelector(".tree-panel").getBoundingClientRect().height,props:document.querySelector(".property-panel").getBoundingClientRect().height})')
@@ -222,7 +267,7 @@ def main():
                 page.wait_for_function('document.getElementById("status").textContent.includes("新版工程已恢复")')
                 cases.append({'name':'actual_open_project_roundtrip','result':True})
                 check('four_cached_channels_and_independent_mask','''async()=>{
-                    const a=uxEditor,m=new UXModel.Model(a.model.topo,a.model.provenance);let channels=0;
+                    const a=uxEditor,m=new UXModel.Model(a.model.topo,a.model.provenance);m.nodes.get('global').values.sourceConvention='hf';let channels=0;
                     for(const channel of ['full','feature','rowcol','residual']){m.nodes.get('global').values.channel=channel;for(const b of a.data.manifest.blocks){const r=await a.data.evaluate(b.id,m);if(r.count<=0||r.pieces.some(p=>p.gray.some(v=>!Number.isFinite(v))))throw Error('统计通道无效');channels++;}}
                     m.nodes.get('global').values.channel='full';m.nodes.get('global').values.filter=true;const one=await a.data.evaluate('L16.down',m),mask=Array.from(one.pieces[0].mask);
                     m.nodes.get('global').values.curve=CurveMath.preset('reverse');const two=await a.data.evaluate('L16.down',m);if(mask.some((v,i)=>v!==two.pieces[0].mask[i]))throw Error('曲线改变筛选位置');
@@ -258,6 +303,21 @@ def main():
                     if(treeTools<3)throw Error('选择操作没有移到树面板');
                     return {top_buttons:top.length,tree_tools:treeTools};
                 }''')
+                page.evaluate('() => document.getElementById("view-preview").click()')
+                page.wait_for_function('document.getElementById("view-preview").getAttribute("aria-selected")==="true"',timeout=180000)
+                prev=page.evaluate('() => ({snow:uxEditor.scene.renderedSnow,blocks:uxEditor.results.length,meshes:uxEditor.scene.snowMeshes.size,hidden:document.getElementById("progress").hidden,badge:document.getElementById("preview-state").textContent,positive:uxEditor.results.reduce((n,r)=>n+r.positive,0)})')
+                assert prev['snow']>0 and prev['hidden'],prev
+                assert prev['blocks']==65 and prev['meshes']>=65,prev
+                assert prev['snow']>=prev['positive']>0,prev
+                cases.append({'name':'preview_shows_all_cached_snow','result':prev})
+                page.evaluate('() => uxEditor.model.set("L16.down","white",0.8)')
+                page.wait_for_timeout(1500)
+                after_gray=page.evaluate('() => uxEditor.scene.renderedSnow')
+                assert after_gray>0,after_gray
+                page.evaluate('() => document.getElementById("view-prepare").click()')
+                page.wait_for_function('uxEditor.scene.renderedSnow===0',timeout=30000)
+                assert page.evaluate('() => uxEditor.scene.snowMeshes.size')==0
+                cases.append({'name':'preview_edit_and_return_to_prepare','result':{'preview_snow':prev['snow'],'after_gray':after_gray,'prepare_snow':0}})
                 page.evaluate('(s)=>{uxEditor.model.load(s);uxEditor.select(["L16.down"]);}',initial)
                 page.wait_for_function('uxEditor.selected[0]==="L16.down"')
                 check('param_slider_and_number_are_paired','''()=>{
@@ -352,7 +412,7 @@ def main():
                 assert not errors,errors;browser.close()
     except Exception as e:
         failure=str(e)
-    after={name:sha(ROOT/name) for name in provenance['source_hashes']};assert before==after,'旧文件被修改'
+    after={name:sha(source_path(name)) for name in provenance['source_hashes']};assert before==after,'旧文件被修改'
     assert asset_hashes=={str(p.relative_to(bundle)):sha(p) for p in assets},'测试期间新版代码被修改'
     report={'phase':args.phase,'passed':failure is None,'failure':failure,'page_errors':errors,'diagnostic':diagnostic,'cases':cases,'source_unchanged':True,'assets_sha256':asset_hashes,'test_sha256':sha(Path(__file__)),'seconds':time.monotonic()-start}
     with (output/'checks.json').open('x',encoding='utf-8') as f:json.dump(report,f,ensure_ascii=False,allow_nan=False,indent=2)

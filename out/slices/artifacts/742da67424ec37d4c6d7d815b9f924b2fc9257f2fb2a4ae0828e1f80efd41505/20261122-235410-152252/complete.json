@@ -1,0 +1,1 @@
+{"key":"text:blk.12.ffn_up.weight","data_file":"result.json","data_sha256":"f3b8201618e0648098a5188842f85d8ba7ea4d8a2a09621fcf735243cac5633f","slice_signature":"742da67424ec37d4c6d7d815b9f924b2fc9257f2fb2a4ae0828e1f80efd41505","packed_sha256":"4921d924fe32d470bbabf6dc05da883b97a0d5da101ed9149f1089be22fbe11a","shape":[12288,4096],"grid":[16,16,32]}

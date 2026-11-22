@@ -1,0 +1,1 @@
+{"key":"text:blk.12.post_attention_norm.weight","data_file":"result.json","data_sha256":"f2dc4279670d99732571752d2cf41b6a6bb0ee5599f3689f05cd2fca5f102eab","slice_signature":"75e3fc96e698d949671f3d013d64f8b4a8e719c724dab51838da144115ec3001","packed_sha256":"5cb837fe8e132c121762f304bf2c5725ac6124708c88b7b8d78ed80c9b9fff60","shape":[4096],"grid":[16,16,32]}

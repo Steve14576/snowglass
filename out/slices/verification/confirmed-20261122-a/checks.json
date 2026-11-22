@@ -1,0 +1,107 @@
+{
+  "passed": false,
+  "failure": "{'id': 'slice-20261122-224938-319650', 'state': 'complete', 'completed': 1, 'failed': 0, 'reused': 1, 'total': 1, 'stage': '任务结束', 'signature': '325ae75f3e39a5093f545d2b75b931b157a2ce22d033adca73b55a0854d6f7fb', 'elapsed_seconds': 13.53, 'tensor': 'text:blk.0.attn_norm.weight', 'manifest_url': '/api/slice1/jobs/slice-20261122-224938-319650/manifest', 'failures': []}",
+  "real_scope": "L00.attn_norm",
+  "cases": [
+    {
+      "name": "whole_model_plan_without_computation",
+      "blocks": 369,
+      "tensors": 761
+    },
+    {
+      "name": "confirmation_cancel_starts_no_job",
+      "passed": true
+    },
+    {
+      "name": "prepare_exposure_never_draws_snow",
+      "passed": true
+    },
+    {
+      "name": "real_norm_matches_old_cache_exactly",
+      "task": "slice-20261122-224902-387330",
+      "elements": 4096,
+      "grid": [
+        16,
+        8,
+        16
+      ],
+      "seconds": 15.59
+    },
+    {
+      "name": "tab_geometry_after_slice",
+      "tabs": [
+        {
+          "id": "view-prepare",
+          "rect": [
+            200.21875,
+            9,
+            45.8125,
+            21
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "disabled": false
+        },
+        {
+          "id": "view-preview",
+          "rect": [
+            246.03125,
+            9,
+            44.8125,
+            21
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "name": "second_click_reuses_completed_tensor",
+      "task": "slice-20261122-224921-106157",
+      "reused": 1
+    },
+    {
+      "name": "diagnostic",
+      "status": "预览：65 块已有统计；其余块只有结构，不补模拟。",
+      "task": {
+        "id": "slice-20261122-224938-319650",
+        "state": "complete",
+        "completed": 1,
+        "failed": 0,
+        "reused": 1,
+        "total": 1,
+        "stage": "任务结束",
+        "signature": "325ae75f3e39a5093f545d2b75b931b157a2ce22d033adca73b55a0854d6f7fb",
+        "elapsed_seconds": 13.53,
+        "tensor": "text:blk.0.attn_norm.weight",
+        "manifest_url": "/api/slice1/jobs/slice-20261122-224938-319650/manifest",
+        "failures": []
+      },
+      "tabs": [
+        {
+          "id": "view-prepare",
+          "width": 45.8125,
+          "height": 21,
+          "disabled": false
+        },
+        {
+          "id": "view-preview",
+          "width": 44.8125,
+          "height": 21,
+          "disabled": false
+        }
+      ]
+    }
+  ],
+  "page_errors": [],
+  "frozen_inputs_unchanged": true,
+  "hashes": {
+    "scripts\\survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "scripts\\survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "scripts\\run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\manifest.json": "3fde33f82aa34c1f3b49496dff6ffe2e41d5b7d55dfaf213e9cafa6c8289f0db",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\tensors\\text__blk.0.attn_norm.weight.json": "d61769a751c4763a71d3e2dde1bcaeed2666a190bfd8a09bc82e2d6fb2dae941"
+  },
+  "seconds": 55.06
+}

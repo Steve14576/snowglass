@@ -1,0 +1,1 @@
+{"key":"text:blk.13.ssm_norm.weight","data_file":"result.json","data_sha256":"71792d742049ad24ff11eb85ff135e69db4eb2b43c33cab76bc47916dc3199b5","slice_signature":"1d2d7e6163620cf5188406b9ba1e080e43926177e27d4677a481c037c78babe3","packed_sha256":"36d259a301bbb7ced21868d79c59324ef665f10d3803e5fef08cfa959752257b","shape":[128],"grid":[16,16,32]}

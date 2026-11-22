@@ -1,0 +1,1 @@
+{"key":"text:blk.1.ssm_alpha.weight","data_file":"result.json","data_sha256":"6bec5b2fc541d534ac705039c2e78e6ca407421a7890401a72355fc84b0deb4b","slice_signature":"3e00415e653554306e56a5f6197e8a935a4d17a56b5d3a346d317b4318d053b4","packed_sha256":"e7fbf43ccd48ecd33ac6fe6b4e9b508dce64f4e300b6ca403950e2d9c9c0f85d","shape":[32,4096],"grid":[16,16,32]}

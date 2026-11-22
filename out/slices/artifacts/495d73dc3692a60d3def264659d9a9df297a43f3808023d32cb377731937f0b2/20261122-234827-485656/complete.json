@@ -1,0 +1,1 @@
+{"key":"text:blk.1.ffn_gate.weight","data_file":"result.json","data_sha256":"1e4f601cace1fde26f873a704bc13b18754b3eef41e51d71cc464dbb32f61654","slice_signature":"495d73dc3692a60d3def264659d9a9df297a43f3808023d32cb377731937f0b2","packed_sha256":"68e7962021e1b4c4e82fe4d9cf51f75bded2614be25e03957d91c24a26387f18","shape":[12288,4096],"grid":[16,16,32]}

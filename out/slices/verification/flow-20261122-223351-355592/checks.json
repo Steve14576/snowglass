@@ -1,0 +1,60 @@
+{
+  "passed": false,
+  "failure": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"#view-prepare\")\n    - locator resolved to <button role=\"tab\" id=\"view-prepare\" title=\"结构编辑，不显示雪花\" aria-selected=\"false\">准备</button>\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n",
+  "real_scope": "L00.attn_norm",
+  "cases": [
+    {
+      "name": "whole_model_plan_without_computation",
+      "blocks": 369,
+      "tensors": 761
+    },
+    {
+      "name": "confirmation_cancel_starts_no_job",
+      "passed": true
+    },
+    {
+      "name": "prepare_exposure_never_draws_snow",
+      "passed": true
+    },
+    {
+      "name": "real_norm_matches_old_cache_exactly",
+      "task": "slice-20261122-223356-230248",
+      "elements": 4096,
+      "grid": [
+        16,
+        8,
+        16
+      ],
+      "seconds": 31.67
+    },
+    {
+      "name": "diagnostic",
+      "status": "预览：65 块已有统计；其余块只有结构，不补模拟。",
+      "task": {
+        "id": "slice-20261122-223356-230248",
+        "state": "complete",
+        "completed": 1,
+        "failed": 0,
+        "reused": 0,
+        "total": 1,
+        "stage": "任务结束",
+        "signature": "f1ce7487680e91702e3419b9902ae0c5bb01a8f73381c81f8eb3f5e5284f8673",
+        "elapsed_seconds": 31.67,
+        "tensor": "text:blk.0.attn_norm.weight",
+        "heartbeat": true,
+        "manifest_url": "/api/slice1/jobs/slice-20261122-223356-230248/manifest",
+        "failures": []
+      }
+    }
+  ],
+  "page_errors": [],
+  "frozen_inputs_unchanged": true,
+  "hashes": {
+    "scripts\\survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "scripts\\survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "scripts\\run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\manifest.json": "3fde33f82aa34c1f3b49496dff6ffe2e41d5b7d55dfaf213e9cafa6c8289f0db",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\tensors\\text__blk.0.attn_norm.weight.json": "d61769a751c4763a71d3e2dde1bcaeed2666a190bfd8a09bc82e2d6fb2dae941"
+  },
+  "seconds": 73.03
+}

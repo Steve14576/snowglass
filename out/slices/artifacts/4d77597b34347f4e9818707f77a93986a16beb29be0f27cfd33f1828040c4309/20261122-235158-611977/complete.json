@@ -1,0 +1,1 @@
+{"key":"text:blk.11.attn_v.weight","data_file":"result.json","data_sha256":"e70d70178a54b0d5ea564289ea33fd46729dc4250c91d051a42a04a70e0eb149","slice_signature":"4d77597b34347f4e9818707f77a93986a16beb29be0f27cfd33f1828040c4309","packed_sha256":"b4ac5d52f933d8b72a797ba87e4cdb88aa3531a2715dc1d3e38443bbc54503a8","shape":[1024,4096],"grid":[16,16,32]}

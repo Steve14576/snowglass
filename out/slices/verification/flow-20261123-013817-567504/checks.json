@@ -1,0 +1,58 @@
+{
+  "passed": false,
+  "failure": "{'snow': None, 'active': None, 'mode': 'prepare', 'tasks': 4}",
+  "real_scope": null,
+  "cases": [
+    {
+      "name": "new_project_defaults_to_raw_and_no_diagnostics",
+      "passed": true
+    },
+    {
+      "name": "whole_model_plan_without_computation",
+      "blocks": 369,
+      "tensors": 761
+    },
+    {
+      "name": "confirmation_cancel_starts_no_job",
+      "passed": true
+    },
+    {
+      "name": "prepare_exposure_never_draws_snow",
+      "passed": true
+    },
+    {
+      "name": "old_channels_after_variant_install",
+      "channels": 260,
+      "passed": true
+    },
+    {
+      "name": "diagnostic",
+      "status": "加载三维依赖：examples/js/controls/TransformControls.js",
+      "task": null,
+      "tabs": [
+        {
+          "id": "view-prepare",
+          "width": 45.8125,
+          "height": 21,
+          "disabled": false
+        },
+        {
+          "id": "view-preview",
+          "width": 44.8125,
+          "height": 21,
+          "disabled": false
+        }
+      ]
+    }
+  ],
+  "page_errors": [],
+  "frozen_inputs_unchanged": true,
+  "hashes": {
+    "scripts\\survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "scripts\\survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "scripts\\run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\manifest.json": "3fde33f82aa34c1f3b49496dff6ffe2e41d5b7d55dfaf213e9cafa6c8289f0db",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\tensors\\text__blk.0.attn_norm.weight.json": "d61769a751c4763a71d3e2dde1bcaeed2666a190bfd8a09bc82e2d6fb2dae941"
+  },
+  "seconds": 9.25
+}

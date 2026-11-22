@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 CACHE=ROOT/'prototype/contrast_survey/20261122-033209-256746/data'
-OLD=ROOT/'prototype/snowglass_editor.html'
+# 旧编辑器已于 2026-11-22 归档；优先新位置，保留旧路径作回退。
+OLD=next(p for p in [ROOT/'prototype/_archive/editor_legacy/snowglass_editor.html',ROOT/'prototype/snowglass_editor.html'] if p.exists())
 TOPO=ROOT/'prototype/data/qwen35_9b.topo.json'
 
 

@@ -1,0 +1,167 @@
+{
+  "phase": "full",
+  "passed": false,
+  "failure": "Page.evaluate: Error: text:blk.0.attn_norm.weight：所选统计尚未生成，请点击一级切片；不会用full冒充。\n    at Data.tensor (http://127.0.0.1:8130/assets/data.js:50:36)\n    at http://127.0.0.1:8130/assets/data.js:66:65\n    at Array.map (<anonymous>)\n    at Data.evaluate (http://127.0.0.1:8130/assets/data.js:66:53)\n    at eval (eval at evaluate (:370:30), <anonymous>:3:187)\n    at async <anonymous>:381:23",
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "sidebar_right": 380,
+        "view_left": 385,
+        "tree_y": 40,
+        "properties_y": 335,
+        "slice_disabled": true
+      }
+    },
+    {
+      "name": "optional_channel_cache_and_convention_isolation",
+      "result": {
+        "missing_refused": true,
+        "channel_preserved": true,
+        "conventions_isolated": true
+      }
+    },
+    {
+      "name": "legacy_project_keeps_convention_and_new_switches_inherit",
+      "result": {
+        "legacy_hf": true,
+        "geometry_unchanged": true,
+        "sparse_override": true
+      }
+    },
+    {
+      "name": "inherit_group_and_sparse_overrides",
+      "result": {
+        "group": "group-1",
+        "overrides": {
+          "frameGray": 0.3
+        }
+      }
+    },
+    {
+      "name": "fixed_mm_transform_and_reparent",
+      "result": {
+        "side": 0.012,
+        "retained_raw": 8192
+      }
+    },
+    {
+      "name": "ungroup_two_modes_and_undo",
+      "result": true
+    },
+    {
+      "name": "ghosts_and_global_only_fields",
+      "result": {
+        "ghost": "ghost-mws3h64j-3"
+      }
+    },
+    {
+      "name": "project_roundtrip_and_invalid_trees",
+      "result": true
+    },
+    {
+      "name": "curve_math_insert_inverse_and_lut",
+      "result": {
+        "splitError": 6.731904078627338e-08,
+        "lutError": 8.074897883680876e-08,
+        "lut_size": 4097
+      }
+    },
+    {
+      "name": "actual_curve_click_add_drag_single_undo",
+      "result": true
+    },
+    {
+      "name": "gray_export_same_as_preview_no_mutation",
+      "result": {
+        "saved_count": 8192
+      }
+    },
+    {
+      "name": "actual_inspector_global_ghost_sparse_edit",
+      "result": true
+    },
+    {
+      "name": "all_cached_types_and_missing_layers",
+      "result": {
+        "groups": 65,
+        "tensors": 124,
+        "missing": "该层尚未计算",
+        "mtp": "权重未收录"
+      }
+    },
+    {
+      "name": "rendered_snow_contributes_pixels",
+      "result": {
+        "pixels": 21957,
+        "instances": 8192
+      }
+    },
+    {
+      "name": "mobile_panels_no_overflow",
+      "result": {
+        "width": 390,
+        "scroll": 390,
+        "tree": 110,
+        "props": 199
+      }
+    },
+    {
+      "name": "visual_tree_identity_and_invalid_window",
+      "result": true
+    },
+    {
+      "name": "geometry_recipe_change_during_reparent_preserves_world",
+      "result": true
+    },
+    {
+      "name": "actual_tree_shift_group_default_ungroup",
+      "result": true
+    },
+    {
+      "name": "actual_global_curve_keeps_reference_feedback",
+      "result": true
+    },
+    {
+      "name": "save_buttons_capture_matching_payload",
+      "result": {
+        "project_kind": "snowglass.editor-ux.v1",
+        "mapping_kind": "snowglass.ux-gray-mapping.v1",
+        "count": 8192
+      }
+    },
+    {
+      "name": "actual_open_project_roundtrip",
+      "result": true
+    }
+  ],
+  "source_unchanged": true,
+  "assets_sha256": {
+    "index.html": "e66a10ccb2bf17a5fc18091a6d9f8291793cbf770ba1e5688283095005ba9810",
+    "assets\\app.js": "f4a6f30e091030c772fa57224f2d3590b784a1712647dd12c10992dc793ffe2f",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "59beffdfc5c13935ade7c8f5eed9880d693094b222e9b0e163c8c5347f05dc0a",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "ccd0a0ced9096cd9badf45a4f1f467cb5d2887d3489f0b7513bfc7120004536a",
+    "assets\\editor.css": "8128f9d0200c4acc7b7cbc6728696cd98768bf4d6578c32807086825ecc2f4e5",
+    "assets\\inspector.js": "82d4a2fc761cf8d941e89a276059d640c68d714ff9b94dc73f975bf7fb904ca7",
+    "assets\\layout.js": "b6e78479bbfbb275f61af486a7cda4377d0aae108e80c83f36007d72a66a4573",
+    "assets\\model.js": "a0dc396bc5cb23f1bf9fa9f6b99dd2d7c684c2063e3609c1bb72ab058247af75",
+    "assets\\scene.js": "1138012d54ce8999bafe415ae539f8cf225e2d12316a2d13c67900a97bcbfdff",
+    "assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "assets\\tree.js": "ee55aab46979ceba66d4e9423b02d2ff8efb248b477d43db364a0510ded19d18"
+  },
+  "test_sha256": "7daa7d07e36265f14f536d6286324c9ac2dfed4493095178727448339f031e34",
+  "seconds": 30.437000000005355
+}

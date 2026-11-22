@@ -1,0 +1,1 @@
+{"id": "slice-20261122-225203-005852", "state": "complete", "completed": 1, "failed": 0, "reused": 1, "total": 1, "stage": "任务结束", "signature": "325ae75f3e39a5093f545d2b75b931b157a2ce22d033adca73b55a0854d6f7fb", "elapsed_seconds": 15.75, "tensor": "text:blk.0.attn_norm.weight", "manifest_url": "/api/slice1/jobs/slice-20261122-225203-005852/manifest", "failures": []}

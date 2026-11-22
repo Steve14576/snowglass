@@ -16,7 +16,7 @@
     bootFail('这个页面要用本地服务打开，不能双击文件',
       '当前地址是 file:// 开头。浏览器把同目录的拓扑和 124 份张量统计当成跨源请求拦掉，所以你看到空白和一串 403。数据文件都在，代码也没坏。',
       '换成下面这条本机地址即可；服务没开时先在项目根执行框里的命令。',
-      'http://127.0.0.1:8128/\n\nuv run --no-project python -m http.server 8128 --bind 127.0.0.1 --directory prototype/editor_ux/20261122-055413-124110');
+      'http://127.0.0.1:8128/\n\nuv run --offline --script scripts/serve_editor.py');
     return;
   }
   async function json(path){const r=await fetch(path,{cache:'no-store'});if(!r.ok)throw Error(path+' HTTP '+r.status);return r.json();}
@@ -35,16 +35,23 @@
   function confirmAction(title,text){const d=$('confirm-dialog');$('confirm-title').textContent=title;$('confirm-body').textContent=text;d.returnValue='';return new Promise(resolve=>{d.addEventListener('close',()=>resolve(d.returnValue==='ok'),{once:true});d.showModal();});}
   try{
     const [topo,manifest,provenance]=await Promise.all([json('data/topology.json'),json('data/manifest.json'),json('provenance.json')]);await libraries();
-    const model=new UXModel.Model(topo,provenance),data=new UXData.Data(manifest);let selected=['L16.down'],preview=['L16.down'],results=[],serial=0,saveTimer,inspector,tree,scene,dataTimer=null,structPending=false;
+    const model=new UXModel.Model(topo,provenance),data=new UXData.Data(manifest);let selected=['L16.down'],preview=['L16.down'],results=[],serial=0,saveTimer,inspector,tree,scene,dataTimer=null,structPending=false,viewMode='prepare',previewLoading=false,previewResults=[],slicing=null,bootDoc=null;
     const observed=()=>selected.length===1&&selected[0]==='global'?preview:selected;
-    const snapshot=()=>({...model.snapshot(),view:{selected:selected.slice(),preview:preview.slice(),isolate:scene.isolate,exposure:scene.exposure,camera:scene.camera.position.toArray(),target:scene.orbit.target.toArray(),open:[...tree.open]}});
+    const snapshot=()=>({...model.snapshot(),slice:slicing?.snapshot(),view:{selected:selected.slice(),preview:preview.slice(),isolate:scene.isolate,exposure:scene.exposure,camera:scene.camera.position.toArray(),target:scene.orbit.target.toArray(),open:[...tree.open]}});
     const safe=fn=>{try{return fn();}catch(e){message(e.message);}};
     async function refreshData(){
-      const token=++serial,ids=model.leaves(observed()).filter(id=>model.nodes.get(id).type==='block');
-      try{const values=await Promise.all(ids.map(id=>data.evaluate(id,model)));if(token!==serial)return;results=values;scene.drawSnow(values);inspector.results(values);
+      const token=++serial;
+      // 预览态画全部有缓存的块；准备态只求值当前观察对象但不画雪花。
+      const sourceIds=viewMode==='preview'?[...data.groups.keys()]:model.leaves(observed());
+      const ids=sourceIds.filter(id=>model.nodes.get(id)?.type==='block');
+      try{const values=await Promise.all(ids.map(id=>data.evaluate(id,model)));if(token!==serial)return;results=values;
+        scene.drawSnow(viewMode==='preview'?values:[]);if(viewMode==='preview')previewResults=values;
+        const selectedIds=new Set(model.leaves(observed()));inspector.results(values.filter(r=>selectedIds.has(r.id)));
+        renderViewState();slicing?.render();
         const count=values.reduce((n,r)=>n+r.count,0),missing=values.filter(r=>!r.pieces.length).length;
         const reference=selected.length===1&&selected[0]==='global'?`编辑全局；参考预览 ${preview.join('、')}，曲线来源 ${ids[0]?model.nodes.get(model.resolve(ids[0],'curve').source).name:'无'}。`:'当前对象预览。';
-        $('view-caption').textContent=`${reference}${ids.length} 个功能块 · ${count} 个真实候选格 · ${missing} 个未计算／缺权重块。${scene.isolate?'结构隔离仅影响屏幕，':'全景结构可能遮挡纹理，'}不补模拟。`;renderReport();
+        const coverage=slicing?.summary();
+        $('view-caption').textContent=`${viewMode==='prepare'?'准备：不显示雪花。':reference}${ids.length} 个功能块 · ${count} 候选格 · ${coverage?coverage.total-coverage.ready:missing} 块待切片；旧统计若不匹配会保留并标记，不填模拟。`;renderReport();
       }catch(e){if(token===serial){
         const same=ids.length===results.length&&ids.every(id=>results.some(r=>r.id===id));if(!same){results=[];scene.drawSnow([]);}
         $('view-caption').textContent=same?'当前窗口／缓存无效，保留上一有效灰度预览；当前设置尚未应用。':'所选统计无法载入，未填充任何替代纹理。';
@@ -58,10 +65,11 @@
       const size=model.bounds(['work']).getSize(new THREE.Vector3());line('模型世界包围盒：'+size.toArray().map(v=>v.toFixed(3)).join(' × ')+' mm');
       line('进入作品功能块：'+report.solids+'；仿射盒重叠：'+report.overlaps.length+' 对',report.overlaps.length?'danger':null);
       for(const g of report.ghosts)line(g.name+(g.primary?'（主参照）':'')+'：'+g.outside.length+'块出界'+(g.invalid?'，内预留区域为空':'')+(g.approx?'，圆柱内偏移保守近似':''),g.outside.length?'danger':g.invalid?'warn':null);
-      for(const r of results){if(!r.pieces.length)continue;const m=model.world(r.id),side=model.resolve(r.id,'snowSize').value;
+      for(const r of results.slice(0,8)){if(!r.pieces.length)continue;const m=model.world(r.id),side=model.resolve(r.id,'snowSize').value;
         const spacing=r.pieces.flatMap(p=>p.grid.map((n,i)=>new THREE.Vector3().setFromMatrixColumn(m,i).length()*p.region.size[i]/n)),tight=Math.min(...spacing)<side;
         line(r.id+'：'+r.count+'候选格，'+r.positive+'正灰度格，'+r.masked+'显式筛除；轴向最小间距 '+Math.min(...spacing).toFixed(5)+' mm'+(tight?'，小于雪花边长，存在干涉风险':''),tight?'warn':null);
       }
+      if(results.length>8)line(`其余 ${results.length-8} 块只在预览中绘制，不逐块列出。`);
       model.layoutWarnings.forEach(text=>line(text,'warn'));line('轴向间距不是全部跨块近邻检查。没有厂家灰阶标定，不据点距宣称可加工；爆点数、工时、灰度容量未核实。','warn');
     }
     function refresh(transient=false){
@@ -69,12 +77,50 @@
       if(transient){
         inspector.updateTransform();inspector.curveUI?.redraw();
         if(!structPending){structPending=true;requestAnimationFrame(()=>{structPending=false;scene.structure();scene.render();});}
-        clearTimeout(dataTimer);dataTimer=setTimeout(()=>refreshData(),50);
+        clearTimeout(dataTimer);dataTimer=setTimeout(()=>refreshData(),viewMode==='preview'?260:50);
         return;
       }
       {const curveState=inspector.curveUI?{index:inspector.curveUI.index,handles:inspector.curveUI.handles}:null;inspector.ids=selected;inspector.render();if(curveState&&inspector.curveUI){Object.assign(inspector.curveUI,curveState);inspector.curveUI.redraw();}tree.selected=selected;tree.render();
         clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(storageKey,JSON.stringify(snapshot()));}catch(e){message('自动保存失败，请保存工程文件');}},400);}
       scene.structure();refreshData();renderReport();$('undo').disabled=!model.history.length;$('redo').disabled=!model.future.length;
+    }
+    const previewIds=()=>[...data.groups.keys()].filter(id=>model.nodes.get(id)?.type==='block');
+    function renderViewState(){
+      $('view-prepare').setAttribute('aria-selected',String(viewMode==='prepare'));
+      $('view-preview').setAttribute('aria-selected',String(viewMode==='preview'));
+      const badge=$('preview-state');
+      if(viewMode==='preview'&&previewResults.length){badge.hidden=false;badge.textContent=`${previewResults.length} 块 · ${previewResults.reduce((n,r)=>n+r.count,0)} 候选格`;}
+      else badge.hidden=true;
+      slicing?.render();
+    }
+    function showProgress(done,total,text){$('progress').hidden=false;$('progress-text').textContent=text;$('progress-fill').style.width=(total?Math.round(done/total*100):0)+'%';}
+    function hideProgress(){$('progress').hidden=true;}
+    async function enterPreview(){
+      const ids=previewIds(),total=ids.length;const token=++serial;showProgress(0,total,'正在载入统计缓存…');
+      $('progress-note').textContent='读取已有统计并绘制；此步骤不读取原权重、不重新切片。';
+      try{
+        const loaded=[];const queue=ids.map((id,i)=>i);let done=0;
+        await Promise.all(Array.from({length:6},async()=>{
+          while(queue.length){const i=queue.shift();loaded[i]=await data.evaluate(ids[i],model);done++;
+            showProgress(done,total,`已载入 ${done} / ${total} 组`);await new Promise(r=>setTimeout(r,0));}
+        }));
+        if(scene.isolate){scene.isolate=false;const b=$('isolate-view');b.classList.remove('active');b.setAttribute('aria-checked','false');}
+        if(token!==serial){hideProgress();return;}
+        previewResults=loaded;viewMode='preview';results=loaded;
+        scene.observation=ids;scene.structure();scene.drawSnow(loaded);
+        hideProgress();renderViewState();renderReport();
+        const scope=new Set(model.leaves(observed()));inspector.results(loaded.filter(r=>scope.has(r.id)));
+        message(`预览：${total} 块已有统计；其余块只有结构，不补模拟。`);
+      }catch(e){hideProgress();message('预览载入失败：'+e.message);}
+    }
+    function exitPreview(){
+      viewMode='prepare';previewResults=[];scene.drawSnow([]);hideProgress();renderViewState();
+      message('准备：结构编辑，不显示雪花。');refreshData();
+    }
+    async function setView(mode){
+      if(mode===viewMode||previewLoading)return;
+      if(mode==='prepare'){exitPreview();return;}
+      previewLoading=true;try{await enterPreview();}finally{previewLoading=false;}
     }
     function renderIdentity(){
       const el=$('identity');el.textContent='';
@@ -93,13 +139,14 @@
           row(`源层 ${src.layer!=null?'L'+src.layer:src.vlayer!=null?'V'+src.vlayer:'—'} · 槽位 ${src.slot||'—'} · ${(src.tensors||[]).length} 个张量`);
           for(const t of src.tensors||[]){
             const box=document.createElement('div');box.className='id-tensor';
-            box.textContent=`${t.gguf}\n${t.shape.join('×')} · ${t.qtype||'—'}${t.restore?' · 已按HF约定还原':''}`;el.append(box);
+            box.textContent=`${t.gguf}\n${t.shape.join('×')} · ${t.qtype||'—'}${t.restore?' · 可选HF对齐规则：'+t.restore:''}`;el.append(box);
           }
         }else row('没有源张量（空框或权重未收录）');
-        const real=data.groups.has(n.sourceId),st=document.createElement('p');
-        st.className='id-state'+(real?'':' muted');st.textContent=real?'统计状态：已有真实缓存':'统计状态：未计算／权重未收录';el.append(st);
+        const real=data.groups.has(n.sourceId),fresh=slicing?.fresh(n.sourceId)??real,st=document.createElement('p');
+        st.className='id-state'+(fresh?'':' muted');st.textContent=fresh?'统计状态：已有匹配真实缓存':real?'统计状态：来源／约定／网格待生成；当前保留旧结果':'统计状态：未计算／权重未收录';el.append(st);
         const size=model.bounds([n.id]).getSize(new THREE.Vector3());
         row('包络 '+size.toArray().map(v=>v.toFixed(3)).join(' × ')+' mm');
+        row('当前选定约定：'+(model.resolve(n.id,'sourceConvention').value==='gguf'?'GGUF文件原值':'HF数值约定')+'；额外诊断 '+(model.resolve(n.id,'extraDiagnostics').value?'启用':'关闭'));
       }else if(n.type==='ghost'){
         const d=n.data;row(`形状 ${d.shape==='box'?'长方体':'圆柱'} · 向内预留 ${d.margin} mm${model.primaryGhost===n.id?' · 主参照':''}`);
       }else if(n.type==='group'){
@@ -149,6 +196,8 @@
     const mode=value=>{scene.setMode(value);document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===value));};document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>mode(b.dataset.mode));
     const boxButton=$('box-select'),syncBox=()=>{boxButton.classList.toggle('active',scene.boxMode);boxButton.setAttribute('aria-pressed',String(scene.boxMode));};
     boxButton.onclick=()=>{scene.boxMode=!scene.boxMode;syncBox();};
+    $('view-prepare').onclick=()=>setView('prepare');
+    $('view-preview').onclick=()=>setView('preview');
     // 视图菜单与两个弹层：同一时间只开一个，点外部或 Esc 关闭。
     const pops=['view-menu-list','observe-pop','keys-pop'],popButtons=['view-menu-button','observe-button','keys-button'];
     const closePop=()=>{pops.forEach(id=>{const el=$(id);if(el)el.hidden=true;});popButtons.forEach(id=>$(id).setAttribute('aria-expanded','false'));};
@@ -162,14 +211,12 @@
     $('fit-all').onclick=()=>{isolation(false);scene.fit(['work']);closePop();};
     $('fit-selected').onclick=()=>{scene.fit(observed());closePop();};
     $('front-view').onclick=()=>{scene.fit(observed().length?observed():['work'],true);closePop();};
-    $('exposure').oninput=()=>{scene.exposure=+$('exposure').value;$('exposure-out').textContent=scene.exposure.toFixed(2);scene.drawSnow(results);};
-    for(const [id,text] of [['slice-1','首批未接入真实统计与网格重算；统计生成设置改变后才需要这一步。'],['slice-2','首批未接入厂家加工导出；不会把灰度映射冒充可加工文件。']])
-      $(id).addEventListener('pointerdown',()=>message(text));
+    $('exposure').oninput=()=>{scene.exposure=+$('exposure').value;$('exposure-out').textContent=scene.exposure.toFixed(2);scene.drawSnow(viewMode==='preview'?results:[]);};
     $('report-toggle').onclick=()=>{$('report').hidden=!$('report').hidden;renderReport();};$('focus-toggle').onclick=()=>{document.body.classList.toggle('focus');scene.resize();};
     $('save-project').onclick=()=>download(snapshot(),'snowglass_ux_'+stamp()+'.json');$('open-project').onclick=()=>$('project-file').click();
     $('project-file').onchange=async()=>{try{const doc=JSON.parse(await $('project-file').files[0].text());model.load(doc);if(doc.view?.camera&&doc.view.camera.length===3&&[...doc.view.camera,...doc.view.target].every(Number.isFinite)){scene.camera.position.fromArray(doc.view.camera);scene.orbit.target.fromArray(doc.view.target);scene.orbit.update();}
         if(Array.isArray(doc.view?.open))tree.open=new Set(doc.view.open);preview=(doc.view?.preview||['L16.down']).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);$('isolate-view').setAttribute('aria-checked',String(scene.isolate));
-        select((doc.view?.selected||['work']).filter(id=>model.nodes.has(id)));message('新版工程已恢复，继承关系与覆盖项保留');}catch(e){message('打开失败：'+e.message);}finally{$('project-file').value='';}};
+        await slicing.restore(doc);select((doc.view?.selected||['work']).filter(id=>model.nodes.has(id)));message('新版工程已恢复，继承关系、覆盖与切片引用保留');}catch(e){message('打开失败：'+e.message);}finally{$('project-file').value='';}};
     $('save-mapping').onclick=async()=>{if(!selected.length){message('先选择有真实统计的块或组');return;}const button=$('save-mapping');button.disabled=true;
       try{const frozen=new UXModel.Model(topo,provenance);frozen.restore(model.snapshot());const scope=selected.length===1&&selected[0]==='global'?['work']:selected.slice();const doc=await data.mapping(scope,frozen);if(!doc.results.some(r=>r.pieces.length))throw Error('所选范围没有真实统计，不输出空白冒充成功');doc.project=frozen.snapshot();download(doc,'gray_mapping_'+stamp()+'.json');message('灰度映射已保存为新文件；未生成厂家加工文件');}
       catch(e){message(e.message);}finally{button.disabled=false;refreshData();}};
@@ -209,10 +256,15 @@
         if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();$('remove').click();}
       }
     });
-    try{const stored=localStorage.getItem(storageKey);if(stored){const doc=JSON.parse(stored);model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);const iso=$('isolate-view');iso.classList.toggle('active',scene.isolate);iso.setAttribute('aria-checked',String(scene.isolate));}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
-    window.uxEditor={model,data,scene,tree,inspector,select,get selected(){return selected;},get results(){return results;},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,renderIdentity,
-      loadProject:doc=>{model.load(doc);select(['work']);},mapping:ids=>data.mapping(ids.length===1&&ids[0]==='global'?['work']:ids,model),storageKey};
-    $('coverage').textContent='65组 / 124张量已有统计 · 不跑新权重';select(selected);mode('translate');scene.fit(selected);message('独立新版已就绪：未计算块留结构，不填模拟纹理。');
+    try{const stored=localStorage.getItem(storageKey);if(stored){const doc=JSON.parse(stored);bootDoc=doc;model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);const iso=$('isolate-view');iso.classList.toggle('active',scene.isolate);iso.setAttribute('aria-checked',String(scene.isolate));}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
+    slicing=new UXSlicing(model,data,{selected:()=>selected,view:()=>viewMode,message,confirm:confirmAction,progress:showProgress,hideProgress,
+      dataChanged:async(autoPreview)=>{++serial;scene.drawSnow([]);inspector.render();tree.render();renderIdentity();
+        clearTimeout(saveTimer);saveTimer=setTimeout(()=>localStorage.setItem(storageKey,JSON.stringify(snapshot())),400);
+        if(!autoPreview)await refreshData();},preview:async()=>{await enterPreview();}});
+    window.uxEditor={model,data,scene,tree,inspector,slicing,select,get selected(){return selected;},get results(){return results;},get viewMode(){return viewMode;},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,renderIdentity,
+      loadProject:async doc=>{model.load(doc);await slicing.restore(doc);select(['work']);},mapping:ids=>data.mapping(ids.length===1&&ids[0]==='global'?['work']:ids,model),storageKey};
+    await slicing.initialize(bootDoc);
+    $('coverage').textContent='已有统计可预览 · 一级切片须显式确认';renderViewState();select(selected);mode('translate');scene.fit(['work']);
   }catch(e){
     message('启动失败：'+e.message);console.error(e);
     bootFail('启动失败',e.message,

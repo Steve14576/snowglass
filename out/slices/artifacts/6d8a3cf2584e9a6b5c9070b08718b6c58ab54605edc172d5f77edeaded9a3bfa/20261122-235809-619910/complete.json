@@ -1,0 +1,1 @@
+{"key":"text:blk.14.ssm_out.weight","data_file":"result.json","data_sha256":"0997565c07267c41334988a6365e7859e69bfee829e2f9a6a3c94b5fef94b0d4","slice_signature":"6d8a3cf2584e9a6b5c9070b08718b6c58ab54605edc172d5f77edeaded9a3bfa","packed_sha256":"be268bddfec5747370ff3ef59c6c8ad83435f783d9dd219bfc331be866105a2d","shape":[4096,4096],"grid":[16,16,32]}

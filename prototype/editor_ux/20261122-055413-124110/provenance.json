@@ -131,6 +131,9 @@
     "prototype\\contrast_survey\\20261122-033209-256746\\data\\vision__v.post_ln.bias.json": "8933d8fbdfa3bbfedc4f50af84b52635378660607f182ecaeb7e3b23cc315d3a",
     "prototype\\contrast_survey\\20261122-033209-256746\\data\\vision__v.post_ln.weight.json": "a388db78e5977ae402dd9da9f8dcf3865b174f9151b7c5af2d500006873057dc"
   },
+  "archived_paths": {
+    "prototype\\snowglass_editor.html": "prototype\\_archive\\editor_legacy\\snowglass_editor.html"
+  },
   "cached_groups": 65,
   "cached_tensors": 124,
   "topology_sha256": "7a82b5172d6c59c54d8c8b3d76068c084cf55241dd31cf25faadc05695c9f33f",

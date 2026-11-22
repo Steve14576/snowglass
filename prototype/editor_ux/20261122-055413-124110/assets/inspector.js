@@ -3,6 +3,7 @@
   'use strict';
   const typeNames={global:'全局配置',root:'模型根',tower:'塔',layer:'层',group:'操作组',block:'权重功能块',ghost:'幽灵毛坯',reference:'参照集合',project:'工程'};
   const RANGES={
+    gridX:[1,64,1],gridY:[1,64,1],gridZ:[1,64,1],
     frameT:[0,.5,.001],shellT:[0,.5,.001],frameGray:[0,1,.005],shellGray:[0,1,.002],
     snowSize:[.002,.08,.001],gap:[-.3,.3,.005],labelSize:[.1,4,.05],
     labelDx:[-30,30,.1],labelDy:[-30,30,.1],labelDz:[-30,30,.1],
@@ -108,7 +109,7 @@
       const M=this.model;this.ids=this.ids.filter(id=>M.nodes.has(id));const ids=this.ids;
       document.getElementById('property-title').textContent=ids.length===1?M.nodes.get(ids[0]).name:ids.length?'已选 '+ids.length+' 个对象':'对象属性';
       document.getElementById('property-kind').textContent=ids.length===1?typeNames[M.nodes.get(ids[0]).type]:'';this.element.textContent='';this.curveUI=null;
-      const summary=document.getElementById('property-summary');summary.textContent=ids.length?'修改值才覆盖，没改的实时继承。数据计算未接入，不会自动读取权重。':'在树或视口选择对象；不自动把输入当作修改全局。';
+      const summary=document.getElementById('property-summary');summary.textContent=ids.length?'修改值才覆盖，其余实时继承。缺少所需来源／约定／网格／诊断时需显式切片；窗口、曲线与几何即时生效。':'在树或视口选择对象；不自动把输入当作修改全局。';
       if(!ids.length)return;const first=M.nodes.get(ids[0]),global=ids.length===1&&first.type==='global';
       if(ids.length===1&&['group','ghost'].includes(first.type)){const input=document.createElement('input');input.type='text';input.value=first.name;input.setAttribute('aria-label','对象名称');input.onchange=()=>this.safe(()=>M.rename(first.id,input.value));this.element.append(input);}
       if(ids.every(id=>!['global','project','reference'].includes(M.nodes.get(id).type)))this.transform(this.section('transform','变换 · 相对默认位置'));
@@ -119,9 +120,17 @@
         const button=document.createElement('button');button.textContent=M.primaryGhost===first.id?'当前主参照':'设为主参照';button.disabled=M.primaryGhost===first.id;button.onclick=()=>M.commit(()=>M.primaryGhost=first.id);body.append(button);this.note(body,'毛坯只作参照；改变它不缩模型、不重算权重。圆柱非均匀变换下内偏移为保守近似。',true);return;
       }
       if(ids.some(id=>['project','reference','ghost'].includes(M.nodes.get(id).type))){this.note(this.element,'此选择仅支持适用的几何管理；没有雪花算法属性。');return;}
+      const slice=this.section('slice','一级切片 · 统计生成');
+      this.field(slice,'gridX','分区 X 格数上限');this.field(slice,'gridY','分区 Y 格数上限');this.field(slice,'gridZ','分区 Z 格数上限');
+      this.note(slice,'网格改后点击右上一级切片。所有权重参与均值合并；每格具体合并多少以 counts 为准。默认16×16×32沿用原探路配方；每分区最多65536格是当前资源限制。');
+      this.field(slice,'sourceConvention','权重数值约定',[['gguf','GGUF文件原值'],['hf','HF约定对齐（可选）']]);
+      this.field(slice,'extraDiagnostics','额外诊断统计（可选）');
+      this.note(slice,'新工程默认GGUF原值、不启用额外诊断；旧工程保留当时的HF约定，需显式切换。对齐只修正数值／排列约定，不恢复量化前精度。');
+      this.note(slice,'额外诊断包括带符号均值、原矩阵极值／零比例／RMS。未启用诊断且选完整幅度时不计算这些；谱来源仍须计算RMS作为阈值，这是算法依赖。');
       const gray=this.section('gray','输出灰度 · 即时缓存映射');this.field(gray,'channel','统计来源',[['full','完整权重幅度'],['feature','谱／直接特征'],['rowcol','行列强度'],['residual','谱残差幅度']]);
       this.field(gray,'windowMode','输入窗口',[['range','每张量实际跨度'],['reference','原幅度参考标尺']]);this.field(gray,'black','黑端 · 相对输入');this.field(gray,'white','白端 · 相对输入');
-      this.note(gray,'组继承的是窗口策略；实际源端点逐张量列出。曲线前统计与灰度分开，黑色不表示权重缺失。');
+      this.note(gray,'已有对应统计立即映射；未生成的来源提示需要切片，不拿full冒充。完整幅度只直接池化，行列强度才计算行列范数，谱／残差来源才运行SVD并成对生成。');
+      this.note(gray,'窗口和曲线只改缓存映射，不读原权重；黑色不表示权重缺失。');
       if(ids.length===1){const container=document.createElement('div');gray.append(container);this.curveUI=new UXCurveUI(container,M,ids[0],text=>this.error(text));}
       else this.note(gray,'多选先查看共同参数；要统一编辑曲线可打组，避免把临时选区当持久组。');
       const support=this.section('filter','独立位置筛选');this.field(support,'filter','启用筛选');this.field(support,'cutoff','曲线前输入门槛');this.note(support,'默认关闭；比较窗口后的输入，不受曲线反转影响，不是无用权重判断。');
@@ -141,8 +150,7 @@
       this.note(label,'文字是对象自己的属性，打组不改成员文字。“屏幕上显示”只管预览；“随作品输出”才会写进导出清单。');
       this.note(label,'当前导出管线未接入：文字定义（内容、字体、毫米字号、三轴偏移、锚点位置）会写入灰度映射 JSON，但尚未转成可加工字形几何；朝向、中文字形与轮廓授权仍待核实。',true);
       if(global){const machine=this.section('machine','全局机台与后验参照');for(const [key,text] of [['pitch','机台点距 mm'],['dotUm','爆点点径 μm'],['speed','打点速度 / 秒']])this.field(machine,key,text);this.note(machine,'仅作未核实的工艺参照，不能推断可辨灰阶或安全。',true);}
-      const calculation=this.section('calculation','统计与后续计算');this.note(calculation,'当前只载入已完成的固定网格缓存。每格合并量n仍待最终确认；网格与谱重算、任意解析式、自适应、厂家OBJ/STL导出未接入，不触发新权重实验。',true);
-      const b=document.createElement('button');b.textContent='统计重算 · 首批未接入';b.disabled=true;calculation.append(b);
+      const calculation=this.section('calculation','后续计算边界');this.note(calculation,'一级切片已接本机任务服务；统计网格可配置，统计来源按需生成；仅谱来源沿用原SVD配方。任意解析式、自适应、字体几何及厂家OBJ/STL导出仍未接入。每格合并量n不是另行拍板的固定值，以实际 counts 为准。',true);
       this.resultsBody=this.section('results','所选真实统计与来源');this.note(this.resultsBody,'正在载入所选对象的已有统计……');
     }
     selection(ids){this.ids=ids;this.render();}
@@ -162,7 +170,7 @@
     results(results){
       if(!this.resultsBody?.isConnected)return;this.resultsBody.textContent='';let total=0;
       for(const r of results){total+=r.count;this.note(this.resultsBody,r.id+' · '+r.status+' · '+r.count+'候选格 / '+(r.positive||0)+'正灰度格');
-        for(const p of r.pieces){const div=document.createElement('div');div.className='source-piece';div.textContent=`${p.tensor} / ${p.name} · ${p.used} · ${p.grid.join('×')} · 每格${Math.min(...p.counts)}–${Math.max(...p.counts)}值 · 源窗[${p.window.low.toPrecision(5)}, ${p.window.high.toPrecision(5)}]`;this.resultsBody.append(div);}
+        for(const p of r.pieces){const div=document.createElement('div');div.className='source-piece';div.textContent=`${p.tensor} / ${p.name} · ${p.used} · ${p.source_convention==='gguf'?'GGUF原值':'HF约定'} · ${p.grid.join('×')} · 每格${Math.min(...p.counts)}–${Math.max(...p.counts)}值 · 源窗[${p.window.low.toPrecision(5)}, ${p.window.high.toPrecision(5)}]`;this.resultsBody.append(div);}
         r.caveats?.forEach(v=>this.note(this.resultsBody,v,true));
       }this.note(this.resultsBody,'统计来源：'+this.model.provenance.source_run+'。总候选格'+total+'；不从正灰度数推爆点数。');
     }

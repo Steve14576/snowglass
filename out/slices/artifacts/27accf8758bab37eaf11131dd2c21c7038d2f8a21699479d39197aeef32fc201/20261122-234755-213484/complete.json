@@ -1,0 +1,1 @@
+{"key":"text:blk.1.attn_qkv.weight","data_file":"result.json","data_sha256":"52e3e6a0398abe846a5e8fcc61a97b807dfa35793aea5fddc40ec20887ed51dd","slice_signature":"27accf8758bab37eaf11131dd2c21c7038d2f8a21699479d39197aeef32fc201","packed_sha256":"357c152d94578dc0fa8ac774b59cc3c7a04f06aec01565e986cc4bf589ee5bbc","shape":[8192,4096],"grid":[16,16,32]}

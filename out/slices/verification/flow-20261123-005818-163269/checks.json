@@ -1,0 +1,134 @@
+{
+  "passed": false,
+  "failure": "Page.wait_for_function: Timeout 10000ms exceeded.",
+  "real_scope": "L00.attn_norm",
+  "cases": [
+    {
+      "name": "new_project_defaults_to_raw_and_no_diagnostics",
+      "passed": true
+    },
+    {
+      "name": "whole_model_plan_without_computation",
+      "blocks": 369,
+      "tensors": 761
+    },
+    {
+      "name": "confirmation_cancel_starts_no_job",
+      "passed": true
+    },
+    {
+      "name": "prepare_exposure_never_draws_snow",
+      "passed": true
+    },
+    {
+      "name": "real_raw_norm_full_only_without_optional_work",
+      "task": "slice-20261123-005822-113197",
+      "elements": 4096,
+      "grid": [
+        16,
+        8,
+        16
+      ],
+      "seconds": 31.08
+    },
+    {
+      "name": "tab_geometry_after_slice",
+      "tabs": [
+        {
+          "id": "view-prepare",
+          "rect": [
+            200.21875,
+            9,
+            45.8125,
+            21
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "disabled": false
+        },
+        {
+          "id": "view-preview",
+          "rect": [
+            246.03125,
+            9,
+            44.8125,
+            21
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "name": "second_click_reuses_completed_tensor",
+      "task": "slice-20261123-005911-373139",
+      "reused": 1
+    },
+    {
+      "name": "changed_grid_uses_matching_result_then_disables_button",
+      "task": "slice-20261123-005928-215724",
+      "reused": 0,
+      "grid": [
+        8,
+        8,
+        16
+      ],
+      "ready": true,
+      "meshes": 130
+    },
+    {
+      "name": "geometry_gray_and_selection_do_not_reslice_or_hide_all_snow",
+      "passed": true
+    },
+    {
+      "name": "diagnostic",
+      "status": "切片未启动：已有切片任务正在运行，请先等待或取消",
+      "task": {
+        "id": "slice-20261123-005928-215724",
+        "state": "complete",
+        "completed": 1,
+        "failed": 0,
+        "reused": 0,
+        "total": 1,
+        "stage": "任务结束",
+        "signature": "85cce046671dadeebf28b597eb6481361876124d48876dcae9a07214dbe7f726",
+        "elapsed_seconds": 31.02,
+        "tensor": "text:blk.0.attn_norm.weight",
+        "source": "full",
+        "convention": "gguf",
+        "svd_enabled": false,
+        "diagnostics": false,
+        "iteration": null,
+        "rank": null,
+        "heartbeat": true,
+        "manifest_url": "/api/slice1/jobs/slice-20261123-005928-215724/manifest",
+        "failures": []
+      },
+      "tabs": [
+        {
+          "id": "view-prepare",
+          "width": 45.8125,
+          "height": 21,
+          "disabled": false
+        },
+        {
+          "id": "view-preview",
+          "width": 44.8125,
+          "height": 21,
+          "disabled": false
+        }
+      ]
+    }
+  ],
+  "page_errors": [],
+  "frozen_inputs_unchanged": true,
+  "hashes": {
+    "scripts\\survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "scripts\\survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "scripts\\run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\manifest.json": "3fde33f82aa34c1f3b49496dff6ffe2e41d5b7d55dfaf213e9cafa6c8289f0db",
+    "prototype\\editor_ux\\20261122-055413-124110\\data\\tensors\\text__blk.0.attn_norm.weight.json": "d61769a751c4763a71d3e2dde1bcaeed2666a190bfd8a09bc82e2d6fb2dae941"
+  },
+  "seconds": 112.98
+}

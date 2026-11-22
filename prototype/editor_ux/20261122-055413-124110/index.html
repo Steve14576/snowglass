@@ -12,6 +12,12 @@
     <strong>snowglass</strong>
     <span class="version">独立 UX 版 · 已有真实统计</span>
   </div>
+  <div class="view-switch" role="tablist" aria-label="视图">
+    <button id="view-prepare" role="tab" aria-selected="true" title="结构编辑，不显示雪花">准备</button>
+    <button id="view-preview" role="tab" aria-selected="false" title="显示全部已缓存雪花">预览</button>
+  </div>
+  <span id="preview-state" class="view-state" hidden></span>
+  <span id="slice-state" class="view-state"></span>
   <div class="file-actions" role="group" aria-label="文件">
     <button id="save-project">保存工程</button>
     <button id="open-project">打开工程</button>
@@ -20,7 +26,8 @@
   </div>
   <div class="header-spacer"></div>
   <div class="slice-actions" role="group" aria-label="切片">
-    <button id="slice-1" class="slice-button" disabled title="首批未接入真实统计与网格重算">一级切片</button>
+    <select id="slice-scope" aria-label="一级切片范围"><option value="work">作品范围</option><option value="selected">所选对象</option></select>
+    <button id="slice-1" class="slice-button" disabled title="正在连接本机计算服务">一级切片</button>
     <button id="slice-2" class="slice-button" disabled title="首批未接入厂家加工导出">二级导出</button>
   </div>
   <div class="header-actions" role="group" aria-label="编辑与查看">
@@ -104,6 +111,12 @@
     </div>
   </div>
   <div id="marquee" hidden></div><div id="hover-card" hidden></div>
+  <div id="progress" hidden role="status" aria-live="polite">
+    <p id="progress-text">正在载入统计缓存…</p>
+    <div class="progress-bar"><i id="progress-fill"></i></div>
+    <p id="progress-note" class="progress-note">读取已有统计并绘制；原权重只在明确执行一级切片时读取。</p>
+    <button id="slice-cancel" hidden>取消任务 · 保留已完成统计</button>
+  </div>
   <aside id="report" hidden aria-label="后验报告"></aside>
   <section id="identity" aria-label="选中对象身份" hidden></section>
   <div id="view-caption">载入已有缓存；未计算块不填模拟雪花。</div>
@@ -111,5 +124,5 @@
 </main>
 <footer class="statusbar"><span id="status" role="status">正在加载三维依赖与独立缓存……</span><span id="coverage"></span></footer>
 <dialog id="confirm-dialog"><form method="dialog"><h2 id="confirm-title"></h2><pre id="confirm-body"></pre><div class="dialog-actions"><button value="cancel">取消</button><button id="confirm-ok" value="ok">确认</button></div></form></dialog>
-<script src="assets/curve_math.js"></script><script src="assets/layout.js"></script><script src="assets/model.js"></script><script src="assets/data.js"></script><script src="assets/checks.js"></script><script src="assets/scene.js"></script><script src="assets/tree.js"></script><script src="assets/curve_ui.js"></script><script src="assets/inspector.js"></script><script src="assets/app.js"></script>
+<script src="assets/curve_math.js"></script><script src="assets/layout.js"></script><script src="assets/model.js"></script><script src="assets/data.js"></script><script src="assets/checks.js"></script><script src="assets/scene.js"></script><script src="assets/tree.js"></script><script src="assets/curve_ui.js"></script><script src="assets/inspector.js"></script><script src="assets/slicing.js"></script><script src="assets/app.js"></script>
 </body></html>

@@ -103,15 +103,19 @@
         const side=M.resolve(result.id,'snowSize').value;
         for(const p of result.pieces){
           const key=result.id+'|'+p.key+'|'+p.name;used.add(key);let mesh=this.snowMeshes.get(key);
+          if(mesh&&mesh.instanceMatrix.count!==p.gray.length){this.snow.remove(mesh);mesh.material.dispose();mesh.dispose?.();this.snowMeshes.delete(key);mesh=null;}
           if(!mesh){mesh=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial(),p.gray.length);mesh.frustumCulled=false;this.snowMeshes.set(key,mesh);this.snow.add(mesh);}
-          const geometryKey=JSON.stringify([world.elements,side,p.region,p.grid,result.settings.filter?[p.used,result.settings.windowMode,result.settings.black,result.settings.white,result.settings.cutoff]:false]);
-          const updatePositions=mesh.userData.geometryKey!==geometryKey,mat=new T.Matrix4(),pos=new T.Vector3(),color=new T.Color(),size=new T.Vector3(side,side,side);let count=0;
+          const geometryKey=JSON.stringify([world.elements,side,p.region,p.grid,result.settings.filter?[p.data_sha256,p.used,result.settings.windowMode,result.settings.black,result.settings.white,result.settings.cutoff]:false]);
+          const colorKey=JSON.stringify([result.signature,p.data_sha256,this.exposure]);
+          const updatePositions=mesh.userData.geometryKey!==geometryKey,updateColors=mesh.userData.colorKey!==colorKey;
+          if(!updatePositions&&!updateColors){this.renderedSnow+=mesh.count;continue;}
+          const mat=new T.Matrix4(),pos=new T.Vector3(),color=new T.Color(),size=new T.Vector3(side,side,side);let count=0;
           for(let i=0;i<p.gray.length;i++){if(!p.mask[i])continue;
             if(updatePositions){pos.fromArray(UXData.position(p,i)).applyMatrix4(world);mat.compose(pos,q,size);mesh.setMatrixAt(count,mat);}
-            const g=Math.min(1,p.gray[i]*this.exposure);mesh.setColorAt(count,color.setRGB(g,g,g));count++;
+            if(updateColors||updatePositions){const g=Math.min(1,p.gray[i]*this.exposure);mesh.setColorAt(count,color.setRGB(g,g,g));}count++;
           }
           mesh.count=count;if(updatePositions)mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
-          mesh.userData={sourceId:result.id,tensor:p.key,geometryKey};this.renderedSnow+=count;
+          mesh.userData={sourceId:result.id,tensor:p.key,geometryKey,colorKey};this.renderedSnow+=count;
         }
       }
       for(const [key,mesh] of this.snowMeshes)if(!used.has(key)){this.snow.remove(mesh);mesh.material.dispose();mesh.dispose?.();this.snowMeshes.delete(key);}
