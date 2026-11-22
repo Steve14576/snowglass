@@ -54,15 +54,15 @@
     function renderReport(){
       if($('report').hidden)return;const report=UXChecks.run(model),root=$('report');root.textContent='';
       const heading=document.createElement('h3');heading.textContent='后验报告 · 只提示，不阻挠';root.append(heading);
-      const line=text=>{const p=document.createElement('p');p.textContent=text;root.append(p);};
+      const line=(text,tone)=>{const p=document.createElement('p');p.textContent=text;if(tone)p.className=tone;root.append(p);};
       const size=model.bounds(['work']).getSize(new THREE.Vector3());line('模型世界包围盒：'+size.toArray().map(v=>v.toFixed(3)).join(' × ')+' mm');
-      line('进入作品功能块：'+report.solids+'；仿射盒重叠：'+report.overlaps.length+' 对');
-      for(const g of report.ghosts)line(g.name+(g.primary?'（主参照）':'')+'：'+g.outside.length+'块出界'+(g.invalid?'，内预留区域为空':'')+(g.approx?'，圆柱内偏移保守近似':''));
+      line('进入作品功能块：'+report.solids+'；仿射盒重叠：'+report.overlaps.length+' 对',report.overlaps.length?'danger':null);
+      for(const g of report.ghosts)line(g.name+(g.primary?'（主参照）':'')+'：'+g.outside.length+'块出界'+(g.invalid?'，内预留区域为空':'')+(g.approx?'，圆柱内偏移保守近似':''),g.outside.length?'danger':g.invalid?'warn':null);
       for(const r of results){if(!r.pieces.length)continue;const m=model.world(r.id),side=model.resolve(r.id,'snowSize').value;
-        const spacing=r.pieces.flatMap(p=>p.grid.map((n,i)=>new THREE.Vector3().setFromMatrixColumn(m,i).length()*p.region.size[i]/n));
-        line(r.id+'：'+r.count+'候选格，'+r.positive+'正灰度格，'+r.masked+'显式筛除；轴向最小间距 '+Math.min(...spacing).toFixed(5)+' mm'+(Math.min(...spacing)<side?'，小于雪花边长，存在干涉风险':''));
+        const spacing=r.pieces.flatMap(p=>p.grid.map((n,i)=>new THREE.Vector3().setFromMatrixColumn(m,i).length()*p.region.size[i]/n)),tight=Math.min(...spacing)<side;
+        line(r.id+'：'+r.count+'候选格，'+r.positive+'正灰度格，'+r.masked+'显式筛除；轴向最小间距 '+Math.min(...spacing).toFixed(5)+' mm'+(tight?'，小于雪花边长，存在干涉风险':''),tight?'warn':null);
       }
-      model.layoutWarnings.forEach(line);line('轴向间距不是全部跨块近邻检查。没有厂家灰阶标定，不据点距宣称可加工；爆点数、工时、灰度容量未核实。');
+      model.layoutWarnings.forEach(text=>line(text,'warn'));line('轴向间距不是全部跨块近邻检查。没有厂家灰阶标定，不据点距宣称可加工；爆点数、工时、灰度容量未核实。','warn');
     }
     function refresh(transient=false){
       selected=selected.filter(id=>model.nodes.has(id));preview=preview.filter(id=>model.nodes.has(id));scene.observation=observed();scene.select(selected);renderIdentity();
@@ -149,16 +149,26 @@
     const mode=value=>{scene.setMode(value);document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===value));};document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>mode(b.dataset.mode));
     const boxButton=$('box-select'),syncBox=()=>{boxButton.classList.toggle('active',scene.boxMode);boxButton.setAttribute('aria-pressed',String(scene.boxMode));};
     boxButton.onclick=()=>{scene.boxMode=!scene.boxMode;syncBox();};
-    const isolation=value=>{scene.isolate=value;$('isolate-view').classList.toggle('active',value);scene.structure();scene.render();refreshData();};
-    $('isolate-view').onclick=()=>isolation(!scene.isolate);
-    $('fit-all').onclick=()=>{isolation(false);scene.fit(['work']);};$('fit-selected').onclick=()=>scene.fit(observed());$('front-view').onclick=()=>scene.fit(observed().length?observed():['work'],true);
+    // 视图菜单与两个弹层：同一时间只开一个，点外部或 Esc 关闭。
+    const pops=['view-menu-list','observe-pop','keys-pop'],popButtons=['view-menu-button','observe-button','keys-button'];
+    const closePop=()=>{pops.forEach(id=>{const el=$(id);if(el)el.hidden=true;});popButtons.forEach(id=>$(id).setAttribute('aria-expanded','false'));};
+    const togglePop=(button,pop)=>{const open=!$(pop).hidden;closePop();if(!open){$(pop).hidden=false;$(button).setAttribute('aria-expanded','true');}};
+    $('view-menu-button').onclick=e=>{e.stopPropagation();togglePop('view-menu-button','view-menu-list');};
+    $('observe-button').onclick=e=>{e.stopPropagation();togglePop('observe-button','observe-pop');};
+    $('keys-button').onclick=e=>{e.stopPropagation();togglePop('keys-button','keys-pop');};
+    document.addEventListener('pointerdown',e=>{if(!e.target.closest('.view-tools'))closePop();});
+    const isolation=value=>{scene.isolate=value;const b=$('isolate-view');b.classList.toggle('active',value);b.setAttribute('aria-checked',String(value));scene.structure();scene.render();refreshData();};
+    $('isolate-view').onclick=()=>{isolation(!scene.isolate);closePop();};
+    $('fit-all').onclick=()=>{isolation(false);scene.fit(['work']);closePop();};
+    $('fit-selected').onclick=()=>{scene.fit(observed());closePop();};
+    $('front-view').onclick=()=>{scene.fit(observed().length?observed():['work'],true);closePop();};
     $('exposure').oninput=()=>{scene.exposure=+$('exposure').value;$('exposure-out').textContent=scene.exposure.toFixed(2);scene.drawSnow(results);};
     for(const [id,text] of [['slice-1','首批未接入真实统计与网格重算；统计生成设置改变后才需要这一步。'],['slice-2','首批未接入厂家加工导出；不会把灰度映射冒充可加工文件。']])
       $(id).addEventListener('pointerdown',()=>message(text));
     $('report-toggle').onclick=()=>{$('report').hidden=!$('report').hidden;renderReport();};$('focus-toggle').onclick=()=>{document.body.classList.toggle('focus');scene.resize();};
     $('save-project').onclick=()=>download(snapshot(),'snowglass_ux_'+stamp()+'.json');$('open-project').onclick=()=>$('project-file').click();
     $('project-file').onchange=async()=>{try{const doc=JSON.parse(await $('project-file').files[0].text());model.load(doc);if(doc.view?.camera&&doc.view.camera.length===3&&[...doc.view.camera,...doc.view.target].every(Number.isFinite)){scene.camera.position.fromArray(doc.view.camera);scene.orbit.target.fromArray(doc.view.target);scene.orbit.update();}
-        if(Array.isArray(doc.view?.open))tree.open=new Set(doc.view.open);preview=(doc.view?.preview||['L16.down']).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);
+        if(Array.isArray(doc.view?.open))tree.open=new Set(doc.view.open);preview=(doc.view?.preview||['L16.down']).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);$('isolate-view').setAttribute('aria-checked',String(scene.isolate));
         select((doc.view?.selected||['work']).filter(id=>model.nodes.has(id)));message('新版工程已恢复，继承关系与覆盖项保留');}catch(e){message('打开失败：'+e.message);}finally{$('project-file').value='';}};
     $('save-mapping').onclick=async()=>{if(!selected.length){message('先选择有真实统计的块或组');return;}const button=$('save-mapping');button.disabled=true;
       try{const frozen=new UXModel.Model(topo,provenance);frozen.restore(model.snapshot());const scope=selected.length===1&&selected[0]==='global'?['work']:selected.slice();const doc=await data.mapping(scope,frozen);if(!doc.results.some(r=>r.pieces.length))throw Error('所选范围没有真实统计，不输出空白冒充成功');doc.project=frozen.snapshot();download(doc,'gray_mapping_'+stamp()+'.json');message('灰度映射已保存为新文件；未生成厂家加工文件');}
@@ -168,27 +178,28 @@
     const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
     const dragResize=(handle,onMove,axis)=>{
       handle.addEventListener('pointerdown',e=>{e.preventDefault();handle.setPointerCapture(e.pointerId);handle.dataset.drag='1';handle.dataset.start=String(axis==='x'?e.clientX:e.clientY);
-        handle.dataset.base=axis==='x'?String(parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-width'))||420):String(document.querySelector('.tree-panel').clientHeight);});
+        handle.dataset.base=axis==='x'?String(parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-width'))||380):String(document.querySelector('.tree-panel').clientHeight);});
       handle.addEventListener('pointermove',e=>{if(handle.dataset.drag!=='1')return;onMove(Number(handle.dataset.base),axis==='x'?e.clientX:e.clientY,Number(handle.dataset.start));});
       const stop=()=>{handle.dataset.drag='0';};handle.addEventListener('pointerup',stop);handle.addEventListener('pointercancel',stop);
       handle.addEventListener('keydown',e=>{const sign=e.key==='ArrowRight'||e.key==='ArrowDown'?1:e.key==='ArrowLeft'||e.key==='ArrowUp'?-1:0;if(!sign)return;e.preventDefault();
-        if(axis==='x'){const base=parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-width'))||420;root.style.setProperty('--sidebar-width',clamp(base+sign*20,260,innerWidth-360)+'px');}
+        if(axis==='x'){const base=parseFloat(getComputedStyle(root).getPropertyValue('--sidebar-width'))||380;root.style.setProperty('--sidebar-width',clamp(base+sign*20,200,innerWidth-300)+'px');}
         else{const base=document.querySelector('.tree-panel').clientHeight;root.style.setProperty('--tree-height',clamp(base+sign*20,120,$('sidebar').clientHeight-180)+'px');}
         scene.resize();});
     };
     dragResize(resizer,(base,now,start)=>{
-      root.style.setProperty('--sidebar-width',clamp(base+(now-start),260,innerWidth-360)+'px');scene.resize();
+      root.style.setProperty('--sidebar-width',clamp(base+(now-start),200,innerWidth-300)+'px');scene.resize();
     },'x');
     dragResize(treeSplit,(base,now,start)=>{
       root.style.setProperty('--tree-height',clamp(base+(now-start),120,$('sidebar').clientHeight-180)+'px');
     },'y');
     document.addEventListener('keydown',e=>{
-      const typing=!!e.target.closest('input,select,textarea');
+      const typing=!!(e.target instanceof Element&&e.target.closest('input,select,textarea'));
       if($('confirm-dialog').open)return;
       const key=e.key.toLowerCase();
       if(e.ctrlKey&&key==='z'){e.preventDefault();e.shiftKey?model.redo():model.undo();return;}
       if(e.ctrlKey&&key==='y'){e.preventDefault();model.redo();return;}
       if(e.ctrlKey&&key==='g'){e.preventDefault();group();return;}
+      if(key==='escape'){closePop();return;}
       if(typing)return;
       if(e.ctrlKey&&key==='a'){e.preventDefault();select([...model.nodes.values()].filter(n=>n.type==='block').map(n=>n.id));return;}
       if(!e.ctrlKey&&!e.altKey){
@@ -198,7 +209,7 @@
         if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();$('remove').click();}
       }
     });
-    try{const stored=localStorage.getItem(storageKey);if(stored){const doc=JSON.parse(stored);model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
+    try{const stored=localStorage.getItem(storageKey);if(stored){const doc=JSON.parse(stored);model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);const iso=$('isolate-view');iso.classList.toggle('active',scene.isolate);iso.setAttribute('aria-checked',String(scene.isolate));}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
     window.uxEditor={model,data,scene,tree,inspector,select,get selected(){return selected;},get results(){return results;},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,renderIdentity,
       loadProject:doc=>{model.load(doc);select(['work']);},mapping:ids=>data.mapping(ids.length===1&&ids[0]==='global'?['work']:ids,model),storageKey};
     $('coverage').textContent='65组 / 124张量已有统计 · 不跑新权重';select(selected);mode('translate');scene.fit(selected);message('独立新版已就绪：未计算块留结构，不填模拟纹理。');

@@ -52,6 +52,12 @@ def main():
                 document.getElementById('report-toggle').click();
                 const accent=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),hue=parseFloat(accent);
                 if(hue>=90&&hue<=180)throw Error('强调色仍偏绿：'+accent);
+                const cs=getComputedStyle(document.documentElement),sat=v=>parseFloat((v||'').trim().split(/\s+/)[1]);
+                if(sat(cs.getPropertyValue('--local'))<25)throw Error('本地覆盖色被去色');
+                if(sat(cs.getPropertyValue('--danger'))<25)throw Error('报红色被去色');
+                if(sat(cs.getPropertyValue('--info'))<25)throw Error('文件操作色被去色');
+                const fileColor=getComputedStyle(document.querySelector('.file-actions button')).color;
+                if(fileColor===getComputedStyle(document.body).color)throw Error('文件按钮与正文同色，无法区分');
                 if(document.getElementById('isolate-view').classList.contains('active'))throw Error('默认不应隔离隐藏其它对象');
                 const saveBtn=document.getElementById('save-project').getBoundingClientRect(),sliceBtn=document.getElementById('slice-1').getBoundingClientRect();
                 if(saveBtn.left>innerWidth/2||sliceBtn.left<innerWidth*0.45)throw Error('文件／切片按钮没有分置左上与右上');
@@ -236,6 +242,22 @@ def main():
                 actual=page.evaluate('() => uxEditor.model.localTRS("L16.down").t[0]')
                 assert abs(actual-x-1)<1e-6
                 cases.append({'name':'actual_numeric_transform_input','result':{'delta':actual-x}})
+                check('compact_toolbar_and_help_popover','''()=>{
+                    const top=[...document.querySelectorAll('.view-tools > button, .view-tools .seg button')];
+                    if(top.length>8)throw Error('工具条仍有过多常驻按钮：'+top.length);
+                    const menu=document.getElementById('view-menu-list'),keys=document.getElementById('keys-pop');
+                    if(!menu.hidden||!keys.hidden)throw Error('菜单／弹层默认应关闭');
+                    document.getElementById('view-menu-button').click();
+                    if(menu.hidden)throw Error('视图菜单打不开');
+                    document.getElementById('keys-button').click();
+                    if(!menu.hidden||keys.hidden)throw Error('两个面板没有互斥');
+                    if(!keys.textContent.includes('跳选'))throw Error('键位表内容缺失');
+                    document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));
+                    if(!keys.hidden)throw Error('Esc 没关闭弹层');
+                    const treeTools=document.querySelectorAll('.tree-tools button').length;
+                    if(treeTools<3)throw Error('选择操作没有移到树面板');
+                    return {top_buttons:top.length,tree_tools:treeTools};
+                }''')
                 page.evaluate('(s)=>{uxEditor.model.load(s);uxEditor.select(["L16.down"]);}',initial)
                 page.wait_for_function('uxEditor.selected[0]==="L16.down"')
                 check('param_slider_and_number_are_paired','''()=>{

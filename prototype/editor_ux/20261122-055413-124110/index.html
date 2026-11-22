@@ -36,12 +36,22 @@
     <div class="panel-heading"><h2>对象树</h2>
       <div class="mini-actions"><button id="new-box">＋长方体</button><button id="new-cylinder">＋圆柱</button></div>
     </div>
+    <div class="tree-tools">
+      <button id="select-all" title="Ctrl+A">全选</button>
+      <button id="select-none">清空</button>
+      <button id="box-select" title="常驻框选；也可直接 Shift 在视口拖动">框选</button>
+    </div>
+    <details class="tree-batch">
+      <summary>批量选择</summary>
+      <div class="batch-row"><label>层号 <input id="layer-number" type="number" min="0" max="31" value="16"></label><button id="select-layer">选该层</button></div>
+      <div class="batch-row"><select id="slot" aria-label="按功能列选择"><option value="mixer">序列混合</option><option value="ffn">FFN</option><option value="norm1">Norm 1</option><option value="norm2">Norm 2</option><option value="vision">视觉塔</option></select><button id="select-column">选该列</button></div>
+    </details>
     <input id="tree-search" type="search" placeholder="查找对象、层号、张量" aria-label="查找对象">
     <div id="tree" role="tree" aria-label="操作对象树"></div>
     <div class="tree-actions">
       <button id="group">打组</button>
-      <button id="ungroup">解组 · 继承</button>
-      <button id="ungroup-keep">解组 · 保留局部</button>
+      <button id="ungroup">解组</button>
+      <button id="ungroup-keep" title="把组实际覆盖项下放为成员本地值">解组·保留</button>
       <button id="remove">删除</button>
     </div>
   </section>
@@ -61,27 +71,37 @@
     <p id="boot-cmd" class="boot-cmd"></p>
   </div>
   <div class="view-tools">
-    <div class="tool-row">
-      <button id="select-all">全选</button><button id="select-none">清空</button>
-      <button id="box-select" title="Shift+拖动或在空白处拖出选框">框选 <kbd>Shift</kbd></button>
-      <button data-mode="translate" title="W">移动</button>
-      <button data-mode="rotate" title="E">旋转</button>
-      <button data-mode="scale" title="R">缩放</button>
-      <button data-mode="off" title="Q">关闭</button>
-      <button id="fit-all">全景</button><button id="fit-selected">聚焦所选</button><button id="front-view">正面</button>
-      <button id="isolate-view" title="只影响屏幕">隔离选区</button>
+    <div class="seg" role="group" aria-label="变换手柄">
+      <button data-mode="translate" title="W">移动</button><button data-mode="rotate" title="E">旋转</button><button data-mode="scale" title="R">缩放</button><button data-mode="off" title="Q">关</button>
     </div>
-    <div class="tool-row">
-      <label>层号 <input id="layer-number" type="number" min="0" max="31" value="16"></label>
-      <button id="select-layer">按层选</button>
-      <select id="slot" aria-label="按功能列选择">
-        <option value="mixer">序列混合</option><option value="ffn">FFN</option>
-        <option value="norm1">Norm 1</option><option value="norm2">Norm 2</option><option value="vision">视觉塔</option>
-      </select>
-      <button id="select-column">按列选</button>
-      <label>屏幕曝光 <input id="exposure" type="range" min=".25" max="2" step=".05" value="1"></label><output id="exposure-out">1.00</output>
+    <div class="menu-host">
+      <button id="view-menu-button" aria-expanded="false" aria-haspopup="true">视图</button>
+      <div id="view-menu-list" class="menu" role="menu" hidden>
+        <button id="fit-all" role="menuitem">全景</button>
+        <button id="fit-selected" role="menuitem">聚焦所选</button>
+        <button id="front-view" role="menuitem">正面</button>
+        <button id="isolate-view" role="menuitemcheckbox" aria-checked="false">隔离选区</button>
+      </div>
     </div>
-    <p class="key-hint">Shift 拖动框选 · Shift 单击范围选 · Ctrl 单击跳选 · Alt 单击选毛坯 · W/E/R 手柄</p>
+    <button id="observe-button" class="icon-button" aria-expanded="false" title="观察设置">⚙</button>
+    <button id="keys-button" class="icon-button" aria-expanded="false" title="键位说明">?</button>
+    <div id="observe-pop" class="popover" hidden>
+      <label class="pop-row">屏幕曝光 <input id="exposure" type="range" min=".25" max="2" step=".05" value="1"><output id="exposure-out">1.00</output></label>
+      <p>只影响屏幕显示，不改输出灰度。未被局部覆盖的对象跟随全局。</p>
+    </div>
+    <div id="keys-pop" class="popover keys" hidden>
+      <dl>
+        <dt>单击</dt><dd>单选</dd>
+        <dt>Shift 单击（树）</dt><dd>范围选</dd>
+        <dt>Ctrl 单击</dt><dd>跳选（加／减）</dd>
+        <dt>Shift 拖动</dt><dd>框选</dd>
+        <dt>Alt 单击</dt><dd>选毛坯</dd>
+        <dt>W / E / R / Q</dt><dd>移动 / 旋转 / 缩放 / 关</dd>
+        <dt>B / F</dt><dd>框选模式 / 专注</dd>
+        <dt>Ctrl+A / Z / Shift+Z / Y / G</dt><dd>全选 / 撤销 / 重做 / 重做 / 打组</dd>
+        <dt>Delete</dt><dd>删除所选</dd>
+      </dl>
+    </div>
   </div>
   <div id="marquee" hidden></div><div id="hover-card" hidden></div>
   <aside id="report" hidden aria-label="后验报告"></aside>

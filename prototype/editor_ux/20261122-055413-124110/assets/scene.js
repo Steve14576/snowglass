@@ -4,7 +4,7 @@
   class Scene {
     constructor(element,model,onSelect,onHover,onGesture){
       const T=THREE;this.model=model;this.element=element;this.onSelect=onSelect;this.onHover=onHover;this.onGesture=onGesture;this.selected=[];this.exposure=1;this.scopeAll=false;this.snowMeshes=new Map();this.isolate=false;this.observation=[];
-      this.renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));this.renderer.setClearColor(0x080b0d);element.append(this.renderer.domElement);
+      this.renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));this.renderer.setClearColor(0x000000);element.append(this.renderer.domElement);
       this.scene=new T.Scene();this.camera=new T.PerspectiveCamera(42,1,.001,2000);this.orbit=new T.OrbitControls(this.camera,this.renderer.domElement);this.orbit.addEventListener('change',()=>this.render());
       this.unit=new T.BoxGeometry(1,1,1);this.frames=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending}),5000);
       this.shells=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide}),2500);
