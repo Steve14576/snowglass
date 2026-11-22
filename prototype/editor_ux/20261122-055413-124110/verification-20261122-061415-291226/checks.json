@@ -1,0 +1,25 @@
+{
+  "phase": "probe",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "tree_y": 56,
+        "properties_y": 332
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "seconds": 4.202999999979511
+}

@@ -1,0 +1,64 @@
+{
+  "phase": "full",
+  "passed": false,
+  "failure": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\".curve-node[data-index=\\\"0\\\"]\")\n    - locator resolved to <circle cx=\"0\" r=\"1.6\" cy=\"100\" data-index=\"0\" class=\"curve-node selected\"></circle>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <span>输入 0</span> from <div class=\"curve-axis\">…</div> subtree intercepts pointer events\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <span>输入 0</span> from <div class=\"curve-axis\">…</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 100ms\n    57 × waiting for element to be visible, enabled and stable\n       - element is visible, enabled and stable\n       - scrolling into view if needed\n       - done scrolling\n       - <span>输入 0</span> from <div class=\"curve-axis\">…</div> subtree intercepts pointer events\n     - retrying click action\n       - waiting 500ms\n",
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "tree_y": 56,
+        "properties_y": 332
+      }
+    },
+    {
+      "name": "inherit_group_and_sparse_overrides",
+      "result": {
+        "group": "group-1",
+        "overrides": {
+          "frameGray": 0.3
+        }
+      }
+    },
+    {
+      "name": "fixed_mm_transform_and_reparent",
+      "result": {
+        "side": 0.012,
+        "retained_raw": 8192
+      }
+    },
+    {
+      "name": "ungroup_two_modes_and_undo",
+      "result": true
+    },
+    {
+      "name": "ghosts_and_global_only_fields",
+      "result": {
+        "ghost": "ghost-mwqzg9xj-3"
+      }
+    },
+    {
+      "name": "project_roundtrip_and_invalid_trees",
+      "result": true
+    },
+    {
+      "name": "curve_math_insert_inverse_and_lut",
+      "result": {
+        "splitError": 6.731904078627338e-08,
+        "lutError": 8.074897883680876e-08,
+        "lut_size": 4097
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "seconds": 42.39000000001397
+}

@@ -1,0 +1,34 @@
+{
+  "phase": "full",
+  "passed": false,
+  "failure": "Page.evaluate: Error: 变换改了源值\n    at eval (eval at evaluate (:370:30), <anonymous>:6:81)\n    at async <anonymous>:381:23",
+  "page_errors": [],
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "tree_y": 56,
+        "properties_y": 332
+      }
+    },
+    {
+      "name": "inherit_group_and_sparse_overrides",
+      "result": {
+        "group": "group-1",
+        "overrides": {
+          "frameGray": 0.3
+        }
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "seconds": 8.5
+}

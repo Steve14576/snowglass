@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>snowglass · 对象与真实灰度编辑</title><meta name="description" content="独立新版UX：右上对象树、右下属性、按项继承、真实统计与可拖多点曲线。旧工程和实验不覆盖。">
+<link rel="stylesheet" href="assets/base.css"><link rel="stylesheet" href="assets/editor.css"></head>
+<body>
+<header class="app-header"><div><strong>snowglass</strong><span class="version">独立 UX 版 · 已有真实统计</span></div>
+<div class="header-actions"><button id="undo" title="Ctrl+Z">撤销</button><button id="redo" title="Ctrl+Shift+Z">重做</button><button id="save-project">保存工程</button><button id="open-project">打开工程</button><button id="save-mapping">保存所选灰度映射</button><button id="report-toggle">后验报告</button><button id="focus-toggle">专注 F</button><input id="project-file" type="file" accept=".json" hidden></div></header>
+<main class="workspace">
+<section id="view" aria-label="三维工作区"><div class="view-tools">
+<div class="tool-row"><button id="select-all">全选</button><button id="select-none">清空</button><button id="box-select">框选 B</button><button data-mode="translate">移动 W</button><button data-mode="rotate">旋转 E</button><button data-mode="scale">缩放 R</button><button data-mode="off">关闭 Q</button><button id="fit-all">全景</button><button id="fit-selected">聚焦所选</button><button id="front-view">正面</button><button id="isolate-view" class="active">隔离选区 · 屏幕</button></div>
+<div class="tool-row"><label>原始层号 <input id="layer-number" type="number" min="0" max="31" value="16"></label><button id="select-layer">按层选</button><select id="slot" aria-label="按功能列选择"><option value="mixer">序列混合</option><option value="ffn">FFN</option><option value="norm1">Norm 1</option><option value="norm2">Norm 2</option><option value="vision">视觉塔</option></select><button id="select-column">按列选</button>
+<label>屏幕曝光 <input id="exposure" type="range" min=".25" max="2" step=".05" value="1"></label><output id="exposure-out">1.00</output></div>
+</div><div id="marquee" hidden></div><div id="hover-card" hidden></div><aside id="report" hidden aria-label="后验报告"></aside>
+<div id="view-caption">载入已有缓存；未计算块不填模拟雪花。</div></section>
+<aside id="sidebar" aria-label="对象与属性">
+<section class="tree-panel"><div class="panel-heading"><h2>对象树</h2><div class="mini-actions"><button id="new-box">＋长方体毛坯</button><button id="new-cylinder">＋圆柱</button></div></div>
+<input id="tree-search" type="search" placeholder="查找对象、层号、张量" aria-label="查找对象"><div id="tree" role="tree" aria-label="操作对象树"></div>
+<div class="tree-actions"><button id="group">打组</button><button id="ungroup">解组 · 继承</button><button id="ungroup-keep">解组 · 保留局部</button><button id="remove">删除所选</button></div></section>
+<div id="splitter" role="separator" aria-label="调整对象树高度" aria-orientation="horizontal" tabindex="0"></div>
+<section class="property-panel"><div class="panel-heading"><h2 id="property-title">对象属性</h2><span id="property-kind"></span></div><div id="property-summary"></div><div id="properties"></div></section>
+</aside></main>
+<footer class="statusbar"><span id="status" role="status">正在加载三维依赖与独立缓存……</span><span id="coverage"></span></footer>
+<dialog id="confirm-dialog"><form method="dialog"><h2 id="confirm-title"></h2><pre id="confirm-body"></pre><div class="dialog-actions"><button value="cancel">取消</button><button id="confirm-ok" value="ok">确认</button></div></form></dialog>
+<script src="assets/curve_math.js"></script><script src="assets/layout.js"></script><script src="assets/model.js"></script><script src="assets/data.js"></script><script src="assets/checks.js"></script><script src="assets/scene.js"></script><script src="assets/tree.js"></script><script src="assets/curve_ui.js"></script><script src="assets/inspector.js"></script><script src="assets/app.js"></script>
+</body></html>

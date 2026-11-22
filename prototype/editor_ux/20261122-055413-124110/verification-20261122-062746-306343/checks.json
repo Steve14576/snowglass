@@ -1,0 +1,9 @@
+{
+  "phase": "full",
+  "passed": false,
+  "failure": "Page.goto: Timeout 60000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:8128/\", waiting until \"networkidle\"\n",
+  "page_errors": [],
+  "cases": [],
+  "source_unchanged": true,
+  "seconds": 61.312999999994645
+}

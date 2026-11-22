@@ -1,0 +1,167 @@
+{
+  "phase": "full",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "tree_y": 56,
+        "properties_y": 332
+      }
+    },
+    {
+      "name": "inherit_group_and_sparse_overrides",
+      "result": {
+        "group": "group-1",
+        "overrides": {
+          "frameGray": 0.3
+        }
+      }
+    },
+    {
+      "name": "fixed_mm_transform_and_reparent",
+      "result": {
+        "side": 0.012,
+        "retained_raw": 8192
+      }
+    },
+    {
+      "name": "ungroup_two_modes_and_undo",
+      "result": true
+    },
+    {
+      "name": "ghosts_and_global_only_fields",
+      "result": {
+        "ghost": "ghost-mwr0qp42-3"
+      }
+    },
+    {
+      "name": "project_roundtrip_and_invalid_trees",
+      "result": true
+    },
+    {
+      "name": "curve_math_insert_inverse_and_lut",
+      "result": {
+        "splitError": 6.731904078627338e-08,
+        "lutError": 8.074897883680876e-08,
+        "lut_size": 4097
+      }
+    },
+    {
+      "name": "actual_curve_click_add_drag_single_undo",
+      "result": true
+    },
+    {
+      "name": "gray_export_same_as_preview_no_mutation",
+      "result": {
+        "saved_count": 8192
+      }
+    },
+    {
+      "name": "actual_inspector_global_ghost_sparse_edit",
+      "result": true
+    },
+    {
+      "name": "all_cached_types_and_missing_layers",
+      "result": {
+        "groups": 65,
+        "tensors": 124,
+        "missing": "该层尚未计算",
+        "mtp": "权重未收录"
+      }
+    },
+    {
+      "name": "rendered_snow_contributes_pixels",
+      "result": {
+        "pixels": 21461,
+        "instances": 8192
+      }
+    },
+    {
+      "name": "mobile_panels_no_overflow",
+      "result": {
+        "width": 390,
+        "scroll": 390,
+        "tree": 135,
+        "props": 279.078125
+      }
+    },
+    {
+      "name": "visual_tree_identity_and_invalid_window",
+      "result": true
+    },
+    {
+      "name": "geometry_recipe_change_during_reparent_preserves_world",
+      "result": true
+    },
+    {
+      "name": "actual_tree_shift_group_default_ungroup",
+      "result": true
+    },
+    {
+      "name": "actual_global_curve_keeps_reference_feedback",
+      "result": true
+    },
+    {
+      "name": "save_buttons_capture_matching_payload",
+      "result": {
+        "project_kind": "snowglass.editor-ux.v1",
+        "mapping_kind": "snowglass.ux-gray-mapping.v1",
+        "count": 8192
+      }
+    },
+    {
+      "name": "actual_open_project_roundtrip",
+      "result": true
+    },
+    {
+      "name": "four_cached_channels_and_independent_mask",
+      "result": {
+        "group_channel_cases": 260,
+        "mask_independent": true
+      }
+    },
+    {
+      "name": "gumball_events_update_shared_numeric_state",
+      "result": {
+        "delta": 0.6999999999999993,
+        "numeric": 9.2067
+      }
+    },
+    {
+      "name": "actual_numeric_transform_input",
+      "result": {
+        "delta": 1.0
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "assets_sha256": {
+    "index.html": "ffbb52f977103dd371d13d5b01813d6e3f122468c8f3d664f2b9ff8053253973",
+    "assets\\app.js": "e0620288c67be641faed90c5f300185738003f8d437ae62fd949ca607b498340",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "59beffdfc5c13935ade7c8f5eed9880d693094b222e9b0e163c8c5347f05dc0a",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "e19c6f92b1a7afaee9c5350bafa685a1c524a3a19d108df7f250021d3d284ab5",
+    "assets\\editor.css": "72779d907a12e94ffd190b099ca21317aed920a4c5b1507be1eb50254afae0c4",
+    "assets\\inspector.js": "1a9072d16e5e2ac885047408d17c4c23863f63eb6c35338ddcc0b931d8324b4b",
+    "assets\\layout.js": "b6e78479bbfbb275f61af486a7cda4377d0aae108e80c83f36007d72a66a4573",
+    "assets\\model.js": "ac118de65af39103f2b22bf96a9824b024cf3a8cc6dbf78e107b5912af056c92",
+    "assets\\scene.js": "41552c27f0c0b4d94f267237fd79b16bb5655aaf40b1fbf9cd0d8a074027cd56",
+    "assets\\tree.js": "2d1b8c4c123ec50fc252d7de3eb936171ef7d0be697075536f705535e6fa83b6"
+  },
+  "test_sha256": "4e354eadc7b46f3d75dfaeebc7e77b82281340f817c5c14c1b08757ef97e1ceb",
+  "seconds": 28.07799999997951
+}

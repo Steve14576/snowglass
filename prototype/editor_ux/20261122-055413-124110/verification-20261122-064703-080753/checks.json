@@ -1,0 +1,87 @@
+{
+  "phase": "full",
+  "passed": false,
+  "failure": "Page.evaluate: Error: 真实雪花未贡献像素\n    at eval (eval at evaluate (:370:30), <anonymous>:4:144)\n    at UtilityScript.evaluate (<anonymous>:377:18)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "tree_y": 56,
+        "properties_y": 332
+      }
+    },
+    {
+      "name": "inherit_group_and_sparse_overrides",
+      "result": {
+        "group": "group-1",
+        "overrides": {
+          "frameGray": 0.3
+        }
+      }
+    },
+    {
+      "name": "fixed_mm_transform_and_reparent",
+      "result": {
+        "side": 0.012,
+        "retained_raw": 8192
+      }
+    },
+    {
+      "name": "ungroup_two_modes_and_undo",
+      "result": true
+    },
+    {
+      "name": "ghosts_and_global_only_fields",
+      "result": {
+        "ghost": "ghost-mwqzzyub-3"
+      }
+    },
+    {
+      "name": "project_roundtrip_and_invalid_trees",
+      "result": true
+    },
+    {
+      "name": "curve_math_insert_inverse_and_lut",
+      "result": {
+        "splitError": 6.731904078627338e-08,
+        "lutError": 8.074897883680876e-08,
+        "lut_size": 4097
+      }
+    },
+    {
+      "name": "actual_curve_click_add_drag_single_undo",
+      "result": true
+    },
+    {
+      "name": "gray_export_same_as_preview_no_mutation",
+      "result": {
+        "saved_count": 8192
+      }
+    },
+    {
+      "name": "actual_inspector_global_ghost_sparse_edit",
+      "result": true
+    },
+    {
+      "name": "all_cached_types_and_missing_layers",
+      "result": {
+        "groups": 65,
+        "tensors": 124,
+        "missing": "该层尚未计算",
+        "mtp": "权重未收录"
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "seconds": 16.5
+}

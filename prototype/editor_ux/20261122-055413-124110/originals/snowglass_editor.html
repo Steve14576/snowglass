@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>snowglass 编辑器 · Qwen3.5-9B（阶段 1）</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#e6e6e6;
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+:root{--bg:0 0% 0%;--panel:240 6% 6%;--text:0 0% 90%;--muted:240 3% 65%;--border:240 5% 20%;--accent:202 85% 68%;--warn:36 100% 67%;--danger:0 100% 73%;--radius:10px}
+#app{position:fixed;left:320px;right:300px;top:0;bottom:0;background:hsl(var(--bg))}
+canvas{display:block;touch-action:none}
+#loading{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:#000;
+  color:#bbb;text-align:center;line-height:1.8;padding:24px;font-size:13px}
+.card{position:fixed;z-index:20;border:1px solid rgba(255,255,255,.18);border-radius:14px;
+  background:rgba(10,10,12,.9);box-shadow:0 12px 42px rgba(0,0,0,.5);backdrop-filter:blur(10px)}
+#panel{top:0;left:0;bottom:0;width:310px;overflow:auto;padding:16px;border-radius:0;background:hsl(var(--panel))}
+#panel h1{margin:0 0 3px;font-size:16px}
+.sub{color:#999;font-size:10.5px;line-height:1.55;margin-bottom:6px}
+.sec{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
+.sec-t{color:#8a8a90;font-size:10px;letter-spacing:.08em;margin-bottom:5px}
+.btns{display:flex;flex-wrap:wrap;gap:5px}
+button,select,input[type=number]{padding:5px 8px;border:1px solid #3d3d42;border-radius:8px;background:#18181b;
+  color:#ccc;font-family:inherit;font-size:11px;cursor:pointer}
+input[type=number]{width:58px;cursor:text}
+button:hover{background:#26262a}
+button.on{border-color:#fff;background:#3a3a3e;color:#fff}
+.row{display:flex;justify-content:space-between;font-size:10.5px;color:#9a9aa0;margin:6px 0 1px}
+.row span{font-family:ui-monospace,Consolas,monospace;color:#fff}
+.row span.warn{color:#ffb454}
+input[type=range]{-webkit-appearance:none;width:100%;background:transparent;height:14px;margin:2px 0}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid hsl(var(--accent));outline-offset:2px}
+button:disabled{opacity:.5;cursor:not-allowed}
+input[type=range]:focus-visible{outline:2px solid hsl(var(--accent))}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:#333;border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;height:11px;width:11px;border-radius:50%;
+  background:#fff;margin-top:-4px}
+#meter{top:10px;right:10px;width:280px;max-height:52vh;overflow:auto;padding:11px 13px;font-size:11px;line-height:1.65}
+#meter h2,#hover h2{margin:0 0 6px;font-size:12.5px;color:#fff}
+.m-row{display:flex;justify-content:space-between}
+.m-row b{font-weight:500;color:#fff;font-family:ui-monospace,Consolas,monospace}
+.bar{height:7px;border-radius:4px;background:#222;overflow:hidden;display:flex;margin:5px 0 7px}
+.bar i{display:block;height:100%}
+.ok{color:#8fd19e}.bad{color:#ff7a7a}.mid{color:#ffb454}
+#hover{right:10px;bottom:10px;width:280px;max-height:43vh;overflow:auto;padding:11px 13px;font-size:10.5px;
+  line-height:1.6;color:#bbb}
+#hover code{font-family:ui-monospace,Consolas,monospace;color:#ddd;font-size:10px}
+#badge{position:fixed;z-index:15;left:50%;bottom:12px;transform:translateX(-50%);padding:6px 14px;
+  border-radius:20px;background:rgba(0,0,0,.72);border:1px solid rgba(255,180,84,.35);color:#ffb454;
+  font-size:11px;pointer-events:none}
+#boxselect{position:fixed;z-index:12;border:1px solid hsl(var(--accent));background:hsla(var(--accent)/.12);pointer-events:none;display:none}
+#focus-view{position:fixed;right:310px;top:10px;z-index:25}.focus-view #panel,.focus-view #meter,.focus-view #hover{display:none}
+.focus-view #app{left:0;right:0;top:0}.focus-view #focus-view{right:10px}
+#selectioninfo,#notice{font-size:11px;line-height:1.6;color:hsl(var(--muted))}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:7px 0}.feature-grid input{width:100%}
+#ghostFields input{width:70px}code{overflow-wrap:anywhere}
+@media(max-width:950px){#panel{width:270px}#app{left:280px;right:0}#meter,#hover{display:none}}
+@media(max-width:600px){#panel{width:100%;height:38vh;bottom:auto}#app{left:0;top:38vh}#badge{left:50%;max-width:95%;width:max-content;font-size:10px}}
+</style>
+</head>
+<body>
+<div id="loading"><div id="loadmsg">正在加载 three.js 与拓扑数据……</div></div>
+<div id="app"></div>
+<section id="panel" class="card">
+  <h1>snowglass · Qwen3.5-9B</h1>
+  <div class="sub" id="configinfo">配置驱动架构 · 4.2 默认排布 · 1 单位＝1 mm。块内点仅为模拟，不作加工数据。</div>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <div id="controls"></div>
+</section>
+<section id="meter" class="card"></section>
+<section id="hover" class="card"><h2>悬停查看</h2>把鼠标移到任意块上，这里显示它来自哪些张量。</section>
+<div id="badge">模拟雪花 · 布局变形不重采样 · 尚未加载真实权重</div>
+<div id="boxselect"></div>
+<button id="focus-view" aria-pressed="false">专注视图 F</button>
+
+<script>
+(function () {
+"use strict";
+
+const TOPO_URLS = ["data/qwen35_9b.topo.json", "../out/ir/qwen35_9b.topo.json", "../prototype/data/qwen35_9b.topo.json"];
+const CDNS = ["https://cdn.jsdelivr.net/npm/three@0.128.0/", "https://unpkg.com/three@0.128.0/"];
+const FILES = ["build/three.min.js", "examples/js/controls/OrbitControls.js", "examples/js/controls/TransformControls.js"];
+
+function loadSeq(i, cdn, done, fail) {
+  if (i >= FILES.length) return done();
+  const s = document.createElement("script");
+  s.src = CDNS[cdn] + FILES[i];
+  s.onload = () => loadSeq(i + 1, cdn, done, fail);
+  s.onerror = () => (cdn + 1 < CDNS.length ? loadSeq(i, cdn + 1, done, fail) : fail(FILES[i]));
+  document.head.appendChild(s);
+}
+const msg = t => (document.getElementById("loadmsg").innerHTML = t);
+
+loadSeq(0, 0, () => {
+  // 依次尝试几个相对位置：从 8123（根=prototype/）和从 8124（根=项目根）都能打开
+  (async () => {
+    let last=null,tried=[],doc=null;
+    for(const u of TOPO_URLS){tried.push(u);
+      try{const r=await fetch(u,{cache:"no-store"});if(!r.ok){last=r.status;continue;}doc=await r.json();break;}
+      catch(e){last=e.message;}
+    }
+    if(doc){try{start(doc);}catch(e){console.error(e);msg("编辑器初始化失败："+String(e.message).replace(/</g,"&lt;")+"<br>请检查配置或重新生成拓扑。此错误不是文件未找到。");}return;}
+    msg("读不到拓扑文件：<br><code>"+tried.join("</code><br><code>")+"</code><br>最后结果："+last+
+      "<br>请运行 scripts/build_topology_qwen35.py，生成 prototype/data/qwen35_9b.topo.json。");
+  })();
+}, f => msg("three.js 加载失败：" + f));
+
+function start(topo) {
+const THREE = window.THREE;
+
+/* ============================================================
+   参数（docs/decisions.md D9：外观 / 几何 / 数据 三类）
+   ============================================================ */
+const P = {
+  // 外观：只影响屏幕
+  showFrames: true, showShells: true, showSnow: true,
+  labels: true, plate: false, colorByRole: false, autoRotate: false, displayPoints: 300000,
+  pitch: 0.08, dotUm: 60, warnDensity: 0.10, speed: 4500,
+  vision: true, scale: 1, squash: 0.55, depth: 6.2, widthMode: "equal", layerGap: 0,
+  frameT: 0.04, shellT: 0.02, frameGray: 0.18, shellGray: 0.024,
+  compress: 1, gamma: 2.4, floor: 0.03, adaptive: true, seed: 20261118,
+  pointSize: 0.065, brightness: 1, grayDisplay: "brightness",
+};
+const DEFAULTS = JSON.parse(JSON.stringify(P));
+const STORAGE_KEY = "snowglass.preweights.v2";
+let manuals = {}, assembly = new THREE.Matrix4(), ghosts = [{id:"ghost-1",name:"参照毛坯 1",shape:"box",dims:[25,80,25],radius:12.5,height:80,margin:2.5,matrix:new THREE.Matrix4().toArray()}];
+let primaryGhost = "ghost-1", selected = new Set(), gmMode = "off", boxMode = false, gesture = null, transformSession = null;
+let dirtySnow = false, mockGeneration = 0;
+const mockCache = new Map();
+
+/* ============================================================
+   场景
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 3000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.getElementById("app").appendChild(renderer.domElement);
+renderer.domElement.tabIndex=0;renderer.domElement.setAttribute("role","application");
+renderer.domElement.setAttribute("aria-label","三维模型：单击选择、Shift加选、W移动、E旋转、R缩放");
+
+function applyViewOffset() {
+  const rect = document.getElementById("app").getBoundingClientRect();
+  renderer.setSize(rect.width, rect.height); camera.aspect = rect.width / Math.max(1, rect.height);
+  camera.clearViewOffset(); camera.updateProjectionMatrix();
+}
+applyViewOffset();
+
+const orbit = new THREE.OrbitControls(camera, renderer.domElement);
+orbit.enableDamping = true; orbit.dampingFactor = 0.08; orbit.autoRotateSpeed = 0.6;
+
+const glass = new THREE.Group();   // 玻璃坐标系：毛坯中心为原点
+scene.add(glass);
+const model = new THREE.Group();   // 模型坐标系：gumball 作用在这里
+glass.add(model);
+
+const gumball = new THREE.TransformControls(camera, renderer.domElement);
+gumball.setSize(0.8);
+scene.add(gumball);
+const pivot = new THREE.Object3D(); scene.add(pivot);
+gumball.addEventListener("mouseDown", beginTransform);
+gumball.addEventListener("dragging-changed", e => { orbit.enabled = !e.value && !boxMode; if (!e.value) onGumballEnd(); });
+gumball.addEventListener("objectChange", applyTransform);
+
+/* ============================================================
+   工具
+   ============================================================ */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+const fmtInt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + " M" : n >= 1e3 ? (n / 1e3).toFixed(1) + " k" : Math.round(n) + "";
+const pct = v => (v * 100).toFixed(v < 0.1 ? 1 : 0) + " %";
+const mm = v => v.toFixed(2) + " mm";
+const ROLE_HUE = { embed: 196, lm_head: 203, norm: 325, attn_q: 272, attn_k: 264, attn_v: 255, attn_o: 246,
+  gdn_q: 220, gdn_k: 212, gdn_v: 204, gdn_gate: 190, gdn_ctrl: 175, gdn_out: 232, mlp_gate: 34, mlp_up: 24,
+  mlp_down: 14, vis_attn: 140, vis_mlp: 110, vis_patch: 160, vis_merger: 95, mtp: 0 };
+function roleColor(role, light) {
+  if (!P.colorByRole || ROLE_HUE[role] === undefined) return new THREE.Color(light, light, light);
+  return new THREE.Color().setHSL(ROLE_HUE[role] / 360, 0.75, 0.25 + light * 0.45);
+}
+
+const blockById = Object.create(null);
+topo.blocks.forEach(b => (blockById[b.id] = b));
+if (topo.schema_version !== 2) throw new Error("拓扑版本过旧，请重新运行 build_topology_qwen35.py");
+const RECIPE = Object.freeze({mixerStart:-9.2,mixerWidth:7.8,mixerGap:.28,ffnStart:.4,ffnWidth:9.6,ffnGap:.32,
+  norm1X:-10.2,norm2X:-.55,normWidth:.65,headWidth:14,visionX:23.5});
+
+/* ============================================================
+   布局：只在这里实现一次（decisions.md 阶段计划）
+   输出 solids：每个实体的轴对齐包围盒（模型坐标，毫米）
+   ============================================================ */
+let L = null;   // 当前布局结果
+
+function groupWidths(total, items, gap) {
+  const available = total - gap * (items.length - 1);
+  const sum = items.reduce((n,b) => n + (b.params || 0), 0);
+  return items.map(b => available * (P.widthMode === "params" && sum ? b.params / sum : 1 / items.length));
+}
+function boundsOf(solids) {
+  const box = new THREE.Box3(); solids.forEach(s => s.corners.forEach(v => box.expandByPoint(v)));
+  return box;
+}
+
+function layout() {
+  const solids = [], labels = [], warns = [], slots = [];
+  const c = topo.model, sq = P.squash, fix = c.n_layers > 45 ? .72 : 1;
+  const h = .72 * sq * fix, pitch = 1.17 * sq * fix, H = c.n_layers * pitch, depth = P.depth;
+  const global = assembly.clone().multiply(new THREE.Matrix4().makeScale(P.scale,P.scale,P.scale));
+  function add(b, center, dims, kind = "block") {
+    if (!b) return;
+    const size = dims.map((v,i) => Math.max(.0001, v - (i < 2 ? P.layerGap : 0)));
+    if (dims[0] <= P.layerGap || dims[1] <= P.layerGap) warns.push(b.id + " 间隙已大于块尺寸，仅保留最小数学厚度");
+    const anchor = global.clone().multiply(new THREE.Matrix4().makeTranslation(...center));
+    const matrix = anchor.clone().multiply(new THREE.Matrix4().fromArray(manuals[b.id] || new THREE.Matrix4().toArray()))
+      .multiply(new THREE.Matrix4().makeScale(...size));
+    const corners = []; for (const x of [-.5,.5]) for (const y of [-.5,.5]) for (const z of [-.5,.5])
+      corners.push(new THREE.Vector3(x,y,z).applyMatrix4(matrix));
+    const box = new THREE.Box3().setFromPoints(corners), lengths = [0,1,2].map(i => new THREE.Vector3().setFromMatrixColumn(matrix,i).length());
+    solids.push({id:b.id,kind,block:b,role:b.role,slot:{center: center.slice(),size:dims.slice()},size:lengths,
+      localSize:size,anchor,matrix,corners,box,center:new THREE.Vector3().setFromMatrixPosition(matrix),
+      x0:box.min.x,x1:box.max.x,y0:box.min.y,y1:box.max.y,z0:box.min.z,z1:box.max.z});
+    slots.push({corners:corners.map(v=>v.clone())});
+  }
+  function group(items,start,width,gap,y) {
+    items.sort((a,b)=>a.order-b.order); let cursor = start;
+    groupWidths(width,items,gap).forEach((w,i)=>{add(items[i],[cursor+w/2,y,0],[w,h,depth]);cursor += w+gap;});
+  }
+  const headH = Math.max(1.4,2.5*sq);
+  add(blockById.embed,[0,-H/2-headH/2-1.2,0],[14,headH,depth*1.15]);
+  labels.push({text:"Token Embedding",x:0,y:-H/2-headH-2.2});
+  for (let i=0;i<c.n_layers;i++) {
+    const y = -H/2+(i+.5)*pitch, items = topo.blocks.filter(b=>b.layer===i);
+    add(items.find(b=>b.slot==="norm1"),[-10.2,y,0],[.65,h,depth*.6]);
+    group(items.filter(b=>b.slot==="mixer"),RECIPE.mixerStart,RECIPE.mixerWidth,RECIPE.mixerGap,y);
+    add(items.find(b=>b.slot==="norm2"),[-.55,y,0],[.65,h,depth*.6]);
+    group(items.filter(b=>b.slot==="ffn"),RECIPE.ffnStart,RECIPE.ffnWidth,RECIPE.ffnGap,y);
+    if(i%(c.n_layers>45?8:4)===0||i===c.n_layers-1||topo.layers[i].kind==="full")
+      labels.push({text:"L"+i+" · "+(topo.layers[i].kind==="full"?"Full":"GDN"),x:-14.1,y});
+  }
+  add(blockById.final_norm,[0,H/2+.85,0],[6.5,Math.max(.4,.6*sq),depth*.6]);
+  add(blockById.lm_head,[0,H/2+headH/2+1.8,0],[14,headH,depth*1.15]);
+  labels.push({text:"LM Head",x:0,y:H/2+headH+2.8});
+  if(topo.geometry_only.some(b=>b.id==="mtp")) add({id:"mtp",role:"mtp",label:"MTP · 权重未收录",tensors:[],params:0},
+    [10.5,H/2+headH/2+1.8,0],[4.2,headH*.85,depth*.9],"mtp");
+  if(P.vision&&c.vision_layers) {
+    const x=RECIPE.visionX, vp=Math.max(.65,H*.85/c.vision_layers), vh=vp*.62, span=c.vision_layers*vp;
+    add(blockById["V.patch"],[x,-span/2-1.4,0],[8.2,Math.max(1.1,1.7*sq),depth*.9]);
+    add(blockById["V.merger"],[x,span/2+1.5,0],[8.5,Math.max(1.2,1.9*sq),depth*.95]);
+    for(let i=0;i<c.vision_layers;i++) {
+      const y=-span/2+(i+.5)*vp, tag="V"+String(i).padStart(2,"0");
+      [["norm1",-4.5,.45,.5],["attn",-2.1,3.6,.85],["norm2",.3,.45,.5],["mlp",2.9,4,.85]].forEach(([slot,dx,w,d])=>
+        add(blockById[tag+"."+slot],[x+dx,y,0],[w,vh,depth*d]));
+      if(i%6===0||i===c.vision_layers-1) labels.push({text:"V"+i,x:x+6.4,y});
+    }
+    labels.push({text:"Vision Patch",x,y:-span/2-2.9},{text:"Merger / Projector",x,y:span/2+3.2});
+  }
+  // 槽位尺度独立于间隙；实际外沿可内缩，不推动邻居或改层节距。
+  const slotBounds = new THREE.Box3(); solids.forEach(s=>{
+    const slotM=s.anchor.clone().multiply(new THREE.Matrix4().makeScale(...s.slot.size));
+    for(const x of [-.5,.5])for(const y of [-.5,.5])for(const z of [-.5,.5])slotBounds.expandByPoint(new THREE.Vector3(x,y,z).applyMatrix4(slotM));
+  });
+  return {solids,labels,warns,H,pitch,bounds:boundsOf(solids),slotBounds,overlaps:[]};
+}
+
+/* ============================================================
+   几何量：框与壳的有效厚度（块太小会被收窄）、每块的内部体积
+   与点数无关，只由毫米尺寸和两个厚度参数决定
+   ============================================================ */
+function prepare() {
+  let clamped = 0;
+  L.solids.forEach(s => {
+    const [lx,ly,lz] = s.size, mn = Math.min(lx,ly,lz);
+    const t = Math.min(P.frameT, mn / 2), sh = Math.min(P.shellT, mn / 2);
+    if (t < P.frameT - 1e-9 || sh < P.shellT - 1e-9) clamped++;
+    s.tEff = t; s.sEff = sh;
+    const inner = Math.max(lx - 2 * sh, 0) * Math.max(ly - 2 * sh, 0) * Math.max(lz - 2 * sh, 0);
+    s.interior = s.kind === "block" ? inner : 0;
+  });
+  L.clamped = clamped;
+}
+
+/* ============================================================
+   后验报告（decisions.md D2）
+   点数不是限额：网格由几何定，每格放不放点由灰度定，总数是结果。
+   这里只统计并报出来，不改任何生成逻辑，也没有可以“用完”的预算。
+   ============================================================ */
+function report() {
+  let frame=0,shell=0,params=0,mockCount=0;
+  L.solids.forEach(s=>{
+    const [x,y,z]=s.size,t=s.tEff,sh=s.sEff;
+    const fv=4*t*t*(x+y+z-4*t), inner=[x-2*sh,y-2*sh,z-2*sh];
+    const sv=s.kind==="mtp"?0:x*y*z-inner.reduce((a,b)=>a*b,1);
+    const core=t>sh?4*(t-sh)**2*(inner.reduce((a,b)=>a+b,0)-4*(t-sh)):0;
+    const ov=s.kind==="mtp"?0:Math.max(0,fv-core);
+    const determinant=Math.abs(s.matrix.determinant())/(x*y*z);
+    frame+=((fv-ov)*P.frameGray+ov*Math.max(P.frameGray,P.shellGray))*determinant/P.pitch**3;
+    shell+=(sv-ov)*P.shellGray*determinant/P.pitch**3;
+    params+=s.block.params||0; mockCount+=mockCache.get(s.id)?.count||0;
+  });
+  const g=ghosts.find(g=>g.id===primaryGhost), volume=g?ghostVolume(g):0;
+  return {frame,shell,total:frame+shell,minutes:(frame+shell)/P.speed/60,
+    params,mockCount,referenceOuterVolumeMM3:volume,clamped:L.clamped,realSnowLoaded:false};
+}
+
+/* ============================================================
+   绘制：框（12 根方梁）与包络面（6 块薄板）都是有毫米厚度的实体
+   ============================================================ */
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+const MAXI = topo.blocks.length + topo.geometry_only.length;
+const frameMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
+const shellMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+const frames = new THREE.InstancedMesh(unitBox, frameMat, MAXI * 12);
+const shells = new THREE.InstancedMesh(unitBox, shellMat, MAXI * 6);
+const proxies = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial({ visible: false }), MAXI);
+[frames, shells, proxies].forEach(m => { m.frustumCulled = false; model.add(m); });
+for (let i = 0; i < MAXI * 12; i++) frames.setColorAt(i, new THREE.Color(1, 1, 1));
+for (let i = 0; i < MAXI * 6; i++) shells.setColorAt(i, new THREE.Color(1, 1, 1));
+const unitEdges = new THREE.EdgesGeometry(unitBox);
+const selectionGroup = new THREE.Group(); scene.add(selectionGroup);
+const selectionMat = new THREE.LineBasicMaterial({color:0x65c6fa,transparent:true,opacity:.9});
+const warningMat = new THREE.LineBasicMaterial({color:0xff7070,transparent:true,opacity:.22});
+const hl = new THREE.LineSegments(unitEdges, new THREE.LineBasicMaterial({ color: 0x6fd3ff }));
+hl.visible = false; model.add(hl);
+
+function drawStructure() {
+  let fi=0,si=0;
+  L.solids.forEach((s,idx)=>{
+    const [x,y,z]=s.size,t=s.tEff,sh=s.sEff,col=roleColor(s.role,1);
+    proxies.setMatrixAt(idx,s.matrix);s.pid=idx;
+    const basis=s.matrix.clone().multiply(new THREE.Matrix4().makeScale(1/x,1/y,1/z));
+    const piece=(mesh,index,center,size)=>{
+      mesh.setMatrixAt(index,basis.clone().multiply(new THREE.Matrix4().makeTranslation(...center)).multiply(new THREE.Matrix4().makeScale(...size)));
+      mesh.setColorAt(index,col);
+    };
+    for(const yy of [-y/2+t/2,y/2-t/2])for(const zz of [-z/2+t/2,z/2-t/2])piece(frames,fi++,[0,yy,zz],[x,t,t]);
+    for(const xx of [-x/2+t/2,x/2-t/2])for(const zz of [-z/2+t/2,z/2-t/2])piece(frames,fi++,[xx,0,zz],[t,y-2*t,t]);
+    for(const xx of [-x/2+t/2,x/2-t/2])for(const yy of [-y/2+t/2,y/2-t/2])piece(frames,fi++,[xx,yy,0],[t,t,z-2*t]);
+    if(s.kind==="mtp")return;
+    for(const yy of [-y/2+sh/2,y/2-sh/2])piece(shells,si++,[0,yy,0],[x,sh,z]);
+    for(const zz of [-z/2+sh/2,z/2-sh/2])piece(shells,si++,[0,0,zz],[x,y-2*sh,sh]);
+    for(const xx of [-x/2+sh/2,x/2-sh/2])piece(shells,si++,[xx,0,0],[sh,y-2*sh,z-2*sh]);
+  });
+  frames.count=fi;shells.count=si;proxies.count=L.solids.length;
+  [frames,shells,proxies].forEach(m=>{m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;});
+  drawSelection();applyAppearance();
+}
+function drawSelection() {
+  selectionGroup.clear();
+  L.solids.forEach(s=>{if(selected.has(s.id)||s.outside){
+    const line=new THREE.LineSegments(unitEdges,selected.has(s.id)?selectionMat:warningMat);
+    line.matrixAutoUpdate=false;line.matrix.copy(s.matrix);selectionGroup.add(line);
+  }});
+}
+
+function applyAppearance() {
+  // 预览近似：灰度显示成不透明度（成品里是点的疏密）
+  frameMat.opacity=P.frameGray;frames.visible=P.showFrames&&P.frameGray>0;
+  shellMat.opacity=P.shellGray;shells.visible=P.showShells&&P.shellGray>0;
+  snowPts.material.uniforms.pointSize.value=P.pointSize;
+  snowPts.material.uniforms.brightness.value=P.brightness;
+  snowPts.material.uniforms.sizeMode.value=P.grayDisplay==="size"?1:0;
+  snowPts.visible = P.showSnow;
+  labelGroup.visible = P.labels; plate.visible = P.plate;
+  orbit.autoRotate = P.autoRotate;
+}
+
+/* ============================================================
+   雪花（模拟）：按 γ 与底噪地板接受采样，只为预览 U7 的效果
+   ============================================================ */
+const MAXP = 800000;
+const sPos = new Float32Array(MAXP * 3), sCol = new Float32Array(MAXP * 3);
+const snowGeo = new THREE.BufferGeometry();
+snowGeo.setAttribute("position", new THREE.BufferAttribute(sPos, 3));
+snowGeo.setAttribute("color", new THREE.BufferAttribute(sCol, 3));
+const snowPts = new THREE.Points(snowGeo, new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+  uniforms:{pointSize:{value:P.pointSize},brightness:{value:1},sizeMode:{value:0},pixelScale:{value:400}},
+  vertexShader:"attribute vec3 color; varying vec3 vColor; uniform float pointSize,pixelScale,sizeMode,brightness; void main(){vec4 mv=modelViewMatrix*vec4(position,1.0); float g=max(color.r,max(color.g,color.b)); vColor=color*brightness; gl_PointSize=max(.01,pointSize*pixelScale*(sizeMode>.5?.35+g:1.0)/max(.01,-mv.z)); gl_Position=projectionMatrix*mv;}",
+  fragmentShader:"varying vec3 vColor; void main(){gl_FragColor=vec4(vColor,.88);}"}));
+snowPts.frustumCulled = false; model.add(snowPts);
+
+let mockSeed=P.seed,mockCounts={};
+function ensureMock(s) {
+  if(mockCache.has(s.id)||s.kind==="mtp")return;
+  const count=mockCounts[s.id]??Math.round(Math.min(1800,Math.max(95,s.slot.size.reduce((a,b)=>a*b,1)*85)));
+  mockCounts[s.id]=count;
+  const r=mulberry32(hash(topo.model.name+"|"+s.id)^mockSeed),data=new Float32Array(count*4);
+  for(let i=0;i<count;i++){
+    for(let j=0;j<3;j++)data[i*4+j]=(r()-.5)*.96;
+    data[i*4+3]=r()<.16?.48+r()*.52:.05+r()*.14;
+  }
+  mockCache.set(s.id,{count,data});
+}
+function buildSnow() {
+  // 固定块内坐标缓存。重布局只映射到新空间；显示点数是抽样上限，不生成“剩余配额”。
+  L.solids.forEach(ensureMock);
+  const total=L.solids.reduce((n,s)=>n+(mockCache.get(s.id)?.count||0),0),ratio=Math.min(1,P.displayPoints/Math.max(1,total));
+  let n=0;const v=new THREE.Vector3();
+  L.solids.forEach(s=>{
+    const m=mockCache.get(s.id);if(!m)return;
+    const count=Math.floor(m.count*ratio);
+    for(let j=0;j<count&&n<MAXP;j++){
+      const i=Math.floor(j*m.count/count),a=i*4,g=m.data[a+3];
+      v.set(m.data[a],m.data[a+1],m.data[a+2]).applyMatrix4(s.matrix);
+      sPos.set([v.x,v.y,v.z],n*3);const color=roleColor(s.role,g);sCol.set([color.r,color.g,color.b],n*3);n++;
+    }
+  });
+  snowGeo.setDrawRange(0,n);snowGeo.attributes.position.needsUpdate=true;snowGeo.attributes.color.needsUpdate=true;
+  L.displayed=n;snowPts.material.uniforms.pixelScale.value=renderer.domElement.height/2;
+}
+
+/* ============================================================
+   毛坯、可雕区、标签、铭牌（只影响屏幕）
+   ============================================================ */
+const blankGroup = new THREE.Group(); glass.add(blankGroup);
+const labelGroup = new THREE.Group(); model.add(labelGroup);
+let plate = new THREE.Group(); scene.add(plate);
+
+function textSprite(text, h, color) {
+  const c = document.createElement("canvas"), ctx = c.getContext("2d"), fs = 44;
+  ctx.font = "500 " + fs + "px system-ui,'Microsoft YaHei'";
+  c.width = Math.ceil(ctx.measureText(text).width) + 16; c.height = fs + 16;
+  ctx.font = "500 " + fs + "px system-ui,'Microsoft YaHei'";
+  ctx.fillStyle = color || "rgba(220,220,225,0.85)"; ctx.textBaseline = "middle"; ctx.fillText(text, 8, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(h * c.width / c.height, h, 1);
+  return sp;
+}
+
+function disposeTree(o) {
+  o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
+}
+
+let ghostHitObjects=[];
+function selectedGhost(){const key=[...selected].find(id=>id.startsWith("ghost:"));return ghosts.find(g=>g.id===key?.slice(6));}
+function ghostVolume(g){return (g.shape==="box"?g.dims.reduce((a,b)=>a*b,1):Math.PI*g.radius**2*g.height)*Math.abs(new THREE.Matrix4().fromArray(g.matrix).determinant());}
+function ghostInset(g){
+  const inv=new THREE.Matrix4().fromArray(g.matrix).invert(),a=inv.elements;
+  const rows=[0,1,2].map(i=>new THREE.Vector3(a[i],a[i+4],a[i+8]));
+  const A=rows[0].lengthSq(),C=rows[2].lengthSq(),B=rows[0].dot(rows[2]);
+  const radial=Math.sqrt((A+C+Math.sqrt((A-C)**2+4*B*B))/2);
+  return {inv,dims:g.dims.map((v,i)=>v-2*g.margin*rows[i].length()),radius:g.radius-g.margin*radial,
+    height:g.height-2*g.margin*rows[1].length(),approx:g.shape==="cylinder"&&(Math.abs(A-C)>1e-6||Math.abs(B)>1e-6)};
+}
+function drawBlank(){
+  while(blankGroup.children.length){const o=blankGroup.children[0];blankGroup.remove(o);disposeTree(o);}ghostHitObjects=[];
+  ghosts.forEach(g=>{
+    const inset=ghostInset(g),group=new THREE.Group();group.matrixAutoUpdate=false;group.matrix.fromArray(g.matrix);blankGroup.add(group);
+    function shape(inner){
+      if(g.shape==="box"){const dims=inner?inset.dims:g.dims;return dims.some(x=>x<=0)?null:new THREE.BoxGeometry(...dims);}
+      const r=inner?inset.radius:g.radius,h=inner?inset.height:g.height;
+      return r<=0||h<=0?null:new THREE.CylinderGeometry(r,r,h,48);
+    }
+    for(const inner of [false,true]){
+      const geo=shape(inner);if(!geo)continue;
+      const mat=inner?new THREE.LineDashedMaterial({color:0x777c85,transparent:true,opacity:.35,dashSize:.6,gapSize:.4}):
+        new THREE.LineBasicMaterial({color:selected.has("ghost:"+g.id)?0x65c6fa:0x9a9ea6,transparent:true,opacity:.45});
+      const line=new THREE.LineSegments(new THREE.EdgesGeometry(geo),mat);if(inner)line.computeLineDistances();group.add(line);
+      if(!inner){const hit=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({transparent:true,opacity:.002,depthWrite:false,side:THREE.DoubleSide}));
+        hit.userData.ghostId=g.id;group.add(hit);ghostHitObjects.push(hit);}else geo.dispose();
+    }
+  });
+}
+function newGhost(shape){
+  const id="ghost-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6);
+  ghosts.push({id,name:"参照 "+(ghosts.length+1),shape,dims:[25,40,25],radius:12.5,height:40,margin:2.5,matrix:new THREE.Matrix4().toArray()});
+  if(!primaryGhost)primaryGhost=id;selectIds(["ghost:"+id]);schedule("all");saveSoon();
+}
+function deleteGhost(){const g=selectedGhost();if(!g){notice("先选择一个幽灵毛坯");return;}
+  ghosts=ghosts.filter(x=>x.id!==g.id);if(primaryGhost===g.id)primaryGhost=ghosts[0]?.id||null;selectIds([]);schedule("all");saveSoon();}
+function renderGhostPanel(){
+  const list=document.getElementById("ghostList"),fields=document.getElementById("ghostFields");if(!list)return;
+  list.textContent="";list.add(new Option("选择毛坯…",""));ghosts.forEach(g=>list.add(new Option(g.name+(g.id===primaryGhost?" · 主参照":""),g.id)));
+  const g=selectedGhost();list.value=g?.id||"";fields.textContent="";if(!g)return;
+  const name=document.createElement("input");name.value=g.name;name.setAttribute("aria-label","毛坯名称");
+  name.onchange=()=>{g.name=name.value;renderGhostPanel();schedule("meter");saveSoon();};fields.append(name);
+  const controls=g.shape==="box"?[["宽",0,g.dims[0]],["高",1,g.dims[1]],["深",2,g.dims[2]]]:[["半径","radius",g.radius],["高","height",g.height]];
+  controls.push(["向内预留","margin",g.margin]);
+  controls.forEach(([label,key,value])=>{const lab=document.createElement("label"),inp=document.createElement("input");
+    inp.type="number";inp.step="any";inp.value=value;inp.setAttribute("aria-label",label);lab.textContent=label+" mm ";lab.append(inp);fields.append(lab);
+    inp.onchange=()=>{const v=Number(inp.value);if(!inp.value||!Number.isFinite(v)||(key==="margin"?v<0:v<=0)){inp.value=value;notice("请输入有效的正尺寸；预留量可为零");return;}
+      if(typeof key==="number")g.dims[key]=v;else g[key]=v;schedule("all");saveSoon();};
+  });
+  const note=document.createElement("p");note.className="sub";note.textContent="Alt 单击或下拉选择毛坯后用 gumball。圆柱非等比变形时内偏移采用保守近似，未作应力预测。";fields.append(note);
+}
+
+function drawLabels(){
+  while(labelGroup.children.length){const o=labelGroup.children[0];labelGroup.remove(o);disposeTree(o);}
+  const global=assembly.clone().multiply(new THREE.Matrix4().makeScale(P.scale,P.scale,P.scale));
+  L.labels.forEach(l=>{const sp=textSprite(l.text,.55*P.scale);sp.center.set(l.text.startsWith("L")?1:.5,.5);
+    sp.position.set(l.x,l.y,0).applyMatrix4(global);labelGroup.add(sp);});
+}
+
+function drawPlate() {
+  scene.remove(plate); disposeTree(plate);
+  const c = document.createElement("canvas"); c.width = 900; c.height = 420;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "rgba(8,8,10,.94)"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 3; ctx.strokeRect(3, 3, c.width - 6, c.height - 6);
+  ctx.fillStyle = "#e5e5e5"; ctx.font = "bold 30px ui-monospace,Consolas,monospace";
+  const m = topo.model;
+  ["Qwen3.5-9B · " + m.precision_label,
+   "text layers  : " + m.n_layers + "  (3 linear + 1 full) x 8",
+   "hidden / ffn : " + m.hidden + " / " + m.ffn,
+   "params text  : " + (m.params_text / 1e9).toFixed(3) + " B",
+   "params vision: " + (m.params_vision / 1e9).toFixed(3) + " B",
+   "blocks       : " + topo.blocks.length,
+   "config sha   : " + topo.config.sha256.slice(0,16),
+   "snow         : SIMULATED (stage 1)"].forEach((t, i) => ctx.fillText(t, 26, 52 + i * 46));
+  const tex = new THREE.CanvasTexture(c);
+  plate = new THREE.Mesh(new THREE.PlaneGeometry(27, 12.6), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+  plate.scale.set(.3,.3,.3);plate.position.set(-20,L.H/2+5,-5);
+  plate.visible = P.plate;
+  scene.add(plate);
+}
+
+/* ============================================================
+   包含检查（经过 gumball 变换后，所有实体必须在可雕区内）
+   ============================================================ */
+let outside = 0;
+function overlapsExact(a,b){
+  if(a.box.max.x<=b.box.min.x+1e-6||b.box.max.x<=a.box.min.x+1e-6||a.box.max.y<=b.box.min.y+1e-6||b.box.max.y<=a.box.min.y+1e-6||a.box.max.z<=b.box.min.z+1e-6||b.box.max.z<=a.box.min.z+1e-6)return false;
+  const edges=s=>[0,1,2].map(i=>new THREE.Vector3().setFromMatrixColumn(s.matrix,i));
+  const A=edges(a),B=edges(b),normals=e=>[e[0].clone().cross(e[1]),e[1].clone().cross(e[2]),e[2].clone().cross(e[0])];
+  const axes=[...normals(A),...normals(B),...A.flatMap(x=>B.map(y=>x.clone().cross(y)))];
+  for(const axis of axes){if(axis.lengthSq()<1e-15)continue;axis.normalize();
+    const p=a.corners.map(v=>v.dot(axis)),q=b.corners.map(v=>v.dot(axis));
+    if(Math.max(...p)<=Math.min(...q)+1e-6||Math.max(...q)<=Math.min(...p)+1e-6)return false;
+  }return true;
+}
+function checkContainment(){
+  if(!L)return;outside=0;L.solids.forEach(s=>s.outside=false);
+  ghosts.forEach(g=>{
+    const inset=ghostInset(g);g.invalidInset=g.shape==="box"?inset.dims.some(v=>v<=0):inset.radius<=0||inset.height<=0;g.outsideCount=0;
+    L.solids.forEach(s=>{const out=g.invalidInset||s.corners.some(c=>{
+      const v=c.clone().applyMatrix4(inset.inv);
+      return g.shape==="box"?v.toArray().some((x,i)=>Math.abs(x)>inset.dims[i]/2+1e-6):Math.hypot(v.x,v.z)>inset.radius+1e-6||Math.abs(v.y)>inset.height/2+1e-6;
+    });if(out){g.outsideCount++;s.outside=true;}});
+  });outside=L.solids.filter(s=>s.outside).length;
+  L.overlaps=[];for(let i=0;i<L.solids.length;i++)for(let j=i+1;j<L.solids.length;j++)
+    if(overlapsExact(L.solids[i],L.solids[j]))L.overlaps.push([L.solids[i].id,L.solids[j].id]);
+}
+
+/* ============================================================
+   面板
+   ============================================================ */
+const SECTIONS = [
+  ["工程",[["project"]]],
+  ["默认排布 · 4.2 配方",[
+    ["toggles",[["vision","视觉塔"]],"all"],
+    ["choice","widthMode","块宽模式",[["equal","同组等宽（默认）"],["params","按参数规模"]],"all"],
+    ["slider","squash","纵向压缩 / 胖瘦",.25,1.2,.05,v=>v.toFixed(2),"all"],
+    ["slider","depth","主体深度",.5,30,.1,mm,"all"],
+    ["slider","scale","整体缩放",.05,5,.01,v=>v.toFixed(2)+" ×","all"],
+    ["slider","layerGap","块间隙 · 相对默认增减",-.3,.3,.005,mm,"all"],
+    ["note","间隙只收缩/膨胀各块 x/y，不推动槽位中心或改变层节距。毛坯不驱动模型大小。"]]],
+  ["选择与 Gumball",[["selection"],["gumball"]]],
+  ["包络结构 · 实体与灰度",[
+    ["slider","frameT","框的粗细",.005,1,.005,mm,"struct"],
+    ["slider","frameGray","框的灰度 / 透明度",0,1,.005,pct,"struct"],
+    ["slider","shellT","包络面厚度",.005,.5,.005,mm,"struct"],
+    ["slider","shellGray","包络面灰度 / 透明度",0,1,.001,pct,"struct"],
+    ["note","薄框与薄面是匹配 4.2 的视图初始值，不是工艺安全推荐；毫米厚度不随块缩放。"]]],
+  ["视图 · 仅影响屏幕",[
+    ["views"],["toggles",[["showFrames","框"],["showShells","面"],["showSnow","雪花"],["labels","标签"],["plate","铭牌"],["colorByRole","功能着色","struct"],["autoRotate","自转"]]],
+    ["slider","displayPoints","屏幕抽样上限",10000,800000,10000,v=>fmtInt(v),"snow"],
+    ["slider","pointSize","显示点大小",.015,.2,.005,mm,"view"],
+    ["slider","brightness","显示亮度",.1,2,.05,v=>v.toFixed(2),"view"],
+    ["choice","grayDisplay","灰度显示",[["brightness","点亮度"],["size","点大小 + 亮度"]],"view"]]],
+  ["幽灵毛坯 · 只作参照",[["ghosts"]]],
+  ["雪花参数 · 待一级切片",[
+    ["toggles",[["adaptive","一级切片自适应"]],"data"],
+    ["slider","compress","合并压缩力度",1,8,.5,v=>v.toFixed(1)+" ×","data"],
+    ["slider","gamma","γ（对比度）",1,4,.05,v=>v.toFixed(2),"data"],
+    ["slider","floor","底噪地板",0,.1,.002,pct,"data"],
+    ["note","此处先保存待切片参数，不改变固定模拟样本，不读取真实权重。一级切片尚未接入。"]]],
+  ["机台与后验参考",[
+    ["slider","pitch","加工点距",.05,.2,.005,v=>v.toFixed(3)+" mm","data"],
+    ["slider","dotUm","点径",40,80,1,v=>v+" μm","meter"],
+    ["slider","speed","打点速度",1000,20000,500,v=>v+" 点/秒","meter"],
+    ["slider","warnDensity","密度告警参考线（未核实）",.02,.5,.01,pct,"meter"],
+    ["note","参考值只用于后验核对；没有点数配额，真实密度待一级切片后统计。"]]],
+  ["导出",[["export"]]]
+];
+
+const sliders={},toggles={},choices={};
+function button(text,fn){const b=document.createElement("button");b.textContent=text;b.onclick=fn;return b;}
+function notice(text){document.getElementById("notice").textContent=text;}
+function changeParam(key,value,level="all"){
+  if(typeof DEFAULTS[key]==="number"&&!Number.isFinite(value))return;
+  P[key]=value;if(level==="data")dirtySnow=true;
+  schedule(level==="data"?"meter":level);saveSoon();
+}
+function buildPanel() {
+  const root=document.getElementById("controls");root.textContent="";
+  SECTIONS.forEach(([title,items],idx)=>{
+    const sec=document.createElement("details");sec.className="sec";sec.open=idx<3;
+    const head=document.createElement("summary");head.textContent=title;sec.append(head);
+    items.forEach(it=>{
+      const type=it[0];
+      if(type==="note"){const d=document.createElement("p");d.className="sub";d.textContent=it[1];sec.append(d);}
+      if(type==="slider"){
+        const [,key,label,min,max,step,fmt,level]=it,row=document.createElement("div");row.className="row";
+        const lab=document.createElement("label"),out=document.createElement("span"),inp=document.createElement("input");
+        inp.type="range";inp.id="param-"+key;lab.htmlFor=inp.id;lab.textContent=label;
+        inp.min=min;inp.max=max;inp.step=step;inp.value=P[key];row.append(lab,out);
+        const show=()=>{out.textContent=fmt(P[key]);inp.value=P[key];};
+        inp.oninput=()=>changeParam(key,Number(inp.value),level);sliders[key]={inp,show};show();sec.append(row,inp);
+      }
+      if(type==="toggles"){
+        const d=document.createElement("div");d.className="btns";
+        it[1].forEach(([key,text,level])=>{const b=button(text,()=>changeParam(key,!P[key],level||it[2]||"view"));
+          toggles[key]=b;d.append(b);});sec.append(d);
+      }
+      if(type==="choice"){
+        const [,key,label,values,level]=it,lab=document.createElement("label"),sel=document.createElement("select");
+        lab.htmlFor="param-"+key;lab.textContent=label;sel.id=lab.htmlFor;sel.setAttribute("aria-label",label);
+        values.forEach(([value,text])=>sel.add(new Option(text,value)));sel.value=P[key];sel.onchange=()=>changeParam(key,sel.value,level);
+        choices[key]=sel;sec.append(lab,sel);
+      }
+      if(type==="project"){
+        const d=document.createElement("div");d.className="btns";
+        const file=document.createElement("input");file.type="file";file.accept=".json";file.hidden=true;
+        file.onchange=async()=>{try{const doc=JSON.parse(await file.files[0].text());restoreProject(doc);notice("工程已打开");}catch(e){notice("打开失败："+e.message);}file.value="";};
+        d.append(button("保存工程",saveProject),button("打开工程",()=>file.click()),button("恢复默认工程",resetProject),file);sec.append(d);
+      }
+      if(type==="views"){
+        const d=document.createElement("div");d.className="btns";
+        d.append(button("全景",()=>fitView()),button("正面",()=>fitView(true)),button("选中对象",()=>fitView(false,true)));sec.append(d);
+      }
+      if(type==="selection"){
+        const d=document.createElement("div");d.className="btns";
+        const boxButton=button("框选",()=>{boxMode=!boxMode;orbit.enabled=!boxMode;gumball.enabled=!boxMode;boxButton.classList.toggle("on",boxMode);boxButton.setAttribute("aria-pressed",String(boxMode));renderGumballInfo();});boxButton.id="box-select-toggle";boxButton.setAttribute("aria-pressed","false");
+                d.append(button("全选",()=>selectIds(L.solids.map(s=>s.id))),button("清空",()=>selectIds([])),boxButton);
+        const layer=document.createElement("input");layer.type="number";layer.min=0;layer.max=topo.model.n_layers-1;layer.value=0;layer.id="select-layer";layer.setAttribute("aria-label","选择文本层号");
+        d.append(layer,button("按层选",()=>selectIds(L.solids.filter(s=>s.block.layer===Number(layer.value)).map(s=>s.id))));
+        const col=document.createElement("select");col.id="select-column";col.setAttribute("aria-label","选择功能列");
+        [["mixer","序列混合"],["ffn","FFN"],["norm1","Norm 1"],["norm2","Norm 2"],["vision","视觉塔"]].forEach(([v,t])=>col.add(new Option(t,v)));
+        d.append(col,button("按列选",()=>selectIds(L.solids.filter(s=>col.value==="vision"?s.id.startsWith("V"):s.block.slot===col.value).map(s=>s.id))),button("重置选中",resetSelected));
+        const info=document.createElement("div");info.id="selectioninfo";sec.append(d,info);
+        const sizes=document.createElement("div");sizes.id="selectionSizes";sizes.className="feature-grid";sec.append(sizes);
+      }
+      if(type==="gumball"){
+        const d=document.createElement("div");d.className="btns";
+        [["off","关闭 Q"],["translate","移动 W"],["rotate","旋转 E"],["scale","缩放 R"]].forEach(([mode,text])=>{const b=button(text,()=>setGumball(mode));b.dataset.gm=mode;d.append(b);});
+        const info=document.createElement("div");info.id="gminfo";info.className="sub";sec.append(d,info);
+        const note=document.createElement("p");note.className="sub";note.textContent="单击选块，Shift 加选。框选模式拖动矩形。Alt 单击选毛坯；选中毛坯也能使用 gumball。";sec.append(note);
+      }
+      if(type==="ghosts"){
+        const d=document.createElement("div");d.className="btns";
+        d.append(button("新建长方体",()=>newGhost("box")),button("新建圆柱",()=>newGhost("cylinder")),button("删除选中毛坯",deleteGhost));
+        const list=document.createElement("select");list.id="ghostList";list.setAttribute("aria-label","幽灵毛坯");list.onchange=()=>selectIds(list.value?["ghost:"+list.value]:[]);
+        const fields=document.createElement("div");fields.id="ghostFields";
+        sec.append(d,list,button("设为主参照",()=>{const g=selectedGhost();if(g){primaryGhost=g.id;schedule("meter");saveSoon();}}),fields);
+      }
+      if(type==="export"){
+        sec.append(button("导出 layout.json",exportLayout));
+        for(const text of ["一级切片 · 尚未接入","二级 OBJ / STL · 尚未接入"]){const b=document.createElement("button");b.textContent=text;b.disabled=true;b.title="本轮仅布局，不读取真实权重或输出加工文件";sec.append(b);}
+      }
+    });root.append(sec);
+  });
+  syncControls();renderGhostPanel();
+}
+function syncControls(){
+  Object.values(sliders).forEach(s=>s.show());Object.entries(choices).forEach(([k,s])=>s.value=P[k]);
+  Object.entries(toggles).forEach(([k,b])=>{b.classList.toggle("on",P[k]);b.setAttribute("aria-pressed",String(P[k]));});
+}
+
+function selectIds(ids,add=false){
+  const valid=id=>id.startsWith("ghost:")?ghosts.some(g=>"ghost:"+g.id===id):L.solids.some(s=>s.id===id);
+  if(!add||ids.some(id=>id.startsWith("ghost:"))||selectedGhost())selected.clear();
+  ids.filter(valid).forEach(id=>{if(add&&selected.has(id))selected.delete(id);else selected.add(id);});
+  syncPivot();drawSelection();drawBlank();renderGumballInfo();renderGhostPanel();
+}
+function selectionBounds(){const g=selectedGhost();if(g){const G=new THREE.Matrix4().fromArray(g.matrix),r=g.radius;
+  const dims=g.shape==="box"?g.dims:[2*r,g.height,2*r];return new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(),new THREE.Vector3(...dims)).applyMatrix4(G);}
+  return boundsOf(L.solids.filter(s=>selected.has(s.id)));}
+function syncPivot(){
+  if(transformSession)return;
+  if(!selected.size||gmMode==="off"){gumball.detach();return;}
+  pivot.position.copy(selectionBounds().getCenter(new THREE.Vector3()));pivot.quaternion.identity();pivot.scale.set(1,1,1);pivot.updateMatrixWorld(true);
+  gumball.attach(pivot);gumball.setMode(gmMode);
+}
+function setGumball(mode){gmMode=mode;document.querySelectorAll("[data-gm]").forEach(b=>{b.classList.toggle("on",b.dataset.gm===mode);b.setAttribute("aria-pressed",String(b.dataset.gm===mode));});syncPivot();renderGumballInfo();}
+function beginTransform(){pivot.updateMatrixWorld(true);const g=selectedGhost();transformSession={pivot:pivot.matrixWorld.clone(),
+  solids:L.solids.filter(s=>selected.has(s.id)).map(s=>({id:s.id,world:s.matrix.clone()})),ghost:g?{id:g.id,world:new THREE.Matrix4().fromArray(g.matrix)}:null};}
+function applyTransform(){
+  if(!transformSession)return;pivot.updateMatrixWorld(true);
+  const delta=pivot.matrixWorld.clone().multiply(transformSession.pivot.clone().invert());
+  if(Math.abs(delta.determinant())<1e-12)return;
+  if(transformSession.ghost){const g=ghosts.find(g=>g.id===transformSession.ghost.id);g.matrix=delta.clone().multiply(transformSession.ghost.world).toArray();}
+  transformSession.solids.forEach(old=>{const s=L.solids.find(s=>s.id===old.id);
+    const world=delta.clone().multiply(old.world);
+    manuals[s.id]=s.anchor.clone().invert().multiply(world).multiply(new THREE.Matrix4().makeScale(...s.localSize.map(x=>1/x))).toArray();});
+  schedule("all");flush();
+}
+function onGumballEnd(){transformSession=null;syncPivot();saveSoon();renderGumballInfo();}
+function resizeSelection(axis,value){if(!selected.size||value<=0||!Number.isFinite(value)){notice("先选对象并输入正尺寸");return;}
+  const box=selectionBounds(),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3()),scale=[1,1,1];scale[axis]=value/size.getComponent(axis);
+  beginTransform();const D=new THREE.Matrix4().makeTranslation(...center.toArray()).multiply(new THREE.Matrix4().makeScale(...scale)).multiply(new THREE.Matrix4().makeTranslation(...center.toArray().map(x=>-x)));
+  pivot.matrixAutoUpdate=false;pivot.matrix.copy(D.multiply(transformSession.pivot));pivot.matrixWorld.copy(pivot.matrix);applyTransform();pivot.matrixAutoUpdate=true;onGumballEnd();}
+function resetSelected(){const g=selectedGhost();if(g)g.matrix=new THREE.Matrix4().toArray();else selected.forEach(id=>delete manuals[id]);schedule("all");saveSoon();}
+function renderGumballInfo(){
+  const el=document.getElementById("gminfo"),info=document.getElementById("selectioninfo"),sizes=document.getElementById("selectionSizes");if(!el)return;
+  info.textContent=selected.size?"已选 "+selected.size+" 个对象 · "+[...selected].slice(0,3).join(" / "):"尚未选择对象";
+  el.textContent="模式："+({off:"关闭",translate:"移动",rotate:"旋转",scale:"缩放"}[gmMode])+" · "+(boxMode?"框选开启":"拖动旋转视角")+"。框壳毫米厚度保持不变；三轴缩放分别保留。尺寸字段编辑世界轴包围盒。";
+  if(sizes.contains(document.activeElement))return;sizes.textContent="";
+  if(selected.size){const size=selectionBounds().getSize(new THREE.Vector3());["选择宽","选择高","选择深"].forEach((label,i)=>{
+    const lab=document.createElement("label"),input=document.createElement("input");lab.textContent=label;input.type="number";input.step="any";input.value=size.getComponent(i).toFixed(3);input.setAttribute("aria-label",label);
+    input.onchange=()=>resizeSelection(i,Number(input.value));lab.append(input);sizes.append(lab);
+  });}
+}
+function toggleFocus(){const on=document.body.classList.toggle("focus-view"),b=document.getElementById("focus-view");b.textContent=on?"返回编辑 F":"专注视图 F";b.setAttribute("aria-pressed",String(on));applyViewOffset();buildSnow();fitView();}
+function fitView(front=false,onlySelected=false){
+  if(!L)return;const box=onlySelected&&selected.size?selectionBounds():L.bounds,size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+  const t=Math.tan(camera.fov*Math.PI/360),distance=Math.max((size.y+8)/(2*t),(size.x+14)/(2*t*camera.aspect))*1.1+size.z;
+  const yaw=front?0:.42,elevation=front?0:.16;orbit.target.copy(center);
+  camera.position.copy(center).add(new THREE.Vector3(Math.sin(yaw)*Math.cos(elevation),Math.sin(elevation),Math.cos(yaw)*Math.cos(elevation)).multiplyScalar(distance));orbit.update();
+}
+addEventListener("keydown",e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)||e.target.isContentEditable)return;
+  const k=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&k==="a"){e.preventDefault();selectIds(L.solids.map(s=>s.id));return;}
+  if(k==="f")toggleFocus();if(k==="escape")selectIds([]);if(k==="w")setGumball("translate");if(k==="e")setGumball("rotate");if(k==="r")setGumball("scale");if(k==="q")setGumball("off");
+});
+
+/* ============================================================
+   用量表与悬停信息
+   ============================================================ */
+function esc(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function renderMeter() {
+  const k=L.ink,size=L.bounds.getSize(new THREE.Vector3()),slotSize=L.slotBounds.getSize(new THREE.Vector3());
+  const row=(label,value)=>'<div class="m-row">'+label+'<b>'+value+'</b></div>';
+  const dims=v=>v.toArray().map(x=>x.toFixed(2)).join(" × ")+" mm";
+  document.getElementById("meter").innerHTML="<h2>布局后验报告</h2><div class='sub'>只提示，不设点数限额，不自动收缩模型。</div>"+
+    row("功能块 / 外框",L.solids.length)+row("模型尺寸 · 宽高深",dims(size))+row("槽位总体尺寸",dims(slotSize))+
+    row("模拟样本总数",fmtInt(k.mockCount))+row("屏幕显示样本",fmtInt(L.displayed))+
+    "<div class='sub'>真实雪花未加载：真实点数、密度、每格权重数和加工精度检查均待一级切片。模拟点不作为加工数据。</div>"+
+    row("框 · 估算点数",fmtInt(k.frame))+row("壳 · 估算点数",fmtInt(k.shell))+row("仅结构机时参考",k.minutes.toFixed(2)+" 分钟")+
+    "<div class='sub'>体积×灰度÷点距³仅为结构件量级估计，不是厂家切片结果；框壳交集计一次，跨块重叠尚未合并。</div>"+
+    "<div>块重叠：<span class='"+(L.overlaps.length?"bad":"ok")+"'>"+(L.overlaps.length?L.overlaps.length+" 对，示例 "+esc(L.overlaps[0].join(" / ")):"无")+"</span></div>"+
+    ghosts.map(g=>"<div>"+esc(g.name)+(g.id===primaryGhost?"（主参照）":"")+"：<span class='"+(g.outsideCount?"bad":"ok")+"'>"+
+      (g.outsideCount?g.outsideCount+" 块出界":"全部在内")+"</span>"+(g.invalidInset?" · 预留量已使内参照为空":"")+"</div>").join("")+
+    (!ghosts.length?"<div class='mid'>无幽灵毛坯，未做空间出界核对。</div>":"")+
+    (k.clamped?"<div class='mid'>"+k.clamped+" 个块厚度达到实体填满状态，有效厚度已注明。</div>":"")+
+    (P.frameT<2*P.pitch||P.shellT<2*P.pitch?"<div class='mid'>框或壳薄于 2 倍点距，仅提示，工艺需厂家核实。</div>":"")+
+    L.warns.slice(0,3).map(t=>"<div class='mid'>"+esc(t)+"</div>").join("")+
+    "<div class='sub'>待切片参数："+(dirtySnow?"已修改，尚未执行一级切片":"尚未执行一级切片")+"。密度参考线 "+pct(P.warnDensity)+" 未经工艺核实。</div>";
+}
+
+let hoveredSolid = null;
+function hoverInfo(s) {
+  hoveredSolid = s;
+  const el = document.getElementById("hover");
+  if (!s) { el.innerHTML = "<h2>悬停查看</h2>把鼠标移到任意块上，这里显示它来自哪些张量。"; hl.visible = false; return; }
+  const [lx,ly,lz]=s.size;
+  hl.visible=true;hl.matrixAutoUpdate=false;hl.matrix.copy(s.matrix);
+  let h = "<h2>" + s.id + (s.block ? " · " + s.block.label : "") + "</h2>";
+  h += "尺寸 " + [lx, ly, lz].map(v => v.toFixed(2)).join(" × ") + " mm" + (s.outside ? ' <span class="bad">（出界）</span>' : "") + "<br>";
+  if (s.kind === "mtp") h += "MTP 多 token 预测头。权重未收录，只画框，不填模拟点。";
+  else {
+    const b=s.block;
+    h += "参数量 "+fmtInt(b.params)+" · 包含 "+b.tensors.length+" 个独立张量<br>";
+    h += "固定模拟样本 "+fmtInt(mockCache.get(s.id)?.count||0)+"；真实格数与压缩统计尚未生成。<br>";
+    if (b.fold) h += "二维→三维（D13）：" + (b.fold.basis === "structure" && b.fold.factors ? "按" + (b.fold.axis === "cols" ? "列" : "行") + "拆成 " + b.fold.factors.join(" × ") + "（" + b.fold.labels.join(" / ") + "）" : b.fold.note || b.fold.basis) + "<br>";
+    h += "张量：";
+    b.tensors.forEach(t => {
+      h += "<br>· <code>" + esc(t.gguf) + "</code> [" + (t.shape||[]).join(", ") + "] " + esc(t.qtype||"未绑定");
+      if(t.fold)h += "<br>　独立折叠：" + esc(t.fold.factors?.join(" × ")||t.fold.basis);
+      if (t.hf) h += "<br>　HF：<code>" + t.hf.replace("model.language_model.", "") + "</code>";
+      if (t.restore) h += "<br>　还原（U10）：<code>" + t.restore + "</code>";
+    });
+  }
+  el.innerHTML = h;
+}
+
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+let hoverDirty=false;
+function pointerMouse(e){const r=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);hoverDirty=true;}
+function pick(e){pointerMouse(e);scene.updateMatrixWorld(true);ray.setFromCamera(mouse,camera);
+  if(e.altKey){const hit=ray.intersectObjects(ghostHitObjects,false)[0];return hit?"ghost:"+hit.object.userData.ghostId:null;}
+  const hit=ray.intersectObject(proxies,false)[0];return hit?L.solids[hit.instanceId]?.id:null;
+}
+renderer.domElement.addEventListener("pointerdown",e=>{
+  if(e.button!==0||gumball.dragging||(gumball.axis&&gmMode!=="off"&&!boxMode))return;
+  gesture={x:e.clientX,y:e.clientY,box:boxMode||e.shiftKey,add:e.shiftKey,id:e.pointerId};
+  if(gesture.box){e.stopImmediatePropagation();orbit.enabled=false;renderer.domElement.setPointerCapture(e.pointerId);}
+},true);
+renderer.domElement.addEventListener("pointermove",e=>{
+  pointerMouse(e);if(!gesture?.box)return;e.stopImmediatePropagation();
+  const rect=document.getElementById("boxselect");rect.style.display="block";
+  rect.style.left=Math.min(gesture.x,e.clientX)+"px";rect.style.top=Math.min(gesture.y,e.clientY)+"px";
+  rect.style.width=Math.abs(gesture.x-e.clientX)+"px";rect.style.height=Math.abs(gesture.y-e.clientY)+"px";
+},true);
+renderer.domElement.addEventListener("pointerup",e=>{
+  if(!gesture)return;const g=gesture;gesture=null;document.getElementById("boxselect").style.display="none";
+  orbit.enabled=!boxMode;if(g.box)e.stopImmediatePropagation();
+  if(Math.hypot(e.clientX-g.x,e.clientY-g.y)<5){const id=pick(e);selectIds(id?[id]:[],g.add);return;}
+  if(!g.box)return;
+  const r=renderer.domElement.getBoundingClientRect(),x0=Math.min(g.x,e.clientX),x1=Math.max(g.x,e.clientX),y0=Math.min(g.y,e.clientY),y1=Math.max(g.y,e.clientY);
+  camera.updateMatrixWorld(true);
+  const ids=L.solids.filter(s=>{const p=s.corners.map(v=>v.clone().project(camera));if(p.every(v=>v.z>1||v.z<-1))return false;
+    const xs=p.map(v=>r.left+(v.x+1)*r.width/2),ys=p.map(v=>r.top+(1-v.y)*r.height/2);
+    return Math.max(...xs)>=x0&&Math.min(...xs)<=x1&&Math.max(...ys)>=y0&&Math.min(...ys)<=y1;
+  }).map(s=>s.id);selectIds(ids,g.add);
+},true);
+renderer.domElement.addEventListener("pointercancel",()=>{gesture=null;document.getElementById("boxselect").style.display="none";orbit.enabled=!boxMode;});
+orbit.addEventListener("change",()=>{hoverDirty=true;});
+function updateHover() {
+  if (!hoverDirty || !L) return; hoverDirty = false;
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObject(proxies, false)[0];
+  hoverInfo(hit ? L.solids.find(s => s.pid === hit.instanceId) : null);
+}
+
+function layoutData(){return {schema_version:2,units:"mm",topology_id:topo.topology_id,config:topo.config,model:topo.model,
+  params:{...P},ghosts:JSON.parse(JSON.stringify(ghosts)),primaryGhost,realSnowLoaded:false,
+  checks:{overlaps:L.overlaps,outside_count:outside,warnings:L.warns},report:L.ink,
+  solids:L.solids.map(s=>({id:s.id,kind:s.kind,role:s.role,slot:s.slot,matrix_mm:s.matrix.toArray(),
+    aabb_mm:[s.x0,s.y0,s.z0,s.x1,s.y1,s.z1],frame_t:s.tEff,shell_t:s.sEff,tensors:s.block.tensors}))};}
+function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:"application/json"}));
+  const a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
+function stamp(){return new Date().toISOString().replace(/[-:]/g,"").replace("T","-").slice(0,15);}
+function exportLayout(){flush();download(layoutData(),"layout_"+stamp()+".json");}
+function captureProject(){return {schema_version:2,kind:"snowglass.preweights",topology_id:topo.topology_id,params:{...P},
+  manuals:JSON.parse(JSON.stringify(manuals)),assembly:assembly.toArray(),ghosts:JSON.parse(JSON.stringify(ghosts)),primaryGhost,
+  mock:{seed:mockSeed,counts:{...mockCounts},generation:mockGeneration},dirtySnow,
+  camera:{position:camera.position.toArray(),target:orbit.target.toArray()}};}
+let saveTimer=null;
+function saveSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(captureProject()));}catch(e){notice("本地自动保存失败，请用保存工程："+e.message);}},300);}
+function saveProject(){flush();download(captureProject(),"snowglass_"+stamp()+".snowglass.json");}
+function checkedMatrix(a){if(!Array.isArray(a)||a.length!==16||a.some(x=>typeof x!=="number"||!Number.isFinite(x)))throw new Error("变换矩阵无效");
+  const m=new THREE.Matrix4().fromArray(a);if(Math.abs(m.determinant())<1e-12||Math.abs(a[3])+Math.abs(a[7])+Math.abs(a[11])>1e-8||Math.abs(a[15]-1)>1e-8)throw new Error("只支持非退化仿射变换");return m;}
+function validateProject(doc){
+  if(doc.schema_version!==2||doc.kind!=="snowglass.preweights")throw new Error("不是本版 snowglass 工程");
+  if(doc.topology_id!==topo.topology_id)throw new Error("拓扑或源配置已改变，不能把旧工程静默套到新分组");
+  const p={...DEFAULTS};for(const k of Object.keys(DEFAULTS)){if(!(k in doc.params))continue;const value=doc.params[k];
+    if(typeof value!==typeof DEFAULTS[k]||(typeof value==="number"&&!Number.isFinite(value)))throw new Error("参数类型无效："+k);p[k]=value;}
+  for(const k of ["scale","squash","depth","pitch","speed","pointSize","compress","gamma"])if(p[k]<=0)throw new Error("参数必须为正："+k);
+  for(const k of ["frameT","shellT","brightness","dotUm"])if(p[k]<0)throw new Error("参数不能为负："+k);
+  for(const k of ["frameGray","shellGray","floor","warnDensity"])if(p[k]<0||p[k]>1)throw new Error("灰度或参考值须在0–1之间");
+  if(!["equal","params"].includes(p.widthMode)||!["brightness","size"].includes(p.grayDisplay))throw new Error("布局或显示模式无效");
+  const delta={};for(const [id,a] of Object.entries(doc.manuals||{})){if(!blockById[id]&&id!=="mtp")throw new Error("未知块："+id);delta[id]=checkedMatrix(a).toArray();}
+  const gs=doc.ghosts;if(!Array.isArray(gs)||gs.length>100)throw new Error("毛坯列表无效");const ids=new Set();
+  gs.forEach(g=>{if(typeof g.id!=="string"||ids.has(g.id)||typeof g.name!=="string"||g.name.length>200||!["box","cylinder"].includes(g.shape))throw new Error("毛坯身份无效");ids.add(g.id);
+    if(!Array.isArray(g.dims)||g.dims.length!==3||[...g.dims,g.radius,g.height].some(x=>!Number.isFinite(x)||x<=0)||!Number.isFinite(g.margin)||g.margin<0)throw new Error("毛坯尺寸无效");checkedMatrix(g.matrix);});
+  if(doc.primaryGhost!==null&&!ids.has(doc.primaryGhost))throw new Error("主参照不存在");checkedMatrix(doc.assembly);
+  if(!Number.isFinite(doc.mock?.seed))throw new Error("模拟种子无效");
+  for(const [id,n] of Object.entries(doc.mock.counts||{}))if(!blockById[id]||!Number.isInteger(n)||n<0||n>1800)throw new Error("模拟样本记录无效");
+  if(doc.camera)for(const a of [doc.camera.position,doc.camera.target])if(!Array.isArray(a)||a.length!==3||a.some(x=>!Number.isFinite(x)))throw new Error("视角无效");
+  return {p,delta,gs:JSON.parse(JSON.stringify(gs))};
+}
+function restoreProject(doc){
+  const v=validateProject(doc);Object.assign(P,v.p);manuals=v.delta;assembly=checkedMatrix(doc.assembly);ghosts=v.gs;primaryGhost=doc.primaryGhost;
+  mockSeed=doc.mock.seed;mockCounts={...doc.mock.counts};mockGeneration=doc.mock.generation||0;mockCache.clear();dirtySnow=!!doc.dirtySnow;
+  selected.clear();transformSession=null;schedule("all");flush();renderGhostPanel();
+  if(doc.camera){camera.position.fromArray(doc.camera.position);orbit.target.fromArray(doc.camera.target);orbit.update();}else fitView();saveSoon();
+}
+function resetProject(){Object.assign(P,DEFAULTS);manuals={};assembly.identity();ghosts=[{id:"ghost-1",name:"参照毛坯 1",shape:"box",dims:[25,80,25],radius:12.5,height:80,margin:2.5,matrix:new THREE.Matrix4().toArray()}];
+  primaryGhost="ghost-1";selected.clear();mockCache.clear();mockCounts={};mockSeed=P.seed;mockGeneration++;dirtySnow=false;transformSession=null;boxMode=false;orbit.enabled=true;gumball.enabled=true;setGumball("off");
+    const boxButton=document.getElementById("box-select-toggle");boxButton.classList.remove("on");boxButton.setAttribute("aria-pressed","false");
+  schedule("all");flush();renderGhostPanel();fitView();saveSoon();notice("已恢复默认排布与参照对象");}
+
+/* ============================================================
+   更新调度：all（重排）> struct（结构）> snow（映射固定样本）> meter > view
+   ============================================================ */
+const RANK = { view: 0, meter: 1, snow: 2, struct: 3, all: 4 };
+let pending=-1,flushTimer=null;
+function schedule(level){pending=Math.max(pending,RANK[level]??4);if(!flushTimer)flushTimer=setTimeout(()=>{flushTimer=null;flush();},16);}
+function flush(){
+  if(pending<0)return;const lv=pending;pending=-1;const hoverId=hoveredSolid?.id;
+  if(lv>=4){L=layout();selected=new Set([...selected].filter(id=>id.startsWith("ghost:")?ghosts.some(g=>"ghost:"+g.id===id):L.solids.some(s=>s.id===id)));drawBlank();drawLabels();drawPlate();}
+  if(lv>=3){prepare();checkContainment();drawStructure();}
+  if(lv>=2)buildSnow();
+  if(lv>=1){L.ink=report();checkContainment();drawSelection();renderMeter();}
+  syncControls();applyAppearance();syncPivot();renderGumballInfo();
+  if(hoverId)hoverInfo(L.solids.find(s=>s.id===hoverId)||null);else if(lv>=4)hoverInfo(null);
+}
+buildPanel();schedule("all");flush();fitView();
+try{const saved=localStorage.getItem(STORAGE_KEY);if(saved){restoreProject(JSON.parse(saved));notice("已恢复本地工程");}}catch(e){notice("本地工程未恢复："+e.message);}
+document.getElementById("configinfo").textContent="4.2 默认排布 · 1 单位＝1 mm · config SHA "+topo.config.sha256.slice(0,12)+" · 清单覆盖 "+topo.coverage.text_tensors+" + "+topo.coverage.vision_tensors;
+// 同一套接口供工程检查与浏览器控制台复现，不另写第二套布局算法。
+document.getElementById("loading").remove();
+document.getElementById("focus-view").onclick=toggleFocus;
+window.snowglass={getLayout:()=>{flush();return layoutData();},getProject:captureProject,restoreProject,resetProject,
+  select:selectIds,setParam:changeParam,resizeSelection,newGhost,deleteGhost,flush,fitView,
+  mockDigest:id=>{const m=mockCache.get(id);if(!m)return null;let h=0;for(let i=0;i<m.data.length;i++)h=(Math.imul(h,31)+Math.round(m.data[i]*1e6))|0;return {count:m.count,hash:h};},
+  projectSelection:()=>[...selected],projectScreen:id=>{const s=L.solids.find(s=>s.id===id),r=renderer.domElement.getBoundingClientRect();if(!s)return null;const v=s.center.clone().project(camera);return {x:r.left+(v.x+1)*r.width/2,y:r.top+(1-v.y)*r.height/2};}};
+addEventListener("resize",()=>{applyViewOffset();buildSnow();fitView();});
+addEventListener("beforeunload",()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(captureProject()));}catch(e){console.warn("工程自动保存失败",e);}});
+(function loop(){requestAnimationFrame(loop);flush();updateHover();orbit.update();renderer.render(scene,camera);})();
+}
+})();
+</script>
+</body>
+</html>
