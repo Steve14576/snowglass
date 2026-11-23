@@ -1,0 +1,40 @@
+{
+  "phase": "axes",
+  "passed": false,
+  "failure": "Page.wait_for_function: Timeout 45000ms exceeded.",
+  "page_errors": [],
+  "diagnostic": {
+    "status": "启动失败：Cannot read properties of undefined (reading 'map')",
+    "pending": []
+  },
+  "cases": [],
+  "source_unchanged": true,
+  "frozen_math_sha256": {
+    "survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16"
+  },
+  "assets_sha256": {
+    "index.html": "502bc703339d28fa4e7ecb5b125c9a63f1c64f59554cd6cc59d6a87358e78c9d",
+    "assets\\annotation_math.js": "27fd0d0f87d99c7dd35f34023afcd6e06cf2185772dc17977ff2afe70a0c3f01",
+    "assets\\annotation_state.js": "52a35f252de19980cd29ec1da5457abb2ea59cf1e67de6909723851465105d4f",
+    "assets\\annotation_ui.js": "36136a5e2fc7eef5081147b5fe1fe9712f46376bcccbccb962c04adf70d95f61",
+    "assets\\annotation_view.js": "dd43ff7f3fa290334ffd2bc58a13046db76be257ebbc7016badc81423266e359",
+    "assets\\app.js": "ff80faf110f2d78b59a5965813ed6490e723930c5d701f344f37e7cb5444a4d0",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "0faa7cc978955f03a0dc14402a6c92bc25025cc0df43d968d69e2fbd3f6d36ea",
+    "assets\\coordinates.js": "7f2a1cc5b8b45c0af4fd501771d872f571e5bbc19d76c5830ab017c54613f726",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "c932a7efdb566d7cb6a51ca145be7790f45d5b71b64dba8f41c7a9775c3070b9",
+    "assets\\editor.css": "72bb41d234dff5540381b0f75420f1e1f084db9e8689edda00fc7a4476bb9288",
+    "assets\\inspector.js": "0a004f8b61a5caa14f48c7a9d26ea812ad7c0400342e06ad8a7a30f5c7ec39af",
+    "assets\\layout.js": "8f048e91a1b0028d0b66cf6af608e4d419295c11b40d6524994b9321dd63c4f8",
+    "assets\\model.js": "5453a165abd0737b660a5b199373906eef12e1949e8332f6c35cbc9120d9a382",
+    "assets\\scene.js": "28ee4b109fcfeb9299fdbfae98b6f4310cff4d491a58e7450d672ecab47daa3e",
+    "assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "assets\\tree.js": "cb1fc950f50ae27fa98b4183a149d949cd3184e4fb34cf3b1ccd9b874a30dff4"
+  },
+  "test_sha256": "f3ecaab1f4bae25921bca8a32025d88961cfbe4741c8807b78ef70c39da9da31",
+  "seconds": 46.26600000000326
+}

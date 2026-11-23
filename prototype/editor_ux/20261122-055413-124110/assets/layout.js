@@ -80,5 +80,5 @@ function layout() {
    与点数无关，只由毫米尺寸和两个厚度参数决定
    ============================================================ */
 
-return layout();
+return UXCoordinates.layout(layout());
 };

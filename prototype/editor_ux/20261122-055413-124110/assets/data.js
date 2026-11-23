@@ -105,11 +105,12 @@
           pieces:r.pieces.map(p=>({tensor:p.key,name:p.name,channel:p.used,grid:p.grid,region:p.region,gray:Array.from(p.gray),mask:Array.from(p.mask),
             counts:p.counts,window:p.window,reference_white:p.reference,data_sha256:p.data_sha256,source_convention:p.source_convention,source_run:p.source_run}))});
       }
-      return {kind:'snowglass.ux-gray-mapping.v1',created_at:new Date().toISOString(),source_run:this.manifest.source_run,
+      return {kind:'snowglass.ux-gray-mapping.v1',coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:UXCoordinates.GEOMETRY,created_at:new Date().toISOString(),source_run:this.manifest.source_run,
         topology_sha256:model.provenance.topology_sha256,manifest_sha256:model.provenance.manifest_sha256,
         source_runs:this.manifest.source_runs||[this.manifest.source_run],
         approximation:{lut_size:4097,lookup:'linear',note:'贝塞尔数值映射使用查找表近似；预览与此文件共用同一求值规则'},
-        label_pipeline:'文字定义已随结果输出；字形几何、固定朝向与厂家读取契约尚未接入，本文件不是可加工文字。',
+        annotations:model.annotations(ids),
+        label_pipeline:'独立标注带固定世界位姿；旧块标签仍为屏幕贴片。字形轮廓与厂家读取契约未接入，本文件不是可加工文字。',
         disclaimer:'这是统计与灰度映射记录，不是已核实的厂家加工文件；未计算块没有补模拟数据。',results};
     }
   }

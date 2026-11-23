@@ -1,0 +1,488 @@
+{
+  "phase": "full",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 437,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "sidebar_right": 380,
+        "view_left": 385,
+        "tree_y": 40,
+        "properties_y": 335,
+        "slice_disabled": false
+      }
+    },
+    {
+      "name": "world_axes_projection_and_view_only",
+      "result": {
+        "front": [
+          {
+            "axis": "X",
+            "sign": -1,
+            "label": "-X",
+            "x": 42,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "X",
+            "sign": 1,
+            "label": "+X",
+            "x": 102,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "Y",
+            "sign": -1,
+            "label": "-Y",
+            "x": 72,
+            "y": 84,
+            "depth": -6.154770511392546e-17
+          },
+          {
+            "axis": "Y",
+            "sign": 1,
+            "label": "+Y",
+            "x": 72,
+            "y": 24,
+            "depth": 6.154770511392546e-17
+          },
+          {
+            "axis": "Z",
+            "sign": -1,
+            "label": "-Z",
+            "x": 72,
+            "y": 54,
+            "depth": -1
+          },
+          {
+            "axis": "Z",
+            "sign": 1,
+            "label": "+Z",
+            "x": 72,
+            "y": 54,
+            "depth": 1
+          }
+        ],
+        "side": {
+          "axis": "X",
+          "sign": 1,
+          "label": "+X",
+          "x": 72,
+          "y": 54,
+          "depth": 1
+        },
+        "pixels": 1700,
+        "model_unchanged": true,
+        "mouse_passthrough": true
+      }
+    },
+    {
+      "name": "nine_modes_exact_members_and_external_placement",
+      "result": [
+        {
+          "axis": "x",
+          "mode": 0,
+          "labels": 3,
+          "members": 12
+        },
+        {
+          "axis": "x",
+          "mode": 1,
+          "labels": 3,
+          "members": 6
+        },
+        {
+          "axis": "x",
+          "mode": 2,
+          "labels": 3,
+          "members": 24
+        },
+        {
+          "axis": "y",
+          "mode": 0,
+          "labels": 4,
+          "members": 12
+        },
+        {
+          "axis": "y",
+          "mode": 1,
+          "labels": 4,
+          "members": 8
+        },
+        {
+          "axis": "y",
+          "mode": 2,
+          "labels": 4,
+          "members": 24
+        },
+        {
+          "axis": "z",
+          "mode": 0,
+          "labels": 2,
+          "members": 6
+        },
+        {
+          "axis": "z",
+          "mode": 1,
+          "labels": 2,
+          "members": 8
+        },
+        {
+          "axis": "z",
+          "mode": 2,
+          "labels": 2,
+          "members": 24
+        }
+      ]
+    },
+    {
+      "name": "coordinate_tolerance_boundary",
+      "result": {
+        "tolerance": 1e-06
+      }
+    },
+    {
+      "name": "real_topology_nine_modes_and_independent_ends",
+      "result": {
+        "mode_counts": [
+          8,
+          8,
+          8,
+          32,
+          32,
+          32,
+          1,
+          1,
+          1,
+          4,
+          4,
+          4,
+          27,
+          27,
+          27,
+          1,
+          1,
+          1
+        ],
+        "initial_nodes": 437,
+        "created": 32
+      }
+    },
+    {
+      "name": "follow_source_preserves_manual_edits_and_size",
+      "result": {
+        "follow": true,
+        "source_scale_excluded": true,
+        "lost_source_preserved": true
+      }
+    },
+    {
+      "name": "nested_groups_distinct_sources_and_sparse_styles",
+      "result": {
+        "independent_sources": true,
+        "ungroup_follow": true
+      }
+    },
+    {
+      "name": "combined_parent_after_distinct_source_rotations",
+      "result": {
+        "distinct_rotated_sources": true,
+        "parent_numeric_and_gumball_consistent": true
+      }
+    },
+    {
+      "name": "migration_export_and_invalid_annotations",
+      "result": {
+        "legacy": true,
+        "roundtrip": true,
+        "invalid_rejected": true
+      }
+    },
+    {
+      "name": "optional_channel_cache_and_convention_isolation",
+      "result": {
+        "missing_refused": true,
+        "channel_preserved": true,
+        "conventions_isolated": true
+      }
+    },
+    {
+      "name": "legacy_project_keeps_convention_and_new_switches_inherit",
+      "result": {
+        "legacy_hf": true,
+        "geometry_unchanged": true,
+        "sparse_override": true
+      }
+    },
+    {
+      "name": "inherit_group_and_sparse_overrides",
+      "result": {
+        "group": "group-1",
+        "overrides": {
+          "frameGray": 0.3
+        }
+      }
+    },
+    {
+      "name": "fixed_mm_transform_and_reparent",
+      "result": {
+        "side": 0.012,
+        "retained_raw": 8192
+      }
+    },
+    {
+      "name": "ungroup_two_modes_and_undo",
+      "result": true
+    },
+    {
+      "name": "ghosts_and_global_only_fields",
+      "result": {
+        "ghost": "ghost-mwtslqb3-3"
+      }
+    },
+    {
+      "name": "project_roundtrip_and_invalid_trees",
+      "result": true
+    },
+    {
+      "name": "curve_math_insert_inverse_and_lut",
+      "result": {
+        "splitError": 6.731904078627338e-08,
+        "lutError": 8.074897883680876e-08,
+        "lut_size": 4097
+      }
+    },
+    {
+      "name": "actual_curve_click_add_drag_single_undo",
+      "result": true
+    },
+    {
+      "name": "gray_export_same_as_preview_no_mutation",
+      "result": {
+        "saved_count": 8192
+      }
+    },
+    {
+      "name": "actual_inspector_global_ghost_sparse_edit",
+      "result": true
+    },
+    {
+      "name": "all_cached_types_and_missing_layers",
+      "result": {
+        "groups": 65,
+        "tensors": 124,
+        "missing": "该层尚未计算",
+        "mtp": "权重未收录"
+      }
+    },
+    {
+      "name": "rendered_snow_contributes_pixels",
+      "result": {
+        "pixels": 21957,
+        "instances": 8192
+      }
+    },
+    {
+      "name": "mobile_panels_no_overflow",
+      "result": {
+        "width": 390,
+        "scroll": 390,
+        "tree": 110,
+        "props": 199
+      }
+    },
+    {
+      "name": "visual_tree_identity_and_invalid_window",
+      "result": true
+    },
+    {
+      "name": "geometry_recipe_change_during_reparent_preserves_world",
+      "result": true
+    },
+    {
+      "name": "actual_tree_shift_group_default_ungroup",
+      "result": true
+    },
+    {
+      "name": "actual_global_curve_keeps_reference_feedback",
+      "result": true
+    },
+    {
+      "name": "save_buttons_capture_matching_payload",
+      "result": {
+        "project_kind": "snowglass.editor-ux.v1",
+        "mapping_kind": "snowglass.ux-gray-mapping.v1",
+        "count": 8192
+      }
+    },
+    {
+      "name": "actual_open_project_roundtrip",
+      "result": true
+    },
+    {
+      "name": "four_cached_channels_and_independent_mask",
+      "result": {
+        "group_channel_cases": 260,
+        "mask_independent": true
+      }
+    },
+    {
+      "name": "gumball_events_update_shared_numeric_state",
+      "result": {
+        "delta": 0.6999999999999993,
+        "numeric": 0.7,
+        "stored": 0.6999999999999993
+      }
+    },
+    {
+      "name": "actual_numeric_transform_input",
+      "result": {
+        "delta": 1.0
+      }
+    },
+    {
+      "name": "compact_toolbar_and_help_popover",
+      "result": {
+        "top_buttons": 6,
+        "tree_tools": 3
+      }
+    },
+    {
+      "name": "preview_shows_all_cached_snow",
+      "result": {
+        "snow": 594240,
+        "blocks": 65,
+        "meshes": 130,
+        "hidden": true,
+        "badge": "65 块 · 594240 候选格",
+        "positive": 594116
+      }
+    },
+    {
+      "name": "preview_edit_and_return_to_prepare",
+      "result": {
+        "preview_snow": 594240,
+        "after_gray": 594240,
+        "prepare_snow": 0
+      }
+    },
+    {
+      "name": "param_slider_and_number_are_paired",
+      "result": {
+        "frameT": 0.05
+      }
+    },
+    {
+      "name": "zero_thickness_means_no_structure",
+      "result": {
+        "frames": [
+          4440,
+          4428
+        ],
+        "shells": [
+          2214,
+          2208
+        ]
+      }
+    },
+    {
+      "name": "label_text_is_per_object",
+      "result": {
+        "labels": 1
+      }
+    },
+    {
+      "name": "label_is_part_of_output_contract",
+      "result": {
+        "text": "冻结的模型",
+        "font": "Microsoft YaHei",
+        "size_mm": 0.7,
+        "output": true
+      }
+    },
+    {
+      "name": "tree_ctrl_toggle_and_shift_range",
+      "result": [
+        "L16.down",
+        "L16.gate",
+        "L16.up"
+      ]
+    },
+    {
+      "name": "sidebar_width_keyboard_resize",
+      "result": {
+        "before": 380,
+        "after": 420
+      }
+    },
+    {
+      "name": "property_panel_fixed_position",
+      "result": [
+        0,
+        335,
+        379
+      ]
+    },
+    {
+      "name": "gumball_follows_object_orientation_and_survives_camera",
+      "result": {
+        "angle": 0,
+        "highlights": 3
+      }
+    },
+    {
+      "name": "actual_shift_drag_box_select",
+      "result": [
+        "L10.down",
+        "L11.down",
+        "L12.down",
+        "L13.down",
+        "L14.down",
+        "L15.down",
+        "L16.down",
+        "L17.down",
+        "L18.down"
+      ]
+    },
+    {
+      "name": "file_protocol_shows_actionable_banner",
+      "result": "这个页面要用本地服务打开，不能双击文件"
+    }
+  ],
+  "source_unchanged": true,
+  "assets_sha256": {
+    "index.html": "839073a73e708a6e7467da52586f437c70de635c74ed06a64a6ac35d8dedc22c",
+    "assets\\annotation_math.js": "c127f432b1d57e8b0dd49ce73e6c4d23ab410ec13648a4a464323df18c76e69c",
+    "assets\\annotation_state.js": "25c6527f8ad17cf83b4abdd95247a03394cfdbc3e43c79bc51ee4fae0551d225",
+    "assets\\annotation_ui.js": "be13fb6a704de6570e206966f4d62cdb41f60dae630ab3b73a8055cb915e2d15",
+    "assets\\annotation_view.js": "91a9bd134e85906a1fe248c2bb1e4f71f163043d9afcfc3f3217e6ac61394c6b",
+    "assets\\app.js": "aa398e21069c7a8fa83f4af6b8dfcd9be74b2c003d45e0b068ce38c52ded2965",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "59beffdfc5c13935ade7c8f5eed9880d693094b222e9b0e163c8c5347f05dc0a",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "a4b9f979388edc8c13a2976dc0f70b3ab0df855c2b09792422e1b02662873ad7",
+    "assets\\editor.css": "72bb41d234dff5540381b0f75420f1e1f084db9e8689edda00fc7a4476bb9288",
+    "assets\\inspector.js": "9e29388ce840c58bce207273ef9171390bacb9bf99ffe34be88a8378db10e91b",
+    "assets\\layout.js": "b6e78479bbfbb275f61af486a7cda4377d0aae108e80c83f36007d72a66a4573",
+    "assets\\model.js": "c315edd6e7c6d533af662bad3fcc2b5539ec31468ae81a70fdaee51c479fa870",
+    "assets\\scene.js": "ff1ba8a2766c0685815af7e88000794aea2b8bc8fcba3a2c7f8390f626fdd31d",
+    "assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "assets\\tree.js": "cb1fc950f50ae27fa98b4183a149d949cd3184e4fb34cf3b1ccd9b874a30dff4"
+  },
+  "test_sha256": "678406d8c301d1744b1e81ffd2c63a8110bb14f08dd09ba692edfa80e93c19b0",
+  "seconds": 81.98399999999674
+}

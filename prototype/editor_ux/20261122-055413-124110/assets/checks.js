@@ -12,7 +12,7 @@
     }return true;
   }
   function inset(model,id){
-    const d=model.nodes.get(id).data,inv=model.chain(id).invert(),a=inv.elements,rows=[0,1,2].map(i=>new THREE.Vector3(a[i],a[i+4],a[i+8]));
+    const d=model.nodes.get(id).data,inv=model.geometryFrame(id).invert(),a=inv.elements,rows=[0,1,2].map(i=>new THREE.Vector3(a[i],a[i+4],a[i+8]));
     const A=rows[0].lengthSq(),C=rows[2].lengthSq(),B=rows[0].dot(rows[2]),radial=Math.sqrt((A+C+Math.sqrt((A-C)**2+4*B*B))/2);
     return {inv,shape:d.shape,dims:d.dims.map((v,i)=>v-2*d.margin*rows[i].length()),radius:d.radius-d.margin*radial,
       height:d.height-2*d.margin*rows[1].length(),approx:d.shape==='cylinder'&&(Math.abs(A-C)>1e-6||Math.abs(B)>1e-6)};

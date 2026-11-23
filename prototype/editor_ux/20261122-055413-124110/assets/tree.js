@@ -6,7 +6,7 @@
       this.element=document.getElementById('tree');document.getElementById('tree-search').oninput=()=>this.render();}
     render(){
       const M=this.model,query=document.getElementById('tree-search').value.trim().toLowerCase(),shown=new Set();
-      if(query)for(const n of M.nodes.values()){const source=M.topo.blocks.find(b=>b.id===n.sourceId);if((n.id+' '+n.name+' '+JSON.stringify(source?.tensors||[])).toLowerCase().includes(query)){shown.add(n.id);M.ancestors(n.id).forEach(id=>shown.add(id));}}
+      if(query)for(const n of M.nodes.values()){const source=M.topo.blocks.find(b=>b.id===n.sourceId);if((n.id+' '+n.name+' '+JSON.stringify(source?.tensors||[])+' '+(n.data?.members||[]).join(' ')).toLowerCase().includes(query)){shown.add(n.id);M.ancestors(n.id).forEach(id=>shown.add(id));}}
       const scroll=this.element.scrollTop;this.element.textContent='';this.flat=[];
       const append=(id,depth)=>{
         if(query&&!shown.has(id))return;const n=M.nodes.get(id),children=M.children(id),row=document.createElement('div');
@@ -17,12 +17,12 @@
         disclose.onclick=e=>{e.stopPropagation();if(this.open.has(id))this.open.delete(id);else this.open.add(id);this.render();};row.append(disclose);
         const state=document.createElement('span');state.className='tree-state'+(n.type==='block'&&this.data.groups.has(n.sourceId)?' real':'');state.title=n.type==='block'?(this.data.groups.has(n.sourceId)?'已有真实统计缓存':'未计算／权重未收录'):n.type;row.append(state);
         const name=document.createElement('span');name.className='tree-name';name.textContent=n.name;name.title=n.id;row.append(name);
-        if(n.type==='global'||n.type==='group'||n.type==='ghost'){const tag=document.createElement('span');tag.className='tree-kind';tag.textContent={global:'全局',group:'组',ghost:'毛坯'}[n.type];row.append(tag);}
+        if(['global','group','ghost','annotationRoot','labelGroup','label'].includes(n.type)){const tag=document.createElement('span');tag.className='tree-kind';tag.textContent={global:'全局',group:'组',ghost:'毛坯',annotationRoot:'标注',labelGroup:'标签组',label:'字'}[n.type];row.append(tag);}
         const count=Object.keys(n.overrides).length;if(count||M.primaryGhost===id){const tag=document.createElement('span');tag.className='tree-badge';tag.textContent=M.primaryGhost===id?'主参照':count+'项覆盖';row.append(tag);}
         row.onclick=e=>{e.stopPropagation();this.reveal=true;const mode=e.ctrlKey||e.metaKey?'toggle':e.shiftKey?'range':'replace';this.select([id],mode);};row.ondblclick=()=>{this.open.has(id)?this.open.delete(id):this.open.add(id);this.render();};
-        row.draggable=!['project','global','work','text','vision','refs'].includes(id);
+        row.draggable=!['project','global','work','text','vision','refs','annotations'].includes(id);
         row.ondragstart=e=>{e.dataTransfer.setData('text/plain',JSON.stringify(this.selected.includes(id)?M.roots(this.selected):[id]));e.dataTransfer.effectAllowed='move';};
-        row.ondragover=e=>{if(['root','tower','layer','group','reference'].includes(n.type)){e.preventDefault();row.classList.add('dragover');}};
+        row.ondragover=e=>{if(['root','tower','layer','group','reference','annotationRoot','labelGroup'].includes(n.type)){e.preventDefault();row.classList.add('dragover');}};
         row.ondragleave=()=>row.classList.remove('dragover');row.ondrop=e=>{e.preventDefault();row.classList.remove('dragover');try{this.reparent(JSON.parse(e.dataTransfer.getData('text/plain')),id);}catch(error){document.getElementById('status').textContent=error.message;}};
         row.onkeydown=e=>{const rows=[...this.element.querySelectorAll('.tree-row')],i=rows.indexOf(row);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();rows[Math.max(0,Math.min(rows.length-1,i+(e.key==='ArrowDown'?1:-1)))].focus();}
           if(e.key==='Enter'||e.key===' '){e.preventDefault();this.select([id],e.shiftKey?'range':(e.ctrlKey||e.metaKey)?'toggle':'replace');}if(e.key==='ArrowRight'){this.open.add(id);this.render();}if(e.key==='ArrowLeft'){this.open.delete(id);this.render();}};

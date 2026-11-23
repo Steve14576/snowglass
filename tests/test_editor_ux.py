@@ -18,7 +18,7 @@ def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','full'],default='full');parser.add_argument('--url',default='http://127.0.0.1:8128/');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','axes','coordinates','annotations','full'],default='full');parser.add_argument('--url',default='http://127.0.0.1:8128/');args=parser.parse_args()
     bundle=args.folder.resolve();provenance=json.loads((bundle/'provenance.json').read_text(encoding='utf-8'))
     # 归档只改路径、不改内容：按 provenance.archived_paths 解析新位置，仍是同一份哈希。
     moved=provenance.get('archived_paths',{})
@@ -26,6 +26,11 @@ def main():
     missing=[name for name in provenance['source_hashes'] if not source_path(name).exists()]
     assert not missing,'原件缺失（既不在原路径也不在归档路径）：'+', '.join(missing)
     before={name:sha(source_path(name)) for name in provenance['source_hashes']};assert before==provenance['source_hashes']
+    # 原谱小样报告已经记录的冻结核心，GUI改动不得以当前值替换基准。
+    frozen_math={'survey_data.py':'5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f',
+                 'survey_math.py':'185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d',
+                 'run_type_survey.py':'33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16'}
+    assert frozen_math=={name:sha(ROOT/'scripts'/name) for name in frozen_math},'冻结科学脚本已变化'
     output=bundle/'verification'/('run-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f'));(bundle/'verification').mkdir(exist_ok=True);output.mkdir(exist_ok=False)
     assets=[bundle/'index.html',*list((bundle/'assets').glob('*'))];asset_hashes={str(p.relative_to(bundle)):sha(p) for p in assets}
     cases=[];errors=[];pending=set();diagnostic={};start=time.monotonic();failure=None
@@ -40,8 +45,9 @@ def main():
                 assert page.evaluate('()=>uxEditor.model.resolve("global","sourceConvention").value')=='gguf'
                 assert page.evaluate('()=>uxEditor.model.resolve("global","extraDiagnostics").value') is False
                 # 后续原有科学缓存回归明确选择其HF约定，不把旧缓存冒充新默认原值。
-                page.evaluate('()=>uxEditor.model.set("global","sourceConvention","hf")')
-                page.wait_for_function('uxEditor.results[0].settings.sourceConvention==="hf"')
+                if args.phase not in ('axes','coordinates','annotations'):
+                    page.evaluate('()=>uxEditor.model.set("global","sourceConvention","hf")')
+                    page.wait_for_function('uxEditor.results[0].settings.sourceConvention==="hf"')
             except Exception:
                 diagnostic={'status':page.locator('#status').inner_text(timeout=1000),'pending':sorted(pending)}
                 raise
@@ -77,7 +83,126 @@ def main():
             cases.append({'name':'startup_real_geometry_and_layout','result':baseline})
             print(json.dumps({'baseline':baseline,'errors':errors},ensure_ascii=False),flush=True)
             if errors:raise AssertionError(errors)
-            if args.phase=='probe':
+            axes=page.evaluate('''()=>{
+                const a=uxEditor,s=a.scene,m=a.model,before=JSON.stringify(m.snapshot()),selection=s.selected.slice(),snow=s.renderedSnow;
+                const el=document.getElementById('world-axis'),r=el.getBoundingClientRect(),view=s.element.getBoundingClientRect(),caption=document.getElementById('view-caption').getBoundingClientRect();
+                if(el.dataset.frame!=='world'||getComputedStyle(el).pointerEvents!=='none'||!el.getAttribute('aria-label').includes('Z正向上'))throw Error('世界轴语义或鼠标穿透错误');
+                if(r.width<100||r.left<view.left||r.right>view.right||r.top<view.top||r.bottom>caption.top)throw Error('世界轴超出视口或遮挡状态栏');
+                const position=s.camera.position.clone(),target=s.orbit.target.clone();
+                try{
+                    s.fit(['work'],true);const front=s.axisProjection.map(v=>({...v})),p=label=>front.find(v=>v.label===label);
+                    if(p('+X').x<=72||p('-X').x>=72||p('+Z').y>=54||p('-Z').y<=54||p('-Y').depth<.99||p('+Y').depth>-.99||s.camera.up.z!==1)throw Error('正面世界XYZ方向错误');
+                    s.camera.position.copy(s.orbit.target).add(new THREE.Vector3(60,0,0));s.orbit.update();s.render();
+                    const side=s.axisProjection.find(v=>v.label==='+X');if(side.depth<.99)throw Error('世界轴未随相机转动');
+                    const c=s.axisCanvas,rgba=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let pixels=0;for(let i=3;i<rgba.length;i+=4)if(rgba[i])pixels++;
+                    if(pixels<60)throw Error('世界轴画布没有实际绘制');
+                    if(JSON.stringify(m.snapshot())!==before||s.renderedSnow!==snow||JSON.stringify(s.selected)!==JSON.stringify(selection))throw Error('轴指示改动了模型／雪花／选择');
+                    return {front,side,pixels,model_unchanged:true,mouse_passthrough:true};
+                }finally{s.camera.position.copy(position);s.orbit.target.copy(target);s.orbit.update();s.render();}
+            }''')
+            cases.append({'name':'world_axes_projection_and_view_only','result':axes})
+            if args.phase in ('coordinates','full'):
+                coordinate_suite=page.evaluate('(source)=>{(0,eval)(source);return CoordinateTests.run();}',(ROOT/'tests/coordinate_checks.js').read_text(encoding='utf-8'))
+                cases.extend(coordinate_suite['cases'])
+            if args.phase in ('annotations','full'):
+                suite=page.evaluate('(source)=>{(0,eval)(source);return AnnotationTests.run();}',(ROOT/'tests/annotation_checks.js').read_text(encoding='utf-8'))
+                cases.extend(suite)
+                print(json.dumps({'annotation_math_cases':len(suite)},ensure_ascii=False),flush=True)
+            if args.phase=='coordinates':
+                legacy_json=json.dumps(coordinate_suite['legacy'],ensure_ascii=False)
+                restored=browser.new_page(viewport={'width':1600,'height':1050})
+                restored.add_init_script('(value=>localStorage.setItem("snowglass.editor-ux.20261122-055413-124110.v2",value))('+json.dumps(legacy_json)+')')
+                restored.goto(args.url,wait_until='domcontentloaded')
+                restored.wait_for_function('window.uxEditor?.model.nodes.has("label-old") && uxEditor.scene.annotationView.meshes.size===1 && uxEditor.results.length',timeout=45000)
+                state=restored.evaluate('()=>({camera:uxEditor.scene.camera.position.toArray(),target:uxEditor.scene.orbit.target.toArray(),system:uxEditor.getProject().coordinateSystem,old:localStorage.getItem("snowglass.editor-ux.20261122-055413-124110.v2"),key:uxEditor.storageKey})')
+                assert state['old']==legacy_json and state['key'].endswith('.v3-zup')
+                for actual,expected in ((state['camera'],coordinate_suite['expectedCamera']),(state['target'],coordinate_suite['expectedTarget'])):
+                    assert all(abs(a-b)<1e-7 for a,b in zip(actual,expected)),(actual,expected)
+                restored.wait_for_function('JSON.parse(localStorage.getItem(uxEditor.storageKey)||"null")?.coordinateSystem==="snowglass.xyz-z-up.v1"')
+                assert restored.evaluate('()=>uxEditor.scene.renderedSnow')==0
+                assert restored.evaluate('()=>localStorage.getItem("snowglass.editor-ux.20261122-055413-124110.v2")')==legacy_json
+                restored.close()
+                page.locator('#project-file').set_input_files({'name':'legacy.json','mimeType':'application/json','buffer':legacy_json.encode('utf-8')})
+                page.wait_for_function('document.getElementById("status").textContent.includes("新版工程已恢复")')
+                file_state=page.evaluate('()=>({camera:uxEditor.scene.camera.position.toArray(),system:uxEditor.getProject().coordinateSystem,labels:uxEditor.scene.annotationView.meshes.size})')
+                assert file_state['labels']==1 and file_state['system']=='snowglass.xyz-z-up.v1'
+                assert all(abs(a-b)<1e-7 for a,b in zip(file_state['camera'],coordinate_suite['expectedCamera']))
+                cases.append({'name':'legacy_browser_storage_and_file_open_preserve_camera','result':{'original_storage_unchanged':True,'new_coordinate_system':state['system']}})
+                browser.close()
+            elif args.phase=='annotations':
+                starts=[];page.on('request',lambda r:starts.append(r.url) if '/api/slice1/start' in r.url else None)
+                before_state=page.evaluate('()=>({parents:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.nodes.get(b.id).parent,uxEditor.model.world(b.id).toArray()]),requests:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                page.evaluate('()=>uxEditor.select(["L16.down"])')
+                page.locator('#annotation-axis').select_option('x');page.locator('#annotation-mode').select_option('2')
+                assert '8个标签' in page.locator('#annotation-preview').inner_text()
+                page.locator('#generate-annotations').click(timeout=10000)
+                page.wait_for_function('document.getElementById("confirm-dialog").open')
+                assert '8 个标签' in page.locator('#confirm-body').inner_text()
+                page.locator('#confirm-ok').click(timeout=10000)
+                page.wait_for_function('uxEditor.model.nodes.get(uxEditor.selected[0])?.type==="labelGroup"')
+                gid=page.evaluate('()=>uxEditor.selected[0]')
+                assert page.locator('#field-gridX').count()==0
+                interaction=page.evaluate('''()=>{
+                    const a=uxEditor,s=a.scene,m=a.model,g=a.selected[0],labels=m.children(g),id=labels[0].id,count=m.history.length,before=m.world(id);
+                    s.syncPivot();s.pivot.updateMatrixWorld(true);s.gumball.dispatchEvent({type:'dragging-changed',value:true});s.gumball.dragging=true;
+                    s.pivot.position.x+=.3;s.pivot.updateMatrixWorld(true);s.gumball.dispatchEvent({type:'objectChange'});s.gumball.dragging=false;s.gumball.dispatchEvent({type:'dragging-changed',value:false});
+                    const after=m.world(id);if(Math.abs(after.elements[12]-before.elements[12]-.3)>1e-7||m.history.length!==count+1)throw Error('标签组gumball／手势撤销错误');
+                    a.select([id]);return {id,g,count:labels.length,group_delta:.3};
+                }''')
+                assert page.locator('#annotation-text').is_visible()
+                page.get_by_text('变换 · 相对默认位置',exact=True).click() if not page.locator('[data-trs="t"][data-axis="0"]').is_visible() else None
+                page.locator('[data-trs="t"][data-axis="0"]').fill('0.2');page.locator('[data-trs="t"][data-axis="0"]').dispatch_event('change')
+                single=page.evaluate('''()=>{
+                    const a=uxEditor,m=a.model,s=a.scene,id=a.selected[0];if(Math.abs(m.localTRS(id).t[0]-.2)>1e-8)throw Error('标签数值变换未写入');
+                    const before=m.world(id),count=m.history.length;s.syncPivot();s.pivot.updateMatrixWorld(true);s.gumball.dispatchEvent({type:'dragging-changed',value:true});s.gumball.dragging=true;
+                    s.pivot.position.z+=.15;s.pivot.updateMatrixWorld(true);s.gumball.dispatchEvent({type:'objectChange'});s.gumball.dragging=false;s.gumball.dispatchEvent({type:'dragging-changed',value:false});
+                    if(Math.abs(m.world(id).elements[14]-before.elements[14]-.15)>1e-7||m.history.length!==count+1)throw Error('单标签gumball未共享状态');return {numeric:.2,gumball_z:.15};
+                }''')
+                page.locator('#annotation-text').fill('长中文标签用于完整字形测量与保存验证'*3)
+                page.locator('#annotation-text').dispatch_event('change')
+                page.wait_for_function('uxEditor.scene.annotationView.meshes.get(uxEditor.selected[0])?.userData.contentKey.includes("长中文")')
+                view=page.evaluate('''()=>{
+                    const a=uxEditor,s=a.scene,m=a.model,id=a.selected[0],mesh=s.annotationView.meshes.get(id),w=m.world(id).toArray();
+                    if(!mesh.isMesh||mesh.isSprite)throw Error('仍是相机Sprite');const size=UXAnnotationMath.shape(m,m.nodes.get(id));
+                    if(Math.abs(new THREE.Vector3().setFromMatrixColumn(m.world(id),1).length()-.7)>1e-7)throw Error('字号不是字形高度');
+                    const c=mesh.material.map.image,pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let minX=c.width,maxX=-1,minY=c.height,maxY=-1;
+                    for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(pixels[(y*c.width+x)*4+3]>20){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
+                    if(minX<2||maxX>=c.width-2||minY<2||maxY>=c.height-2||maxX<0)throw Error('字形贴图裁切或未绘制');
+                    const camera=s.camera.position.clone(),target=s.orbit.target.clone();s.camera.position.x+=10;s.orbit.update();s.render();
+                    if(m.world(id).toArray().some((v,i)=>Math.abs(v-w[i])>1e-8))throw Error('相机带着字转');s.camera.position.copy(camera);s.orbit.target.copy(target);s.orbit.update();
+                    const other=m.children(m.nodes.get(id).parent).find(n=>n.id!==id);m.setLabelText(other.id,m.nodes.get(id).data.text);s.structure();
+                    if(s.annotationView.meshes.get(other.id).material.map!==mesh.material.map)throw Error('相同文字没有共享纹理');
+                    const mapping=m.annotations([id])[0];if(mapping.front_world[2]<.99||mapping.follow.sourceId!=='L16.down')throw Error('固定朝向／跟随导出错误');
+                    return {canvas:[c.width,c.height],ink:[minX,minY,maxX,maxY],glyph_height:size.height,texture_shared:true};
+                }''')
+                after_state=page.evaluate('()=>({parents:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.nodes.get(b.id).parent,uxEditor.model.world(b.id).toArray()]),requests:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                assert before_state==after_state,'标注操作影响源块／切片参数'
+                picking=page.evaluate('''()=>{
+                    const a=uxEditor,m=a.model,s=a.scene,id=a.selected[0];for(const n of m.nodes.values())if(n.type==='label'&&n.id!==id)m.set(n.id,'visible',false);
+                    s.setMode('off');s.structure();const center=m.bounds([id]).getCenter(new THREE.Vector3());s.orbit.target.copy(center);s.camera.position.copy(center).add(new THREE.Vector3(0,-.01,20));s.orbit.update();s.render();
+                    const p=s.screen(id),hit=s.pick({clientX:p.x,clientY:p.y,altKey:false});if(hit!==id)throw Error('固定文字平面未参与点击命中');return {id,point:p};
+                }''')
+                page.mouse.click(picking['point']['x'],picking['point']['y'])
+                assert page.evaluate('()=>uxEditor.selected[0]')==picking['id']
+                page.keyboard.down('Shift');page.mouse.move(picking['point']['x']-12,picking['point']['y']-12);page.mouse.down();page.mouse.move(picking['point']['x']+12,picking['point']['y']+12,steps=3);page.mouse.up();page.keyboard.up('Shift')
+                assert picking['id'] in page.evaluate('()=>uxEditor.selected')
+                page.evaluate('(id)=>uxEditor.select([id])',picking['id'])
+                mapping=page.evaluate('async()=>uxEditor.mapping(uxEditor.selected)');assert not mapping['results'] and len(mapping['annotations'])==1
+                with page.expect_download(timeout=10000) as download:
+                    page.get_by_text('保存标注定义',exact=True).click()
+                assert download.value.suggested_filename.startswith('annotations_')
+                saved=page.evaluate('()=>uxEditor.getProject()')
+                restored=browser.new_page(viewport={'width':1600,'height':1050})
+                restored.add_init_script('(doc=>localStorage.setItem("snowglass.editor-ux.20261122-055413-124110.v2",JSON.stringify(doc)))('+json.dumps(saved)+')')
+                restored.goto(args.url,wait_until='domcontentloaded');restored.wait_for_function('window.uxEditor?.model.nodes.get(uxEditor.selected[0])?.type==="label" && uxEditor.scene.annotationView.meshes.size===8',timeout=45000)
+                assert restored.evaluate('()=>uxEditor.model.nodes.get(uxEditor.selected[0]).data.text')==next(n for n in saved['nodes'] if n['id']==interaction['id'])['data']['text']
+                assert restored.evaluate('()=>uxEditor.scene.renderedSnow')==0
+                restored.close();assert not starts,starts;assert not errors,errors
+                cases.append({'name':'actual_annotation_controls_gumball_texture_export_restore','result':{**interaction,**view,'single_transform':single,'click_and_box_select':True,'source_unchanged':True,'no_weight_job':True}})
+                browser.close()
+            elif args.phase=='axes':
+                browser.close()
+            elif args.phase=='probe':
                 diag=page.evaluate('''()=>{
                     const s=uxEditor.scene,r=s.renderer,g=r.getContext(),w=g.drawingBufferWidth,h=g.drawingBufferHeight;
                     function compare(){const on=new Uint8Array(w*h*4),off=new Uint8Array(w*h*4);s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,on);s.snow.visible=false;s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,off);s.snow.visible=true;
@@ -386,7 +511,7 @@ def main():
                 cases.append({'name':'property_panel_fixed_position','result':prop_after})
                 check('gumball_follows_object_orientation_and_survives_camera','''()=>{
                     const m=uxEditor.model,s=uxEditor.scene;m.setLocalTRS('L16.down',{t:[0,0,0],r:[0,0,.7],s:[1,1,1]});
-                    s.select(['L16.down']);s.syncPivot();const q=new THREE.Quaternion();m.world('L16.down').decompose(new THREE.Vector3(),q,new THREE.Vector3());
+                    s.select(['L16.down']);s.syncPivot();const q=new THREE.Quaternion();m.objectFrame('L16.down').decompose(new THREE.Vector3(),q,new THREE.Vector3());
                     if(s.pivot.quaternion.angleTo(q)>1e-6)throw Error('手柄姿态没有跟随对象旋转');
                     const pos=s.pivot.position.clone();s.camera.position.x+=6;s.orbit.update();s.render();
                     if(s.pivot.position.distanceTo(pos)>1e-9||s.pivot.quaternion.angleTo(q)>1e-6)throw Error('视角变化重置了手柄');
@@ -413,8 +538,9 @@ def main():
     except Exception as e:
         failure=str(e)
     after={name:sha(source_path(name)) for name in provenance['source_hashes']};assert before==after,'旧文件被修改'
+    assert frozen_math=={name:sha(ROOT/'scripts'/name) for name in frozen_math},'验证期间科学核心被修改'
     assert asset_hashes=={str(p.relative_to(bundle)):sha(p) for p in assets},'测试期间新版代码被修改'
-    report={'phase':args.phase,'passed':failure is None,'failure':failure,'page_errors':errors,'diagnostic':diagnostic,'cases':cases,'source_unchanged':True,'assets_sha256':asset_hashes,'test_sha256':sha(Path(__file__)),'seconds':time.monotonic()-start}
+    report={'phase':args.phase,'passed':failure is None,'failure':failure,'page_errors':errors,'diagnostic':diagnostic,'cases':cases,'source_unchanged':True,'frozen_math_sha256':frozen_math,'assets_sha256':asset_hashes,'test_sha256':sha(Path(__file__)),'seconds':time.monotonic()-start}
     with (output/'checks.json').open('x',encoding='utf-8') as f:json.dump(report,f,ensure_ascii=False,allow_nan=False,indent=2)
     print(json.dumps({'passed':report['passed'],'cases':len(cases),'failure':failure,'report':str(output/'checks.json'),'source_unchanged':True},ensure_ascii=False),flush=True)
     if failure:raise SystemExit(1)

@@ -6,6 +6,7 @@
   --warning:38 78% 66%; --danger:2 65% 66%;
   --line:240 4% 27%; --curve-bg:240 5% 5%; --blue:205 45% 70%;
   --support-panel:240 5% 8%; --profile-guide:240 4% 27%;
+  --axis-x:2 82% 72%; --axis-y:130 55% 69%; --axis-z:210 90% 73%;
   --sidebar-width:380px; --tree-height:290px; --row:21px;
 }
 [hidden]{display:none !important}
@@ -152,10 +153,27 @@ h2{font-size:11px;font-weight:550;letter-spacing:-.01em;margin:0}
 .curve-values label{font-size:9px;color:hsl(var(--muted))}
 .curve-values input{width:100%;padding:2px 4px;font-size:11px}
 .source-piece{padding:4px 6px;background:hsl(var(--surface));border-radius:4px;margin:3px 0;font-size:9px;overflow-wrap:anywhere;line-height:1.4}
+.annotation-generator{border:1px solid hsl(var(--border));border-radius:4px;padding:6px;margin:4px 0 8px;background:hsl(var(--surface)/.35)}
+.annotation-field{display:grid;grid-template-columns:1fr;gap:3px;margin:4px 0;color:hsl(var(--muted));font-size:10px}
+.annotation-field select,.annotation-field input{width:100%;min-width:0;font-size:10px}
+.annotation-generator button{width:100%;color:hsl(var(--info));border-color:hsl(var(--info)/.5);margin-top:5px}
+.annotation-jump{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;margin:3px 0;color:hsl(var(--info))}
 
 /* 视口 */
 #view{position:relative;min-height:0;overflow:hidden;background:hsl(var(--bg))}
 #view>canvas{display:block;width:100%;height:100%;touch-action:none}
+#world-axis{
+  position:absolute;left:10px;bottom:32px;z-index:2;width:144px;pointer-events:none;
+  background:hsl(var(--panel)/.88);border:1px solid hsl(var(--border));border-radius:5px;
+  color:hsl(var(--ink));font-size:10px;line-height:1.4;letter-spacing:0;
+}
+#world-axis .axis-title{padding:4px 7px 0;color:hsl(var(--muted))}
+#world-axis canvas{display:block;width:100%;height:108px}
+#world-axis .axis-legend{padding:0 7px 5px}
+#world-axis .axis-legend span{display:block;white-space:nowrap}
+#world-axis .axis-x{color:hsl(var(--axis-x))}
+#world-axis .axis-y{color:hsl(var(--axis-y))}
+#world-axis .axis-z{color:hsl(var(--axis-z))}
 /* 视口工具：一条紧凑条，其余收进菜单／弹层 */
 .view-tools{
   position:absolute;top:8px;left:8px;z-index:4;display:flex;align-items:center;gap:4px;

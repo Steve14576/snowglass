@@ -1,8 +1,8 @@
 /* 独立UX启动与联动。旧工程键、旧缓存和服务不修改。 */
 (async()=>{
   'use strict';
-  const $=id=>document.getElementById(id),storageKey='snowglass.editor-ux.20261122-055413-124110.v2';
-  const kindName={global:'全局配置',root:'模型根',tower:'塔',layer:'层',group:'操作组',block:'权重功能块',ghost:'幽灵毛坯',reference:'参照集合',project:'工程'};
+  const $=id=>document.getElementById(id),storageKey='snowglass.editor-ux.20261122-055413-124110.v3-zup',legacyStorageKey='snowglass.editor-ux.20261122-055413-124110.v2';
+  const kindName={global:'全局配置',root:'模型根',tower:'塔',layer:'层',group:'操作组',block:'权重功能块',ghost:'幽灵毛坯',reference:'参照集合',project:'工程',annotationRoot:'标注',labelGroup:'标签组',label:'独立标签'};
   const message=text=>$('status').textContent=text;
   function bootFail(title,body,hint,cmd){
     const box=$('boot-error');if(!box)return;
@@ -133,7 +133,8 @@
       }
       const n=model.nodes.get(selected[0]);h.textContent=n.name+' · '+n.id;el.append(h);
       const kind=document.createElement('p');kind.className='id-kind';kind.textContent=kindName[n.type]||n.type;el.append(kind);
-      if(n.type==='block'){
+      if(UXAnnotationState.is(n)){UXAnnotationUI.identity(model,n).forEach(row);}
+      else if(n.type==='block'){
         const src=topo.blocks.find(b=>b.id===n.sourceId)||(topo.geometry_only||[]).find(b=>b.id===n.sourceId);
         if(src){
           row(`源层 ${src.layer!=null?'L'+src.layer:src.vlayer!=null?'V'+src.vlayer:'—'} · 槽位 ${src.slot||'—'} · ${(src.tensors||[]).length} 个张量`);
@@ -176,18 +177,18 @@
     }
     function hover(id,event){const card=$('hover-card');if(!id){card.hidden=true;return;}const n=model.nodes.get(id),source=topo.blocks.find(b=>b.id===n.sourceId);card.textContent=n.name+' · '+n.id+'\n'+(source?.tensors||[]).map(t=>t.gguf+' '+t.shape.join('×')).join('\n');
       const r=$('view').getBoundingClientRect();card.style.left=Math.max(8,Math.min(event.clientX-r.left+15,r.width-370))+'px';card.style.top=Math.max(8,Math.min(event.clientY-r.top+15,r.height-100))+'px';card.hidden=false;}
-    tree=new UXTree(model,data,select,reparent);inspector=new UXInspector(model,message);
+    tree=new UXTree(model,data,select,reparent);inspector=new UXInspector(model,message,{select:ids=>{tree.reveal=true;select(ids);},confirm:confirmAction,message,saveAnnotations});
     scene=new UXScene($('view'),model,(ids,mode)=>{tree.reveal=true;select(ids,mode);},hover,()=>inspector.updateTransform());model.listeners.push(refresh);
     async function group(){try{const ids=model.roots(selected),parents=ids.map(id=>model.ancestors(id));if(!ids.length)throw Error('先多选或框选对象');
       const parent=parents[0].find(p=>parents.every(a=>a.includes(p))),changes=ids.flatMap(id=>model.changes(id,parent));
       if(changes.length&&!await confirmAction('打组将改变部分继承参数','成员移动到共同上级下的新组，以下参数的继承来源将变化：\n'+[...new Set(changes)].join('、')+'\n世界变换保留；不会复制整套参数。'))return;
       const id=model.group(ids);select([id]);tree.open.add(id);tree.render();message('新组无局部覆盖；只改动／固定的项才覆盖');}catch(e){message(e.message);}}
-    async function ungroup(keep){const id=selected.length===1?selected[0]:null,g=model.nodes.get(id);if(g?.type!=='group'){message('先选一个操作组');return;}
+    async function ungroup(keep){const id=selected.length===1?selected[0]:null,g=model.nodes.get(id);if(!['group','labelGroup'].includes(g?.type)){message('先选一个操作组或标签组');return;}
       const children=model.children(id).map(n=>n.id),keys=Object.keys(g.overrides);
       if(keys.length&&!await confirmAction(keep?'解组并保留组局部设置':'解组后继续继承',keep?'仅将组实际覆盖的适用项下放为成员本地值，不盖过成员已有覆盖：\n'+keys.join('、'):'组的这些局部覆盖随组撤销，成员未覆盖项改为继承上级：\n'+keys.join('、')))return;
       safe(()=>model.ungroup(id,keep));select(children);message(keep?'已解组，明确保留了相关局部覆盖':'已解组，未覆盖项继续继承');}
     $('group').onclick=group;$('ungroup').onclick=()=>ungroup(false);$('ungroup-keep').onclick=()=>ungroup(true);
-    $('remove').onclick=async()=>{const ids=model.roots(selected);if(!ids.length)return;if(await confirmAction('从当前工程删除所选及其内容',ids.map(id=>model.nodes.get(id).name).join('\n')+'\n此操作可撤销，不删除权重或缓存文件。'))safe(()=>{model.commit(()=>{for(const id of ids){if(['project','global','work','text','vision','refs'].includes(id))throw Error('不能删除系统根');for(const key of [id,...model.descendants(id)])model.nodes.delete(key);}if(!model.nodes.has(model.primaryGhost))model.primaryGhost=[...model.nodes.values()].find(n=>n.type==='ghost')?.id||null;});select([]);});};
+    $('remove').onclick=async()=>{const ids=model.roots(selected);if(!ids.length)return;if(await confirmAction('从当前工程删除所选及其内容',ids.map(id=>model.nodes.get(id).name).join('\n')+'\n可撤销；不删除权重或缓存。删除源块会解除相关标注跟随，并保留最后位置。'))safe(()=>{model.removeMany(ids);select([]);});};
     $('new-box').onclick=()=>safe(()=>select([model.newGhost('box')]));$('new-cylinder').onclick=()=>safe(()=>select([model.newGhost('cylinder')]));
     $('undo').onclick=()=>safe(()=>model.undo());$('redo').onclick=()=>safe(()=>model.redo());
     $('select-all').onclick=()=>select([...model.nodes.values()].filter(n=>n.type==='block').map(n=>n.id));$('select-none').onclick=()=>select([]);
@@ -214,11 +215,13 @@
     $('exposure').oninput=()=>{scene.exposure=+$('exposure').value;$('exposure-out').textContent=scene.exposure.toFixed(2);scene.drawSnow(viewMode==='preview'?results:[]);};
     $('report-toggle').onclick=()=>{$('report').hidden=!$('report').hidden;renderReport();};$('focus-toggle').onclick=()=>{document.body.classList.toggle('focus');scene.resize();};
     $('save-project').onclick=()=>download(snapshot(),'snowglass_ux_'+stamp()+'.json');$('open-project').onclick=()=>$('project-file').click();
-    $('project-file').onchange=async()=>{try{const doc=JSON.parse(await $('project-file').files[0].text());model.load(doc);if(doc.view?.camera&&doc.view.camera.length===3&&[...doc.view.camera,...doc.view.target].every(Number.isFinite)){scene.camera.position.fromArray(doc.view.camera);scene.orbit.target.fromArray(doc.view.target);scene.orbit.update();}
+    function restoreCamera(doc){if(doc.view?.camera&&doc.view.camera.length===3&&[...doc.view.camera,...doc.view.target].every(Number.isFinite)){scene.camera.position.fromArray(doc.view.camera);scene.orbit.target.fromArray(doc.view.target);scene.orbit.update();scene.render();}}
+    $('project-file').onchange=async()=>{try{const doc=UXCoordinates.prepare(JSON.parse(await $('project-file').files[0].text()));model.load(doc);restoreCamera(doc);
         if(Array.isArray(doc.view?.open))tree.open=new Set(doc.view.open);preview=(doc.view?.preview||['L16.down']).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);$('isolate-view').setAttribute('aria-checked',String(scene.isolate));
         await slicing.restore(doc);select((doc.view?.selected||['work']).filter(id=>model.nodes.has(id)));message('新版工程已恢复，继承关系、覆盖与切片引用保留');}catch(e){message('打开失败：'+e.message);}finally{$('project-file').value='';}};
-    $('save-mapping').onclick=async()=>{if(!selected.length){message('先选择有真实统计的块或组');return;}const button=$('save-mapping');button.disabled=true;
-      try{const frozen=new UXModel.Model(topo,provenance);frozen.restore(model.snapshot());const scope=selected.length===1&&selected[0]==='global'?['work']:selected.slice();const doc=await data.mapping(scope,frozen);if(!doc.results.some(r=>r.pieces.length))throw Error('所选范围没有真实统计，不输出空白冒充成功');doc.project=frozen.snapshot();download(doc,'gray_mapping_'+stamp()+'.json');message('灰度映射已保存为新文件；未生成厂家加工文件');}
+    function saveAnnotations(ids){try{const frozen=new UXModel.Model(topo,provenance);frozen.restore(model.snapshot());const annotations=frozen.annotations(ids);if(!annotations.length)throw Error('所选范围没有独立标注');download({kind:'snowglass.annotations.v1',coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:'glyph-xy-plane',created_at:new Date().toISOString(),annotations,project:frozen.snapshot(),glyph_geometry:'未接入厂家可加工轮廓；这里只保存固定文字定义'},'annotations_'+stamp()+'.json');message('独立标注定义已保存，未生成厂家加工字形');}catch(e){message(e.message);}}
+    $('save-mapping').onclick=async()=>{if(!selected.length){message('先选择有真实统计或标注的对象');return;}const button=$('save-mapping');button.disabled=true;
+      try{const frozen=new UXModel.Model(topo,provenance);frozen.restore(model.snapshot());const scope=selected.length===1&&selected[0]==='global'?['work']:selected.slice();const doc=await data.mapping(scope,frozen);if(!doc.results.some(r=>r.pieces.length)&&!doc.annotations.length)throw Error('所选范围没有真实统计或标注，不输出空白冒充成功');doc.project=frozen.snapshot();download(doc,'gray_mapping_'+stamp()+'.json');message('灰度映射已保存为新文件；未生成厂家加工文件');}
       catch(e){message(e.message);}finally{button.disabled=false;refreshData();}};
     // 侧栏宽度与树／属性高度：各拖各的，不互相挤掉。
     const root=document.documentElement,resizer=$('sidebar-resizer'),treeSplit=$('tree-splitter');
@@ -256,15 +259,15 @@
         if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();$('remove').click();}
       }
     });
-    try{const stored=localStorage.getItem(storageKey);if(stored){const doc=JSON.parse(stored);bootDoc=doc;model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);const iso=$('isolate-view');iso.classList.toggle('active',scene.isolate);iso.setAttribute('aria-checked',String(scene.isolate));}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
+    try{const stored=localStorage.getItem(storageKey)||localStorage.getItem(legacyStorageKey);if(stored){const doc=UXCoordinates.prepare(JSON.parse(stored));bootDoc=doc;model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);const iso=$('isolate-view');iso.classList.toggle('active',scene.isolate);iso.setAttribute('aria-checked',String(scene.isolate));}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
     slicing=new UXSlicing(model,data,{selected:()=>selected,view:()=>viewMode,message,confirm:confirmAction,progress:showProgress,hideProgress,
       dataChanged:async(autoPreview)=>{++serial;scene.drawSnow([]);inspector.render();tree.render();renderIdentity();
         clearTimeout(saveTimer);saveTimer=setTimeout(()=>localStorage.setItem(storageKey,JSON.stringify(snapshot())),400);
         if(!autoPreview)await refreshData();},preview:async()=>{await enterPreview();}});
     window.uxEditor={model,data,scene,tree,inspector,slicing,select,get selected(){return selected;},get results(){return results;},get viewMode(){return viewMode;},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,renderIdentity,
-      loadProject:async doc=>{model.load(doc);await slicing.restore(doc);select(['work']);},mapping:ids=>data.mapping(ids.length===1&&ids[0]==='global'?['work']:ids,model),storageKey};
+      loadProject:async doc=>{doc=UXCoordinates.prepare(doc);model.load(doc);await slicing.restore(doc);restoreCamera(doc);select(['work']);},mapping:ids=>data.mapping(ids.length===1&&ids[0]==='global'?['work']:ids,model),saveAnnotations,storageKey};
     await slicing.initialize(bootDoc);
-    $('coverage').textContent='已有统计可预览 · 一级切片须显式确认';renderViewState();select(selected);mode('translate');scene.fit(['work']);
+    $('coverage').textContent='已有统计可预览 · 一级切片须显式确认';renderViewState();select(selected);mode('translate');scene.fit(['work']);if(bootDoc){restoreCamera(bootDoc);try{localStorage.setItem(storageKey,JSON.stringify(snapshot()));}catch(e){message('新坐标自动保存失败，请保存工程文件：'+e.message);}}
   }catch(e){
     message('启动失败：'+e.message);console.error(e);
     bootFail('启动失败',e.message,

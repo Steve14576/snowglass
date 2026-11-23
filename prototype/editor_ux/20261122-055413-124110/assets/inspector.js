@@ -1,7 +1,7 @@
 /* 所选对象属性：继承值可直接改，改这一项才覆盖；固有身份不继承。 */
 (() => {
   'use strict';
-  const typeNames={global:'全局配置',root:'模型根',tower:'塔',layer:'层',group:'操作组',block:'权重功能块',ghost:'幽灵毛坯',reference:'参照集合',project:'工程'};
+  const typeNames={global:'全局配置',root:'模型根',tower:'塔',layer:'层',group:'操作组',block:'权重功能块',ghost:'幽灵毛坯',reference:'参照集合',project:'工程',annotationRoot:'标注',labelGroup:'标签组',label:'独立标签'};
   const RANGES={
     gridX:[1,64,1],gridY:[1,64,1],gridZ:[1,64,1],
     frameT:[0,.5,.001],shellT:[0,.5,.001],frameGray:[0,1,.005],shellGray:[0,1,.002],
@@ -11,7 +11,7 @@
     squash:[.2,2,.01],depth:[1,30,.1],pitch:[.02,.3,.005],dotUm:[20,120,1],speed:[500,20000,100]
   };
   class Inspector {
-    constructor(model,error){this.model=model;this.error=error;this.ids=[];this.open=new Set(['gray','labels','ghost']);this.element=document.getElementById('properties');this.curveUI=null;}
+    constructor(model,error,actions={}){this.model=model;this.error=error;this.actions=actions;this.ids=[];this.open=new Set(['gray','labels','ghost']);this.element=document.getElementById('properties');this.curveUI=null;}
     safe(fn){try{fn();}catch(e){this.error(e.message);this.render();}}
     section(key,title){const d=document.createElement('details');d.className='prop-section';d.open=this.open.has(key);d.ontoggle=()=>{d.open?this.open.add(key):this.open.delete(key);};
       const s=document.createElement('summary');s.textContent=title;const body=document.createElement('div');body.className='prop-body';d.append(s,body);this.element.append(d);return body;}
@@ -63,7 +63,7 @@
     }
     transform(body){
       const M=this.model,ids=this.ids,single=ids.length===1?M.nodes.get(ids[0]):null;
-      const editable=single&&!['global','project','reference'].includes(single.type);
+      const editable=single&&!['global','project','reference','annotationRoot'].includes(single.type);
       if(!editable){
         const box=M.bounds(ids);if(box.isEmpty())return;
         this.note(body,'多选或不可直接变换的对象：下面是世界读数，只读。要参数化整体变换，先把它们打成组再选中该组。');
@@ -71,7 +71,7 @@
         read.textContent=`世界中心 ${box.getCenter(new THREE.Vector3()).toArray().map(v=>v.toFixed(3)).join(', ')} mm · 包围盒 ${box.getSize(new THREE.Vector3()).toArray().map(v=>v.toFixed(3)).join(' × ')} mm`;
         body.append(read);return;
       }
-      this.note(body,'相对默认位置的参数化值，可直接复制记录。偏移与旋转相对上级默认槽位，缩放是倍数；gumball 与这些数字共用同一状态。');
+      this.note(body,'相对默认位置的参数化值，可直接复制记录。父级XYZ使用Z向上的约定（X右、Y后、Z上）；偏移与旋转相对上级默认槽位，缩放是倍数。gumball与数字共用状态，权重网格的局部轴另行记录。');
       const trs=M.localTRS(single.id);
       for(const [key,title,values,factor,hint] of [
         ['t','偏移 mm',trs.t,1,'可负值；0 即回到默认位置。'],
@@ -111,18 +111,19 @@
       document.getElementById('property-kind').textContent=ids.length===1?typeNames[M.nodes.get(ids[0]).type]:'';this.element.textContent='';this.curveUI=null;
       const summary=document.getElementById('property-summary');summary.textContent=ids.length?'修改值才覆盖，其余实时继承。缺少所需来源／约定／网格／诊断时需显式切片；窗口、曲线与几何即时生效。':'在树或视口选择对象；不自动把输入当作修改全局。';
       if(!ids.length)return;const first=M.nodes.get(ids[0]),global=ids.length===1&&first.type==='global';
-      if(ids.length===1&&['group','ghost'].includes(first.type)){const input=document.createElement('input');input.type='text';input.value=first.name;input.setAttribute('aria-label','对象名称');input.onchange=()=>this.safe(()=>M.rename(first.id,input.value));this.element.append(input);}
-      if(ids.every(id=>!['global','project','reference'].includes(M.nodes.get(id).type)))this.transform(this.section('transform','变换 · 相对默认位置'));
+      if(ids.length===1&&['group','ghost','labelGroup'].includes(first.type)){const input=document.createElement('input');input.type='text';input.value=first.name;input.setAttribute('aria-label','对象名称');input.onchange=()=>this.safe(()=>M.rename(first.id,input.value));this.element.append(input);}
+      if(ids.every(id=>!['global','project','reference','annotationRoot'].includes(M.nodes.get(id).type)))this.transform(this.section('transform','变换 · 相对默认位置'));
+      if(UXAnnotationUI.render(this))return;
       if(ids.length===1&&first.type==='ghost'){
         const body=this.section('ghost','毛坯基本特征与参照'),d=first.data;this.note(body,'形状：'+(d.shape==='box'?'长方体':'圆柱')+'；切换形状的换算未拍板，可新建另一形状。');
-        const fields=d.shape==='box'?[['宽 mm',0,d.dims[0]],['高 mm',1,d.dims[1]],['深 mm',2,d.dims[2]]]:[['半径 mm','radius',d.radius],['高度 mm','height',d.height]];
+        const fields=d.shape==='box'?[['宽 mm · 局部X',0,d.dims[0]],['高 mm · 局部Z',1,d.dims[1]],['深 mm · 局部Y',2,d.dims[2]]]:[['半径 mm','radius',d.radius],['高度 mm','height',d.height]];
         fields.push(['向内预留 mm','margin',d.margin]);for(const [name,key,value] of fields){const label=document.createElement('div');label.className='prop-row';const span=document.createElement('span');span.textContent=name;const input=document.createElement('input');input.type='number';input.step='any';input.value=value;input.dataset.ghostKey=key;input.setAttribute('aria-label',name);input.onchange=()=>this.safe(()=>{if(!input.value.trim())throw Error('请输入尺寸');M.ghostField(first.id,key,+input.value);});label.append(span,input);body.append(label);}
         const button=document.createElement('button');button.textContent=M.primaryGhost===first.id?'当前主参照':'设为主参照';button.disabled=M.primaryGhost===first.id;button.onclick=()=>M.commit(()=>M.primaryGhost=first.id);body.append(button);this.note(body,'毛坯只作参照；改变它不缩模型、不重算权重。圆柱非均匀变换下内偏移为保守近似。',true);return;
       }
       if(ids.some(id=>['project','reference','ghost'].includes(M.nodes.get(id).type))){this.note(this.element,'此选择仅支持适用的几何管理；没有雪花算法属性。');return;}
       const slice=this.section('slice','一级切片 · 统计生成');
-      this.field(slice,'gridX','分区 X 格数上限');this.field(slice,'gridY','分区 Y 格数上限');this.field(slice,'gridZ','分区 Z 格数上限');
-      this.note(slice,'网格改后点击右上一级切片。所有权重参与均值合并；每格具体合并多少以 counts 为准。默认16×16×32沿用原探路配方；每分区最多65536格是当前资源限制。');
+      this.field(slice,'gridX','数据局部 X 格数上限');this.field(slice,'gridY','数据局部 Y 格数上限');this.field(slice,'gridZ','数据局部 Z 格数上限');
+      this.note(slice,'网格改后点击右上一级切片。所有权重参与均值合并；网格XYZ是折叠数据的局部轴，不是世界轴，坐标迁移不改变这些格数。每格具体合并多少以 counts 为准。默认16×16×32沿用原探路配方；每分区最多65536格是当前资源限制。');
       this.field(slice,'sourceConvention','权重数值约定',[['gguf','GGUF文件原值'],['hf','HF约定对齐（可选）']]);
       this.field(slice,'extraDiagnostics','额外诊断统计（可选）');
       this.note(slice,'新工程默认GGUF原值、不启用额外诊断；旧工程保留当时的HF约定，需显式切换。对齐只修正数值／排列约定，不恢复量化前精度。');
@@ -141,6 +142,7 @@
       if(global){this.field(layout,'squash','纵向压缩配方');this.field(layout,'depth','基础配方深度 mm');}this.note(layout,'配方不是空间变换；块宽以原层槽位组为单位，不在任意打组中重分参数量。');
       const compose=this.section('compose','显示与作品组成');this.field(compose,'visible','屏幕可见');this.field(compose,'include','进入作品');this.note(compose,'屏幕隐藏不等于不进作品；两者分开。');
       const label=this.section('labels','文字与输出');
+      if(ids.length===1&&first.type==='block')UXAnnotationUI.controls(this,label,first.id);
       this.field(label,'labels','屏幕上显示');
       this.field(label,'labelOutput','随作品／切片输出');
       this.textField(label,'labelText','标签文字','留空则用对象自身名字');
@@ -156,7 +158,7 @@
     selection(ids){this.ids=ids;this.render();}
     updateTransform(){
       const single=this.ids.length===1?this.model.nodes.get(this.ids[0]):null;
-      if(!single||['global','project','reference'].includes(single.type))return;
+      if(!single||['global','project','reference','annotationRoot'].includes(single.type))return;
       const trs=this.model.localTRS(single.id);
       this.element.querySelectorAll('[data-trs]').forEach(input=>{
         if(input===document.activeElement)return;

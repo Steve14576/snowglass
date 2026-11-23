@@ -1,0 +1,259 @@
+{
+  "phase": "annotations",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 437,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "sidebar_right": 380,
+        "view_left": 385,
+        "tree_y": 40,
+        "properties_y": 335,
+        "slice_disabled": false
+      }
+    },
+    {
+      "name": "world_axes_projection_and_view_only",
+      "result": {
+        "front": [
+          {
+            "axis": "X",
+            "sign": -1,
+            "label": "-X",
+            "x": 42,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "X",
+            "sign": 1,
+            "label": "+X",
+            "x": 102,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "Y",
+            "sign": -1,
+            "label": "-Y",
+            "x": 72,
+            "y": 84,
+            "depth": -6.154770511392546e-17
+          },
+          {
+            "axis": "Y",
+            "sign": 1,
+            "label": "+Y",
+            "x": 72,
+            "y": 24,
+            "depth": 6.154770511392546e-17
+          },
+          {
+            "axis": "Z",
+            "sign": -1,
+            "label": "-Z",
+            "x": 72,
+            "y": 54,
+            "depth": -1
+          },
+          {
+            "axis": "Z",
+            "sign": 1,
+            "label": "+Z",
+            "x": 72,
+            "y": 54,
+            "depth": 1
+          }
+        ],
+        "side": {
+          "axis": "X",
+          "sign": 1,
+          "label": "+X",
+          "x": 72,
+          "y": 54,
+          "depth": 1
+        },
+        "pixels": 1700,
+        "model_unchanged": true,
+        "mouse_passthrough": true
+      }
+    },
+    {
+      "name": "nine_modes_exact_members_and_external_placement",
+      "result": [
+        {
+          "axis": "x",
+          "mode": 0,
+          "labels": 3,
+          "members": 12
+        },
+        {
+          "axis": "x",
+          "mode": 1,
+          "labels": 3,
+          "members": 6
+        },
+        {
+          "axis": "x",
+          "mode": 2,
+          "labels": 3,
+          "members": 24
+        },
+        {
+          "axis": "y",
+          "mode": 0,
+          "labels": 4,
+          "members": 12
+        },
+        {
+          "axis": "y",
+          "mode": 1,
+          "labels": 4,
+          "members": 8
+        },
+        {
+          "axis": "y",
+          "mode": 2,
+          "labels": 4,
+          "members": 24
+        },
+        {
+          "axis": "z",
+          "mode": 0,
+          "labels": 2,
+          "members": 6
+        },
+        {
+          "axis": "z",
+          "mode": 1,
+          "labels": 2,
+          "members": 8
+        },
+        {
+          "axis": "z",
+          "mode": 2,
+          "labels": 2,
+          "members": 24
+        }
+      ]
+    },
+    {
+      "name": "coordinate_tolerance_boundary",
+      "result": {
+        "tolerance": 1e-06
+      }
+    },
+    {
+      "name": "real_topology_nine_modes_and_independent_ends",
+      "result": {
+        "mode_counts": [
+          8,
+          8,
+          8,
+          32,
+          32,
+          32,
+          1,
+          1,
+          1,
+          4,
+          4,
+          4,
+          27,
+          27,
+          27,
+          1,
+          1,
+          1
+        ],
+        "initial_nodes": 437,
+        "created": 32
+      }
+    },
+    {
+      "name": "follow_source_preserves_manual_edits_and_size",
+      "result": {
+        "follow": true,
+        "source_scale_excluded": true,
+        "lost_source_preserved": true
+      }
+    },
+    {
+      "name": "nested_groups_distinct_sources_and_sparse_styles",
+      "result": {
+        "independent_sources": true,
+        "ungroup_follow": true
+      }
+    },
+    {
+      "name": "migration_export_and_invalid_annotations",
+      "result": {
+        "legacy": true,
+        "roundtrip": true,
+        "invalid_rejected": true
+      }
+    },
+    {
+      "name": "actual_annotation_controls_gumball_texture_export_restore",
+      "result": {
+        "id": "label-2",
+        "g": "label-group-1",
+        "count": 8,
+        "group_delta": 0.3,
+        "canvas": [
+          3463,
+          71
+        ],
+        "ink": [
+          4,
+          4,
+          3458,
+          66
+        ],
+        "glyph_height": 0.7,
+        "texture_shared": true,
+        "single_transform": {
+          "numeric": 0.2,
+          "gumball_z": 0.15
+        },
+        "click_and_box_select": true,
+        "source_unchanged": true,
+        "no_weight_job": true
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "assets_sha256": {
+    "index.html": "839073a73e708a6e7467da52586f437c70de635c74ed06a64a6ac35d8dedc22c",
+    "assets\\annotation_math.js": "c127f432b1d57e8b0dd49ce73e6c4d23ab410ec13648a4a464323df18c76e69c",
+    "assets\\annotation_state.js": "5c50c3e2bbb995a1dd778d1a86cd7e18362ef8dff0a860f1dd63d9d788a18c68",
+    "assets\\annotation_ui.js": "be13fb6a704de6570e206966f4d62cdb41f60dae630ab3b73a8055cb915e2d15",
+    "assets\\annotation_view.js": "91a9bd134e85906a1fe248c2bb1e4f71f163043d9afcfc3f3217e6ac61394c6b",
+    "assets\\app.js": "aa398e21069c7a8fa83f4af6b8dfcd9be74b2c003d45e0b068ce38c52ded2965",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "59beffdfc5c13935ade7c8f5eed9880d693094b222e9b0e163c8c5347f05dc0a",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "a4b9f979388edc8c13a2976dc0f70b3ab0df855c2b09792422e1b02662873ad7",
+    "assets\\editor.css": "72bb41d234dff5540381b0f75420f1e1f084db9e8689edda00fc7a4476bb9288",
+    "assets\\inspector.js": "9e29388ce840c58bce207273ef9171390bacb9bf99ffe34be88a8378db10e91b",
+    "assets\\layout.js": "b6e78479bbfbb275f61af486a7cda4377d0aae108e80c83f36007d72a66a4573",
+    "assets\\model.js": "450895c64f6f076d6644229e3d52311b02a66702ee265d1ba0b0e60770118e9b",
+    "assets\\scene.js": "ff1ba8a2766c0685815af7e88000794aea2b8bc8fcba3a2c7f8390f626fdd31d",
+    "assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "assets\\tree.js": "cb1fc950f50ae27fa98b4183a149d949cd3184e4fb34cf3b1ccd9b874a30dff4"
+  },
+  "test_sha256": "678406d8c301d1744b1e81ffd2c63a8110bb14f08dd09ba692edfa80e93c19b0",
+  "seconds": 19.42099999997299
+}

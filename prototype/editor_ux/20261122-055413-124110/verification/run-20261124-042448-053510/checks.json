@@ -1,0 +1,112 @@
+{
+  "phase": "axes",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 436,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          26.391999999999996,
+          7.13
+        ],
+        "sidebar_right": 380,
+        "view_left": 385,
+        "tree_y": 40,
+        "properties_y": 335,
+        "slice_disabled": false
+      }
+    },
+    {
+      "name": "world_axes_projection_and_view_only",
+      "result": {
+        "front": [
+          {
+            "axis": "X",
+            "sign": -1,
+            "label": "-X",
+            "x": 42,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "X",
+            "sign": 1,
+            "label": "+X",
+            "x": 102,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "Y",
+            "sign": -1,
+            "label": "-Y",
+            "x": 72,
+            "y": 84,
+            "depth": -6.154770511392546e-17
+          },
+          {
+            "axis": "Y",
+            "sign": 1,
+            "label": "+Y",
+            "x": 72,
+            "y": 24,
+            "depth": 6.154770511392546e-17
+          },
+          {
+            "axis": "Z",
+            "sign": -1,
+            "label": "-Z",
+            "x": 72,
+            "y": 54,
+            "depth": -1
+          },
+          {
+            "axis": "Z",
+            "sign": 1,
+            "label": "+Z",
+            "x": 72,
+            "y": 54,
+            "depth": 1
+          }
+        ],
+        "side": {
+          "axis": "X",
+          "sign": 1,
+          "label": "+X",
+          "x": 72,
+          "y": 54,
+          "depth": 1
+        },
+        "pixels": 1700,
+        "model_unchanged": true,
+        "mouse_passthrough": true
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "assets_sha256": {
+    "index.html": "e66a10ccb2bf17a5fc18091a6d9f8291793cbf770ba1e5688283095005ba9810",
+    "assets\\app.js": "f4a6f30e091030c772fa57224f2d3590b784a1712647dd12c10992dc793ffe2f",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "59beffdfc5c13935ade7c8f5eed9880d693094b222e9b0e163c8c5347f05dc0a",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "ccd0a0ced9096cd9badf45a4f1f467cb5d2887d3489f0b7513bfc7120004536a",
+    "assets\\editor.css": "367379d16a052feb63cda06e0bcdf2f70a6b7572d6be1e9557014ef87d91215e",
+    "assets\\inspector.js": "82d4a2fc761cf8d941e89a276059d640c68d714ff9b94dc73f975bf7fb904ca7",
+    "assets\\layout.js": "b6e78479bbfbb275f61af486a7cda4377d0aae108e80c83f36007d72a66a4573",
+    "assets\\model.js": "a0dc396bc5cb23f1bf9fa9f6b99dd2d7c684c2063e3609c1bb72ab058247af75",
+    "assets\\scene.js": "de39ec6b063a0ba2e9e243fed420f633bc84e1d18b0c57c38c366ec1cbb115ee",
+    "assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "assets\\tree.js": "ee55aab46979ceba66d4e9423b02d2ff8efb248b477d43db364a0510ded19d18"
+  },
+  "test_sha256": "3a7d903f58541b6f26b8590e36d718b36846cba6361b6ddf4303c02cbbe62685",
+  "seconds": 6.063000000023749
+}

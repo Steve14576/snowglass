@@ -36,7 +36,7 @@
       for(let i=0;i<this.topo.model.n_layers;i++)add('layer-'+i,'layer','L'+String(i).padStart(2,'0'),'text');
       for(let i=0;i<this.topo.model.vision_layers;i++)add('vlayer-'+i,'layer','V'+String(i).padStart(2,'0'),'vision');
       for(const b of this.topo.blocks){const parent=b.id.startsWith('V')?(Number.isInteger(b.vlayer)?'vlayer-'+b.vlayer:'vision'):(Number.isInteger(b.layer)?'layer-'+b.layer:'text');add(b.id,'block',b.label,parent,b.id);}
-      add('mtp','block','MTP · 权重未收录','text','mtp');
+      add('mtp','block','MTP · 权重未收录','text','mtp');add('annotations','annotationRoot','标注','project');
       const g=add('ghost-1','ghost','参照毛坯 1','refs');g.data={shape:'box',dims:[25,80,25],radius:12.5,height:80,margin:2.5};this.primaryGhost=g.id;this.rebase();
     }
     rebase(){
@@ -52,9 +52,9 @@
       for(const s of layouts.equal.solids){if(!this.nodes.has(s.id))continue;
         const mode=choice.get(s.block.layer+':'+s.block.slot)||p.widthMode;
         const picked=layouts[mode].solids.find(b=>b.id===s.id)||s,gap=this.resolve(s.id,'gap').value;
-        const dims=picked.slot.size.map((v,i)=>Math.max(.0001,v-(i<2?gap:0)));
-        if(picked.slot.size.slice(0,2).some(v=>v<=gap))this.layoutWarnings.push(s.id+' 间隙超过基础尺寸，仅保留数学最小厚度');
-        this.bases.set(s.id,{...picked,dims,matrix:I().makeTranslation(...picked.slot.center).multiply(I().makeScale(...dims))});
+        const dims=picked.slot.geometrySize.map((v,i)=>Math.max(.0001,v-(i<2?gap:0)));
+        if(picked.slot.geometrySize.slice(0,2).some(v=>v<=gap))this.layoutWarnings.push(s.id+' 间隙超过基础尺寸，仅保留数学最小厚度');
+        this.bases.set(s.id,{...picked,dims,matrix:I().makeTranslation(...picked.slot.center).multiply(UXCoordinates.basis()).multiply(I().makeScale(...dims))});
       }
     }
     resolve(id,key){let n=this.nodes.get(id);while(n&&n.type!=='global'){if(Object.hasOwn(n.overrides,key))return {value:n.overrides[key],source:n.id,own:n.id===id};n=this.nodes.get(n.parent);}
@@ -62,24 +62,27 @@
     children(id){return [...this.nodes.values()].filter(n=>n.parent===id);}
     descendants(id){const out=[];for(const n of this.children(id)){out.push(n.id,...this.descendants(n.id));}return out;}
     roots(ids){const set=new Set(ids.filter(id=>this.nodes.has(id)));return [...set].filter(id=>{let n=this.nodes.get(id);while(n.parent){if(set.has(n.parent))return false;n=this.nodes.get(n.parent);}return true;});}
-    chain(id){const n=this.nodes.get(id);if(!n||!n.parent)return I();return this.chain(n.parent).multiply(matrix(n.local));}
-    world(id){const n=this.nodes.get(id),m=this.chain(id);if(n.type==='block')return m.multiply(this.bases.get(id).matrix);
-      if(n.type==='ghost'){const d=n.data;return m.multiply(I().makeScale(...(d.shape==='box'?d.dims:[2*d.radius,d.height,2*d.radius])));}return m;}
-    leaves(ids){return [...new Set(ids.flatMap(id=>[id,...this.descendants(id)]))].filter(id=>['block','ghost'].includes(this.nodes.get(id)?.type));}
-    bounds(ids){const box=new THREE.Box3();for(const id of this.leaves(ids)){const m=this.world(id);for(const x of [-.5,.5])for(const y of [-.5,.5])for(const z of [-.5,.5])box.expandByPoint(new THREE.Vector3(x,y,z).applyMatrix4(m));}return box;}
+    chain(id){const n=this.nodes.get(id);if(!n||!n.parent)return I();if(UXAnnotationState.is(n))return UXAnnotationState.frame(this,id);return this.chain(n.parent).multiply(matrix(n.local));}
+    world(id){const n=this.nodes.get(id);if(UXAnnotationState.is(n))return UXAnnotationState.world(this,id);const m=this.chain(id);if(n.type==='block')return m.multiply(this.bases.get(id).matrix);
+      if(n.type==='ghost'){const d=n.data;return m.multiply(UXCoordinates.basis()).multiply(I().makeScale(...(d.shape==='box'?d.dims:[2*d.radius,d.height,2*d.radius])));}return m;}
+    objectFrame(id){const w=this.world(id);return ['block','ghost','label'].includes(this.nodes.get(id).type)?w.multiply(UXCoordinates.inverse()):w;}
+    geometryFrame(id){return this.chain(id).multiply(UXCoordinates.basis());}
+    leaves(ids){return [...new Set(ids.flatMap(id=>[id,...this.descendants(id)]))].filter(id=>['block','ghost','label'].includes(this.nodes.get(id)?.type));}
+    bounds(ids){const box=new THREE.Box3();for(const id of this.leaves(ids)){const m=this.world(id),zs=this.nodes.get(id).type==='label'?[0]:[-.5,.5];for(const x of [-.5,.5])for(const y of [-.5,.5])for(const z of zs)box.expandByPoint(new THREE.Vector3(x,y,z).applyMatrix4(m));}return box;}
     snapshot(){return {kind:'snowglass.editor-ux.v1',topology_sha256:this.provenance.topology_sha256,manifest_sha256:this.provenance.manifest_sha256,
-      bundle:this.provenance.bundle,seq:this.seq,primaryGhost:this.primaryGhost,nodes:clone([...this.nodes.values()])};}
+      bundle:this.provenance.bundle,coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:UXCoordinates.GEOMETRY,annotationVersion:1,seq:this.seq,primaryGhost:this.primaryGhost,nodes:clone([...this.nodes.values()])};}
     emit(transient=false){this.rebase();this.listeners.forEach(fn=>fn(transient));}
-    restore(s){this.nodes=new Map(s.nodes.map(v=>[v.id,Object.assign(new Node(v.id,v.type,v.name,v.parent,v.sourceId),clone(v))]));
+    restore(s){s=UXCoordinates.prepare(s);this.nodes=new Map(s.nodes.map(v=>[v.id,Object.assign(new Node(v.id,v.type,v.name,v.parent,v.sourceId),clone(v))]));
       // 旧工程没有网格字段时，沿用当时的固定统计网格；不更换已有统计来源。
-      this.nodes.get('global').values={...LEGACY_DEFAULTS,...this.nodes.get('global').values};this.seq=s.seq;this.primaryGhost=s.primaryGhost;this.rebase();}
+      this.nodes.get('global').values={...LEGACY_DEFAULTS,...this.nodes.get('global').values};this.seq=s.seq;this.primaryGhost=s.primaryGhost;UXAnnotationState.ensureRoot(this);this.rebase();}
     commit(fn,preserveWorld=false){
-      const before=this.snapshot(),worlds=preserveWorld?new Map(this.leaves(['work','refs']).map(id=>[id,this.world(id)])):null;
+      const before=this.snapshot(),worlds=preserveWorld?new Map(this.leaves(['work','refs','annotations']).map(id=>[id,UXAnnotationState.is(this.nodes.get(id))?this.chain(id):this.world(id)])):null;
       try{fn();
         if(preserveWorld){
           const parents=new Map(before.nodes.map(n=>[n.id,n.parent])),moved=new Set([...this.nodes.values()].filter(n=>parents.has(n.id)&&parents.get(n.id)!==n.parent).map(n=>n.id));this.rebase();
           for(const [id,oldWorld] of worlds){const n=this.nodes.get(id);if(!n||![id,...this.ancestors(id)].some(v=>moved.has(v)))continue;
-            const base=n.type==='block'?this.bases.get(id).matrix:I().makeScale(...(n.data.shape==='box'?n.data.dims:[2*n.data.radius,n.data.height,2*n.data.radius]));
+            if(UXAnnotationState.is(n)){UXAnnotationState.setFrame(this,id,oldWorld);continue;}
+            const base=n.type==='block'?this.bases.get(id).matrix:UXCoordinates.basis().multiply(I().makeScale(...(n.data.shape==='box'?n.data.dims:[2*n.data.radius,n.data.height,2*n.data.radius])));
             n.local=arr(this.chain(n.parent).invert().multiply(oldWorld).multiply(base.clone().invert()));
           }
         }
@@ -92,6 +95,7 @@
     undo(){if(!this.history.length)return;this.future.push(this.snapshot());this.restore(this.history.pop());this.emit();}
     redo(){if(!this.future.length)return;this.history.push(this.snapshot());this.restore(this.future.pop());this.emit();}
     put(id,key,v){validParam(key,v);const n=this.nodes.get(id);if(!n)throw Error('对象不存在');
+      if(UXAnnotationState.is(n)&&!UXAnnotationState.STYLE.includes(key))throw Error('标注只接受字体、字号、显隐与输出样式；文字是自己的内容');
       if(Object.hasOwn(GRID_DEFAULTS,key)){const cells=Object.keys(GRID_DEFAULTS).reduce((a,k)=>a*(k===key?v:this.resolve(id,k).value),1);if(cells>65536)throw Error('当前每分区最多65536格（资源限制）');}
       if(key==='black'||key==='white'){const low=key==='black'?v:this.resolve(id,'black').value,high=key==='white'?v:this.resolve(id,'white').value;if(high<=low)throw Error('白端必须高于黑端');}
       if(n.type==='global'){n.values[key]=clone(v);return;}
@@ -99,8 +103,9 @@
     set(id,key,v){validParam(key,v);if(JSON.stringify(this.resolve(id,key).value)===JSON.stringify(v))return;this.commit(()=>this.put(id,key,v));}
     lock(id,key){this.commit(()=>this.put(id,key,clone(this.resolve(id,key).value)));}
     inherit(id,key){if(id==='global')return;this.commit(()=>delete this.nodes.get(id).overrides[key]);}
-    rename(id,name){if(!['group','ghost'].includes(this.nodes.get(id).type))throw Error('只改操作组／毛坯名，不改源张量身份');this.commit(()=>this.nodes.get(id).name=String(name).slice(0,120));}
-    delta(ids,delta){for(const id of this.roots(ids)){const n=this.nodes.get(id);if(['project','global','reference'].includes(n.type))continue;
+    rename(id,name){if(this.nodes.get(id).type==='label'){UXAnnotationState.text(this,id,String(name));return;}if(!['group','ghost','labelGroup'].includes(this.nodes.get(id).type))throw Error('只改操作组／毛坯／标签名，不改源张量身份');this.commit(()=>this.nodes.get(id).name=String(name).slice(0,120));}
+    delta(ids,delta){for(const id of this.roots(ids)){const n=this.nodes.get(id);if(['project','global','reference','annotationRoot'].includes(n.type))continue;
+      if(UXAnnotationState.is(n)){UXAnnotationState.delta(this,id,delta);continue;}
       const parent=this.chain(n.parent);n.local=arr(parent.clone().invert().multiply(delta).multiply(parent).multiply(matrix(n.local)));}}
     transform(ids,delta){this.commit(()=>this.delta(ids,delta));}
     /** 相对默认位置的参数化变换：偏移(mm)、旋转(弧度)、缩放倍数。 */
@@ -110,15 +115,16 @@
     }
     setLocalTRS(id,trs){
       const n=this.nodes.get(id);if(!n)throw Error('对象不存在');
-      if(['project','global','reference'].includes(n.type))throw Error('此对象没有空间变换');
+      if(['project','global','reference','annotationRoot'].includes(n.type))throw Error('此对象没有空间变换');
       const t=trs.t.slice(),r=trs.r.slice(),s=trs.s.slice();
       if([...t,...r,...s].some(v=>!Number.isFinite(v)))throw Error('变换数值无效');
       if(s.some(v=>Math.abs(v)<1e-6))throw Error('缩放不能为0');
       const m=new THREE.Matrix4().compose(new THREE.Vector3(...t),new THREE.Quaternion().setFromEuler(new THREE.Euler(...r,'XYZ')),new THREE.Vector3(...s));
-      this.commit(()=>n.local=m.toArray());
+      this.commit(()=>{if(UXAnnotationState.is(n))UXAnnotationState.setLocal(this,id,m);else n.local=m.toArray();});
     }
     move(id,parent){
       const n=this.nodes.get(id),target=this.nodes.get(parent);if(!n)throw Error('对象不存在');
+      if(UXAnnotationState.is(n)||UXAnnotationState.is(target))return UXAnnotationState.move(this,id,parent);
       if(['project','global','work','text','vision','refs'].includes(id)||!target||!['root','tower','layer','group','reference'].includes(target.type))throw Error('不能迁移到这个节点');
       if(id===parent||this.descendants(id).includes(parent))throw Error('不能形成循环对象树');
       const ghost=n.type==='ghost'||this.leaves([id]).some(v=>this.nodes.get(v).type==='ghost'),ref=parent==='refs'||this.ancestors(parent).includes('refs');
@@ -126,8 +132,8 @@
       const old=this.chain(n.parent);n.local=arr(this.chain(parent).invert().multiply(old).multiply(matrix(n.local)));n.parent=parent;
     }
     ancestors(id){const out=[];let n=this.nodes.get(id);while(n?.parent){out.push(n.parent);n=this.nodes.get(n.parent);}return out;}
-    changes(id,parent){const keys=LOCAL.filter(k=>!Object.hasOwn(this.nodes.get(id).overrides,k));return keys.filter(k=>JSON.stringify(this.resolve(id,k).value)!==JSON.stringify(this.resolve(parent,k).value));}
-    group(ids){let result;this.commit(()=>{
+    changes(id,parent){const keys=(UXAnnotationState.is(this.nodes.get(id))?UXAnnotationState.STYLE:LOCAL).filter(k=>!Object.hasOwn(this.nodes.get(id).overrides,k));return keys.filter(k=>JSON.stringify(this.resolve(id,k).value)!==JSON.stringify(this.resolve(parent,k).value));}
+    group(ids){if(ids.some(id=>UXAnnotationState.is(this.nodes.get(id))))return UXAnnotationState.group(this,ids);let result;this.commit(()=>{
       ids=this.roots(ids);if(!ids.length||ids.some(id=>['project','global','work','text','vision','refs'].includes(id)))throw Error('请选择块、层、操作组或毛坯');
       const chains=ids.map(id=>this.ancestors(id));const parent=chains[0].find(id=>chains.every(c=>c.includes(id)));
       if(!parent||parent==='project')throw Error('首批不跨作品与参照打组');
@@ -135,23 +141,28 @@
       let id;do{id='group-'+this.seq++;}while(this.nodes.has(id));const n=new Node(id,'group','组 '+(this.seq-1),parent);n.local=arr(I().makeTranslation(...center.toArray()));this.nodes.set(id,n);
       ids.forEach(v=>this.move(v,id));result=id;
     },true);return result;}
-    ungroup(id,keep=false){this.commit(()=>{const g=this.nodes.get(id);if(g?.type!=='group')throw Error('先选一个操作组');
+    ungroup(id,keep=false){if(this.nodes.get(id)?.type==='labelGroup')return UXAnnotationState.ungroup(this,id,keep);this.commit(()=>{const g=this.nodes.get(id);if(g?.type!=='group')throw Error('先选一个操作组');
       for(const n of this.children(id)){if(keep)for(const [k,v] of Object.entries(g.overrides))if(!Object.hasOwn(n.overrides,k)&&n.type!=='ghost')n.overrides[k]=clone(v);this.move(n.id,g.parent);}
       this.nodes.delete(id);
     },true);}
-    remove(id){this.commit(()=>{if(['project','global','work','text','vision','refs'].includes(id))throw Error('不能删除系统根节点');
-      for(const key of [id,...this.descendants(id)])this.nodes.delete(key);if(!this.nodes.has(this.primaryGhost))this.primaryGhost=[...this.nodes.values()].find(n=>n.type==='ghost')?.id||null;});}
+    remove(id){UXAnnotationState.remove(this,[id]);}
+    removeMany(ids){UXAnnotationState.remove(this,ids);}
+    planLabels(id,options){return UXAnnotationMath.generate(this,id,options);}
+    createLabels(plan,append=false){return UXAnnotationState.create(this,plan,append);}
+    setLabelText(id,text){UXAnnotationState.text(this,id,text);}
+    annotations(ids){return UXAnnotationState.exportLabels(this,ids);}
     newGhost(shape){let id;this.commit(()=>{id='ghost-'+Date.now().toString(36)+'-'+this.seq++;const n=new Node(id,'ghost','参照毛坯 '+this.seq,'refs');n.data={shape,dims:[25,40,25],radius:12.5,height:40,margin:2.5};this.nodes.set(id,n);if(!this.primaryGhost)this.primaryGhost=id;});return id;}
     ghostField(id,key,v){this.commit(()=>{const n=this.nodes.get(id);if(n.type!=='ghost'||!Number.isFinite(v)||(key==='margin'?v<0:v<=0))throw Error('毛坯尺寸须为正，预留可为零');
       if(typeof key==='number')n.data.dims[key]=v;else n.data[key]=v;});}
     load(doc){
-      this.validate(doc);this.commit(()=>this.restore(doc));
+      doc=UXCoordinates.prepare(doc);this.validate(doc);this.commit(()=>this.restore(doc));
     }
     validate(doc){
+      doc=UXCoordinates.prepare(doc);
       if(doc?.kind!=='snowglass.editor-ux.v1')throw Error('仅打开新版工程；旧工程不静默迁移');
       if(doc.topology_sha256!==this.provenance.topology_sha256||doc.manifest_sha256!==this.provenance.manifest_sha256)throw Error('工程的拓扑或统计来源不匹配');
       if(!Array.isArray(doc.nodes)||doc.nodes.length>10000||!Number.isInteger(doc.seq)||doc.seq<1)throw Error('对象清单无效');
-      const map=new Map(),sources=new Set(),kinds=['project','global','root','tower','reference','layer','group','block','ghost'];
+      const map=new Map(),sources=new Set(),kinds=['project','global','root','tower','reference','layer','group','block','ghost',...UXAnnotationState.TYPES];
       const allowed=['id','type','name','parent','sourceId','local','overrides','data','values'];
       for(const n of doc.nodes){if(!n||Object.keys(n).some(k=>!allowed.includes(k)))throw Error('对象含未知字段');
         if(typeof n.id!=='string'||map.has(n.id)||typeof n.name!=='string'||n.name.length>200||!kinds.includes(n.type))throw Error('对象身份无效');
@@ -166,9 +177,11 @@
       if(Object.keys(map.get('global').values||{}).some(k=>!Object.hasOwn(DEFAULTS,k)))throw Error('未知全局配置');
       for(const key of Object.keys(DEFAULTS))validParam(key,map.get('global').values?.[key]===undefined?LEGACY_DEFAULTS[key]:map.get('global').values[key]);
       for(const n of map.values()){
-        if(n.parent!==null&&!['project','root','tower','reference','layer','group'].includes(map.get(n.parent)?.type))throw Error('上级不能是数据叶节点');
+        if(n.parent!==null&&!['project','root','tower','reference','layer','group','annotationRoot','labelGroup'].includes(map.get(n.parent)?.type))throw Error('上级不能是数据叶节点');
         let p=n,seen=new Set();while(p.parent!==null){if(seen.has(p.id)||!map.has(p.parent))throw Error('对象树循环或上级缺失');seen.add(p.id);p=map.get(p.parent);}if(p.id!=='project')throw Error('对象不属于工程');
       }
+      if(doc.annotationVersion!==undefined&&doc.annotationVersion!==1)throw Error('标注版本不支持');
+      UXAnnotationState.validate(this,map);
       if(doc.primaryGhost!==null&&map.get(doc.primaryGhost)?.type!=='ghost')throw Error('主参照无效');
       if(doc.view){for(const key of ['camera','target'])if(!Array.isArray(doc.view[key])||doc.view[key].length!==3||doc.view[key].some(v=>!Number.isFinite(v)))throw Error('相机记录无效');
         if(!Array.isArray(doc.view.selected)||doc.view.selected.some(id=>!map.has(id))||!Array.isArray(doc.view.open)||doc.view.open.some(id=>typeof id!=='string'))throw Error('选择／树状态无效');
