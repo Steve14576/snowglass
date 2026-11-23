@@ -71,6 +71,12 @@
         read.textContent=`世界中心 ${box.getCenter(new THREE.Vector3()).toArray().map(v=>v.toFixed(3)).join(', ')} mm · 包围盒 ${box.getSize(new THREE.Vector3()).toArray().map(v=>v.toFixed(3)).join(' × ')} mm`;
         body.append(read);return;
       }
+      if(single.type==='labelGroup'){
+        const row=document.createElement('div');row.className='prop-row';const label=document.createElement('label');label.textContent='旋转／缩放中心';label.htmlFor='label-transform-center';
+        const input=document.createElement('select');input.id=label.htmlFor;input.add(new Option('整组中心','group'));input.add(new Option('各标签自身中心','individual'));input.value=UXAnnotationState.centerMode(M,single.id);
+        input.onchange=()=>this.safe(()=>M.setLabelCenter(single.id,input.value));row.append(label,input);body.append(row);
+        this.note(body,'整组会改变排布；各自中心只改朝向／尺寸，保持每个标签中心。平移仍统一操作。父组记录控制变换，子标签位置会补偿；作用于此组全部后代标签。');
+      }
       this.note(body,'相对默认位置的参数化值，可直接复制记录。父级XYZ使用Z向上的约定（X右、Y后、Z上）；偏移与旋转相对上级默认槽位，缩放是倍数。gumball与数字共用状态，权重网格的局部轴另行记录。');
       const trs=M.localTRS(single.id);
       for(const [key,title,values,factor,hint] of [

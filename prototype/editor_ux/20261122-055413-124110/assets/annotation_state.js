@@ -18,13 +18,22 @@
     const n=model.nodes.get(id),result=frame(model,id);if(n.type==='label'){const size=UXAnnotationMath.shape(model,n);result.multiply(UXCoordinates.basis()).multiply(I().makeScale(size.width,size.height,1));}return result;
   }
   function setFrame(model,id,w){model.nodes.get(id).local=beforeLocal(model,id).invert().multiply(w).toArray();}
-  function setLocal(model,id,local){
+  function centerMode(model,id){return model.nodes.get(id)?.data?.transformCenter||'group';}
+  function setCenter(model,id,value){if(model.nodes.get(id)?.type!=='labelGroup'||!['group','individual'].includes(value))throw Error('标签组旋转／缩放中心无效');model.commit(()=>model.nodes.get(id).data.transformCenter=value);}
+  function linearIdentity(m){return [0,1,2,4,5,6,8,9,10].every(i=>Math.abs(m.elements[i]-I().elements[i])<1e-10);}
+  function setLocal(model,id,local,operation=null,translation=null){
     const before=frame(model,id),boundaries=model.descendants(id).filter(child=>model.nodes.get(child).data?.follow).map(child=>({id:child,frame:frame(model,child)}));
+    const individuals=model.nodes.get(id).type==='labelGroup'&&centerMode(model,id)==='individual'?model.leaves([id]).filter(child=>model.nodes.get(child).type==='label').map(child=>({id:child,frame:frame(model,child)})):[];
     model.nodes.get(id).local=local.toArray();const change=frame(model,id).multiply(before.invert());
     // 独立源的坐标系不同；在引用边界补偿，让一次父级操作对各子组产生相同世界变换。
     for(const child of boundaries)setFrame(model,child.id,change.clone().multiply(child.frame));
+    if(individuals.length&&operation!=='translate'&&(operation||!linearIdentity(change))){
+      const linear=change.clone();linear.elements[12]=linear.elements[13]=linear.elements[14]=0;
+      for(const child of individuals){const position=new THREE.Vector3().setFromMatrixPosition(child.frame);if(translation)position.add(translation);
+        setFrame(model,child.id,linear.clone().multiply(child.frame).setPosition(position));}
+    }
   }
-  function delta(model,id,d){const base=beforeLocal(model,id);setLocal(model,id,base.clone().invert().multiply(d).multiply(base).multiply(mat(model.nodes.get(id).local)));}
+  function delta(model,id,d,operation=null){const base=beforeLocal(model,id);setLocal(model,id,base.clone().invert().multiply(d).multiply(base).multiply(mat(model.nodes.get(id).local)),operation);}
   function inBranch(model,id){return is(model.nodes.get(id));}
   function move(model,id,parent){
     const n=model.nodes.get(id),p=model.nodes.get(parent);
@@ -83,7 +92,8 @@
       if(n.sourceId!==null||Object.keys(n.overrides||{}).some(k=>!STYLE.includes(k)))throw Error('非法标注身份或属性');
       if(n.type==='annotationRoot'){if(n.id!=='annotations'||n.parent!=='project'||n.local.some((v,i)=>v!==I().elements[i])||n.data)throw Error('标注根无效');continue;}
       if(!['annotationRoot','labelGroup'].includes(map.get(n.parent)?.type))throw Error('标签上级必须在标注分支');
-      const d=n.data;if(!d||Object.keys(d).some(k=>!(n.type==='label'?['text','members','base','follow']:['recipe','base','follow']).includes(k)))throw Error('标注数据字段无效');validateMatrix(d.base);
+      const d=n.data;if(!d||Object.keys(d).some(k=>!(n.type==='label'?['text','members','base','follow']:['recipe','base','follow','transformCenter']).includes(k)))throw Error('标注数据字段无效');validateMatrix(d.base);
+      if(n.type==='labelGroup'&&d.transformCenter!==undefined&&!['group','individual'].includes(d.transformCenter))throw Error('标签组变换中心无效');
       if(n.type==='label'){if(!ids(d.members)||!d.members.length)throw Error('标签成员身份无效');UXAnnotationMath.measure(d.text,'Microsoft YaHei');}
       if(n.type==='labelGroup'&&d.recipe!==null){const r=d.recipe;if(!r||Object.keys(r).some(k=>!['sourceId','axis','mode','side','face','gap','tolerance','scopeIds','font','height'].includes(k))||!known.has(r.sourceId)||!['x','y','z'].includes(r.axis)||!Number.isInteger(r.mode)||r.mode<0||r.mode>2||!ids(r.scopeIds)||!r.scopeIds.length||!Number.isFinite(r.gap)||r.gap<0||!/^[-+][xyz]$/.test(r.side)||!['-y','+z'].includes(r.face)||r.tolerance!==UXAnnotationMath.EPS)throw Error('标注生成配方无效');UXModel.validParam('labelFont',r.font);UXModel.validParam('labelSize',r.height);}
       if(d.follow){const f=d.follow;if(Object.keys(f).some(k=>!['sourceId','reference','frozen','lostSource'].includes(k)))throw Error('跟随字段无效');
@@ -102,5 +112,5 @@
         glyph_geometry:'未接入：仅固定朝向纹理平面，不是可加工文字轮廓'};
     });
   }
-  window.UXAnnotationState={TYPES,STYLE,is,ensureRoot,effective,follow,beforeLocal,frame,world,setFrame,setLocal,delta,inBranch,move,group,ungroup,create,remove,text,validate,exportLabels};
+  window.UXAnnotationState={TYPES,STYLE,is,ensureRoot,effective,follow,beforeLocal,frame,world,setFrame,setLocal,centerMode,setCenter,delta,inBranch,move,group,ungroup,create,remove,text,validate,exportLabels};
 })();

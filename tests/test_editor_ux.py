@@ -18,7 +18,7 @@ def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','axes','coordinates','annotations','full'],default='full');parser.add_argument('--url',default='http://127.0.0.1:8128/');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','axes','coordinates','pivots','annotations','full'],default='full');parser.add_argument('--url',default='http://127.0.0.1:8128/');args=parser.parse_args()
     bundle=args.folder.resolve();provenance=json.loads((bundle/'provenance.json').read_text(encoding='utf-8'))
     # 归档只改路径、不改内容：按 provenance.archived_paths 解析新位置，仍是同一份哈希。
     moved=provenance.get('archived_paths',{})
@@ -45,7 +45,7 @@ def main():
                 assert page.evaluate('()=>uxEditor.model.resolve("global","sourceConvention").value')=='gguf'
                 assert page.evaluate('()=>uxEditor.model.resolve("global","extraDiagnostics").value') is False
                 # 后续原有科学缓存回归明确选择其HF约定，不把旧缓存冒充新默认原值。
-                if args.phase not in ('axes','coordinates','annotations'):
+                if args.phase not in ('axes','coordinates','pivots','annotations'):
                     page.evaluate('()=>uxEditor.model.set("global","sourceConvention","hf")')
                     page.wait_for_function('uxEditor.results[0].settings.sourceConvention==="hf"')
             except Exception:
@@ -108,7 +108,44 @@ def main():
                 suite=page.evaluate('(source)=>{(0,eval)(source);return AnnotationTests.run();}',(ROOT/'tests/annotation_checks.js').read_text(encoding='utf-8'))
                 cases.extend(suite)
                 print(json.dumps({'annotation_math_cases':len(suite)},ensure_ascii=False),flush=True)
-            if args.phase=='coordinates':
+            if args.phase in ('pivots','full'):
+                cases.extend(page.evaluate('(source)=>{(0,eval)(source);return PivotTests.run();}',(ROOT/'tests/pivot_checks.js').read_text(encoding='utf-8')))
+            if args.phase=='pivots':
+                starts=[];page.on('request',lambda r:starts.append(r.url) if '/api/slice1/start' in r.url else None)
+                source_state=page.evaluate('()=>({nodes:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.world(b.id).toArray()]),request:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                group=page.evaluate('()=>{const a=uxEditor,g=a.model.createLabels(a.model.planLabels("L16.down"));a.select([g]);return g;}')
+                page.get_by_text('变换 · 相对默认位置',exact=True).click() if not page.locator('#label-transform-center').is_visible() else None
+                assert page.locator('#label-transform-center').input_value()=='group'
+                page.locator('#label-transform-center').select_option('individual')
+                positions=page.evaluate('()=>uxEditor.model.leaves(uxEditor.selected).map(id=>({id,p:new THREE.Vector3().setFromMatrixPosition(uxEditor.model.world(id)).toArray()}))')
+                page.locator('[data-trs="r"][data-axis="0"]').fill('30');page.locator('[data-trs="r"][data-axis="0"]').dispatch_event('change')
+                page.locator('[data-trs="s"][data-axis="2"]').fill('2');page.locator('[data-trs="s"][data-axis="2"]').dispatch_event('change')
+                actual=page.evaluate('()=>uxEditor.model.leaves(uxEditor.selected).map(id=>({id,p:new THREE.Vector3().setFromMatrixPosition(uxEditor.model.world(id)).toArray()}))')
+                assert all(a['id']==b['id'] and all(abs(x-y)<1e-7 for x,y in zip(a['p'],b['p'])) for a,b in zip(positions,actual)),'各自中心数字旋缩移动位置'
+                gesture=page.evaluate('''()=>{
+                    const a=uxEditor,m=a.model,s=a.scene,g=a.selected[0],ids=m.leaves([g]),compare=(w,expected)=>{if(w.elements.some((v,i)=>Math.abs(v-expected.elements[i])>1e-7))throw Error('多帧手柄累积了旋缩或移动了中心');};
+                    function perform(mode,values){
+                        s.setMode(mode);s.syncPivot();s.pivot.updateMatrixWorld(true);const initial=s.pivot.matrixWorld.clone(),quaternion=s.pivot.quaternion.clone(),old=ids.map(id=>m.world(id)),count=m.history.length;
+                        s.gumball.dispatchEvent({type:'dragging-changed',value:true});s.gumball.dragging=true;
+                        for(const value of values){if(mode==='rotate')s.pivot.quaternion.copy(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),value).multiply(quaternion));else s.pivot.scale.z=value;
+                            s.pivot.updateMatrixWorld(true);const d=s.pivot.matrixWorld.clone().multiply(initial.clone().invert());s.gumball.dispatchEvent({type:'objectChange'});
+                            ids.forEach((id,i)=>compare(m.world(id),d.clone().multiply(old[i]).setPosition(new THREE.Vector3().setFromMatrixPosition(old[i]))));}
+                        s.gumball.dragging=false;s.gumball.dispatchEvent({type:'dragging-changed',value:false});if(m.history.length!==count+1)throw Error('一次手势不止一次撤销');
+                        const saved=m.snapshot();m.undo();ids.forEach((id,i)=>compare(m.world(id),old[i]));m.redo();if(JSON.stringify(m.snapshot())!==JSON.stringify(saved))throw Error('手柄重做不完整');
+                    }
+                    perform('rotate',[.1,.2]);perform('scale',[1.1,1.4]);return {frames_not_accumulated:true,rotate_and_scale:true,undo_redo:true};
+                }''')
+                after_state=page.evaluate('()=>({nodes:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.world(b.id).toArray()]),request:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                assert source_state==after_state and not starts,'中心模式影响源块或启动权重任务'
+                saved=page.evaluate('()=>uxEditor.getProject()')
+                restored=browser.new_page(viewport={'width':1600,'height':1050})
+                restored.add_init_script('(doc=>localStorage.setItem("snowglass.editor-ux.20261122-055413-124110.v3-zup",JSON.stringify(doc)))('+json.dumps(saved)+')')
+                restored.goto(args.url,wait_until='domcontentloaded');restored.wait_for_function('(id)=>window.uxEditor?.model.nodes.get(id)?.data.transformCenter==="individual" && uxEditor.scene.annotationView.meshes.size===32',arg=group,timeout=45000)
+                assert restored.evaluate('()=>uxEditor.scene.renderedSnow')==0
+                restored.close();assert not errors,errors
+                cases.append({'name':'actual_pivot_selector_numeric_multiframe_gumball_and_restore','result':gesture})
+                browser.close()
+            elif args.phase=='coordinates':
                 legacy_json=json.dumps(coordinate_suite['legacy'],ensure_ascii=False)
                 restored=browser.new_page(viewport={'width':1600,'height':1050})
                 restored.add_init_script('(value=>localStorage.setItem("snowglass.editor-ux.20261122-055413-124110.v2",value))('+json.dumps(legacy_json)+')')

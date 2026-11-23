@@ -104,10 +104,10 @@
     lock(id,key){this.commit(()=>this.put(id,key,clone(this.resolve(id,key).value)));}
     inherit(id,key){if(id==='global')return;this.commit(()=>delete this.nodes.get(id).overrides[key]);}
     rename(id,name){if(this.nodes.get(id).type==='label'){UXAnnotationState.text(this,id,String(name));return;}if(!['group','ghost','labelGroup'].includes(this.nodes.get(id).type))throw Error('只改操作组／毛坯／标签名，不改源张量身份');this.commit(()=>this.nodes.get(id).name=String(name).slice(0,120));}
-    delta(ids,delta){for(const id of this.roots(ids)){const n=this.nodes.get(id);if(['project','global','reference','annotationRoot'].includes(n.type))continue;
-      if(UXAnnotationState.is(n)){UXAnnotationState.delta(this,id,delta);continue;}
+    delta(ids,delta,operation=null){for(const id of this.roots(ids)){const n=this.nodes.get(id);if(['project','global','reference','annotationRoot'].includes(n.type))continue;
+      if(UXAnnotationState.is(n)){UXAnnotationState.delta(this,id,delta,operation);continue;}
       const parent=this.chain(n.parent);n.local=arr(parent.clone().invert().multiply(delta).multiply(parent).multiply(matrix(n.local)));}}
-    transform(ids,delta){this.commit(()=>this.delta(ids,delta));}
+    transform(ids,delta,operation=null){this.commit(()=>this.delta(ids,delta,operation));}
     /** 相对默认位置的参数化变换：偏移(mm)、旋转(弧度)、缩放倍数。 */
     localTRS(id){
       const m=matrix(this.nodes.get(id).local),t=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();m.decompose(t,q,s);
@@ -120,7 +120,10 @@
       if([...t,...r,...s].some(v=>!Number.isFinite(v)))throw Error('变换数值无效');
       if(s.some(v=>Math.abs(v)<1e-6))throw Error('缩放不能为0');
       const m=new THREE.Matrix4().compose(new THREE.Vector3(...t),new THREE.Quaternion().setFromEuler(new THREE.Euler(...r,'XYZ')),new THREE.Vector3(...s));
-      this.commit(()=>{if(UXAnnotationState.is(n))UXAnnotationState.setLocal(this,id,m);else n.local=m.toArray();});
+      this.commit(()=>{if(UXAnnotationState.is(n)){const old=this.localTRS(id),linear=['r','s'].some(k=>trs[k].some((v,i)=>Math.abs(v-old[k][i])>1e-9));
+        const shift=new THREE.Vector3(...trs.t.map((v,i)=>v-old.t[i])).applyMatrix3(new THREE.Matrix3().setFromMatrix4(UXAnnotationState.beforeLocal(this,id)));
+        UXAnnotationState.setLocal(this,id,m,linear?'affine':'translate',shift);
+      }else n.local=m.toArray();});
     }
     move(id,parent){
       const n=this.nodes.get(id),target=this.nodes.get(parent);if(!n)throw Error('对象不存在');
@@ -150,6 +153,7 @@
     planLabels(id,options){return UXAnnotationMath.generate(this,id,options);}
     createLabels(plan,append=false){return UXAnnotationState.create(this,plan,append);}
     setLabelText(id,text){UXAnnotationState.text(this,id,text);}
+    setLabelCenter(id,value){UXAnnotationState.setCenter(this,id,value);}
     annotations(ids){return UXAnnotationState.exportLabels(this,ids);}
     newGhost(shape){let id;this.commit(()=>{id='ghost-'+Date.now().toString(36)+'-'+this.seq++;const n=new Node(id,'ghost','参照毛坯 '+this.seq,'refs');n.data={shape,dims:[25,40,25],radius:12.5,height:40,margin:2.5};this.nodes.set(id,n);if(!this.primaryGhost)this.primaryGhost=id;});return id;}
     ghostField(id,key,v){this.commit(()=>{const n=this.nodes.get(id);if(n.type!=='ghost'||!Number.isFinite(v)||(key==='margin'?v<0:v<=0))throw Error('毛坯尺寸须为正，预留可为零');

@@ -1,0 +1,163 @@
+{
+  "phase": "pivots",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 437,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          7.13,
+          26.391999999999996
+        ],
+        "sidebar_right": 380,
+        "view_left": 385,
+        "tree_y": 40,
+        "properties_y": 335,
+        "slice_disabled": false
+      }
+    },
+    {
+      "name": "world_axes_projection_and_view_only",
+      "result": {
+        "front": [
+          {
+            "axis": "X",
+            "sign": -1,
+            "label": "-X",
+            "x": 42,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "X",
+            "sign": 1,
+            "label": "+X",
+            "x": 102,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "Y",
+            "sign": -1,
+            "label": "-Y",
+            "x": 72,
+            "y": 54.00000000000001,
+            "depth": 1
+          },
+          {
+            "axis": "Y",
+            "sign": 1,
+            "label": "+Y",
+            "x": 72,
+            "y": 53.99999999999999,
+            "depth": -1
+          },
+          {
+            "axis": "Z",
+            "sign": -1,
+            "label": "-Z",
+            "x": 72,
+            "y": 84,
+            "depth": -2.220446049250313e-16
+          },
+          {
+            "axis": "Z",
+            "sign": 1,
+            "label": "+Z",
+            "x": 72,
+            "y": 24,
+            "depth": 2.220446049250313e-16
+          }
+        ],
+        "side": {
+          "axis": "X",
+          "sign": 1,
+          "label": "+X",
+          "x": 72,
+          "y": 54,
+          "depth": 1
+        },
+        "pixels": 1707,
+        "model_unchanged": true,
+        "mouse_passthrough": true
+      }
+    },
+    {
+      "name": "group_and_individual_rotation_centres",
+      "result": {
+        "group_moves": true,
+        "individual_centres_fixed": true,
+        "switch_no_jump": true
+      }
+    },
+    {
+      "name": "individual_scale_all_axes_and_translation",
+      "result": {
+        "scale_axes": true,
+        "negative_nonuniform": true,
+        "translation_unchanged": true
+      }
+    },
+    {
+      "name": "nested_sources_individual_transform_and_follow",
+      "result": {
+        "nested": true,
+        "source_refs_preserved": true
+      }
+    },
+    {
+      "name": "numeric_rotate_scale_move_undo_and_save",
+      "result": {
+        "numeric_centres_fixed": true,
+        "explicit_translation": true,
+        "undo_redo": true,
+        "save_restore": true,
+        "legacy_group": true
+      }
+    },
+    {
+      "name": "actual_pivot_selector_numeric_multiframe_gumball_and_restore",
+      "result": {
+        "frames_not_accumulated": true,
+        "rotate_and_scale": true,
+        "undo_redo": true
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "frozen_math_sha256": {
+    "survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16"
+  },
+  "assets_sha256": {
+    "index.html": "502bc703339d28fa4e7ecb5b125c9a63f1c64f59554cd6cc59d6a87358e78c9d",
+    "assets\\annotation_math.js": "27fd0d0f87d99c7dd35f34023afcd6e06cf2185772dc17977ff2afe70a0c3f01",
+    "assets\\annotation_state.js": "cae696e2417a883fed617c32c025adee8c0540af6bbdbee2c60c65f585ee9298",
+    "assets\\annotation_ui.js": "36136a5e2fc7eef5081147b5fe1fe9712f46376bcccbccb962c04adf70d95f61",
+    "assets\\annotation_view.js": "dd43ff7f3fa290334ffd2bc58a13046db76be257ebbc7016badc81423266e359",
+    "assets\\app.js": "d65200c85545b9f773770d6ab1730488e9ad077ef003d7e9430978fed6e7534c",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "0faa7cc978955f03a0dc14402a6c92bc25025cc0df43d968d69e2fbd3f6d36ea",
+    "assets\\coordinates.js": "20ba58480a5cc9084b5a8b208243452bc1962032e9b11ca24165686cf3e0ca70",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "c932a7efdb566d7cb6a51ca145be7790f45d5b71b64dba8f41c7a9775c3070b9",
+    "assets\\editor.css": "72bb41d234dff5540381b0f75420f1e1f084db9e8689edda00fc7a4476bb9288",
+    "assets\\inspector.js": "465d15002d24cf0a545de612df06843a497938aa640ce4954741f698e23e6433",
+    "assets\\layout.js": "8f048e91a1b0028d0b66cf6af608e4d419295c11b40d6524994b9321dd63c4f8",
+    "assets\\model.js": "02ff8d2484094bcb46a5f91e2b1d4a1caec1137329a1b8b8a23abdebb926536a",
+    "assets\\scene.js": "7af67b1e1e437518a33b9ad1a8b149c262d7e9c404f3c529e89667c5c38ab297",
+    "assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "assets\\tree.js": "cb1fc950f50ae27fa98b4183a149d949cd3184e4fb34cf3b1ccd9b874a30dff4"
+  },
+  "test_sha256": "e327bed2ece18013ea0f75e1025adf4d9a2aaecaf56213f8bcf17e9279f826f7",
+  "seconds": 9.73399999999674
+}

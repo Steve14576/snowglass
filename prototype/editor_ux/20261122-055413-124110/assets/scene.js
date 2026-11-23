@@ -15,10 +15,10 @@
       [this.frames,this.shells,this.proxy].forEach(m=>{m.count=0;m.frustumCulled=false;this.scene.add(m);});
       this.highlights=new T.Group();this.ghosts=new T.Group();this.snow=new T.Group();this.labels=new T.Group();[this.highlights,this.ghosts,this.snow,this.labels].forEach(g=>this.scene.add(g));this.annotationView=new UXAnnotationView(this);
       this.pivot=new T.Object3D();this.scene.add(this.pivot);this.gumball=new T.TransformControls(this.camera,this.renderer.domElement);this.gumball.setSize(.75);this.scene.add(this.gumball);this.gumball.addEventListener('change',()=>this.render());this.mode='translate';
-      this.gumball.addEventListener('dragging-changed',e=>{this.orbit.enabled=!e.value;if(e.value){model.beginGesture();this.startPivot=this.pivot.matrixWorld.clone();this.startLocals=new Map(model.roots(this.selected).map(id=>[id,model.nodes.get(id).local.slice()]));}
+      this.gumball.addEventListener('dragging-changed',e=>{this.orbit.enabled=!e.value;if(e.value){model.beginGesture();this.startPivot=this.pivot.matrixWorld.clone();this.startLocals=new Map(model.roots(this.selected).flatMap(id=>[id,...model.descendants(id)]).map(id=>[id,model.nodes.get(id).local.slice()]));}
         else{model.endGesture();this.syncPivot();this.onGesture(false);}});
       this.gumball.addEventListener('objectChange',()=>{if(!this.startPivot||!this.gumball.dragging)return;this.pivot.updateMatrixWorld();const d=this.pivot.matrixWorld.clone().multiply(this.startPivot.clone().invert());
-        if(Math.abs(d.determinant())<1e-12)return;model.updateGesture(()=>{for(const [id,local] of this.startLocals)model.nodes.get(id).local=local.slice();model.delta(this.selected,d);});this.onGesture(true);});
+        if(Math.abs(d.determinant())<1e-12)return;model.updateGesture(()=>{for(const [id,local] of this.startLocals)model.nodes.get(id).local=local.slice();model.delta(this.selected,d,this.mode);});this.onGesture(true);});
       this.ray=new T.Raycaster();this.mouse=new T.Vector2();this.blockIds=[];this.boxMode=false;this.down=null;
       const canvas=this.renderer.domElement;
       canvas.addEventListener('pointerdown',e=>{this.down={x:e.clientX,y:e.clientY,shift:e.shiftKey,ctrl:e.ctrlKey||e.metaKey};
