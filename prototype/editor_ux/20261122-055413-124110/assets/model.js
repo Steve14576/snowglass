@@ -6,13 +6,12 @@
   const LEGACY_DEFAULTS={...GRID_DEFAULTS,sourceConvention:'hf',extraDiagnostics:false};
   const DEFAULTS={...GRID_DEFAULTS,sourceConvention:'gguf',extraDiagnostics:false,channel:'full',windowMode:'range',black:0,white:1,curve:CurveMath.linear(),filter:false,cutoff:.25,
     frameT:.04,shellT:.02,frameGray:.18,shellGray:.024,snowSize:.012,gap:0,widthMode:'equal',visible:true,include:true,
-    labels:false,labelText:'',labelFont:'Microsoft YaHei',labelOutput:true,labelSize:.7,labelDx:0,labelDy:0,labelDz:0,squash:.55,depth:6.2,pitch:.08,dotUm:60,speed:4500};
+    labelEnabled:true,labelFont:'Microsoft YaHei',labelSize:.7,squash:.55,depth:6.2,pitch:.08,dotUm:60,speed:4500};
   const LOCAL=Object.keys(DEFAULTS).filter(k=>!['squash','depth','pitch','dotUm','speed'].includes(k));
   function validParam(key,v){
     if(!Object.hasOwn(DEFAULTS,key))throw Error('未知参数 '+key);
     if(Object.hasOwn(GRID_DEFAULTS,key)&&(!Number.isInteger(v)||v<1||v>64))throw Error('统计网格须为1–64的整数');
     if(key==='curve')return CurveMath.validate(v);
-    if(key==='labelText'){if(typeof v!=='string'||v.length>80)throw Error('标签文字需为不超过80字的字符串');return true;}
     if(key==='labelFont'){if(typeof v!=='string'||!v.trim()||v.length>60)throw Error('字体名不能为空且不超过60字');return true;}
     if(typeof v!==typeof DEFAULTS[key]||(typeof v==='number'&&!Number.isFinite(v)))throw Error('参数类型无效');
     // 框／壳厚度允许 0：语义是“没有这个结构件”，与灰度0（几何仍在但不显影）不同。
@@ -70,7 +69,7 @@
     leaves(ids){return [...new Set(ids.flatMap(id=>[id,...this.descendants(id)]))].filter(id=>['block','ghost','label'].includes(this.nodes.get(id)?.type));}
     bounds(ids){const box=new THREE.Box3();for(const id of this.leaves(ids)){const m=this.world(id),zs=this.nodes.get(id).type==='label'?[0]:[-.5,.5];for(const x of [-.5,.5])for(const y of [-.5,.5])for(const z of zs)box.expandByPoint(new THREE.Vector3(x,y,z).applyMatrix4(m));}return box;}
     snapshot(){return {kind:'snowglass.editor-ux.v1',topology_sha256:this.provenance.topology_sha256,manifest_sha256:this.provenance.manifest_sha256,
-      bundle:this.provenance.bundle,coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:UXCoordinates.GEOMETRY,annotationVersion:1,seq:this.seq,primaryGhost:this.primaryGhost,nodes:clone([...this.nodes.values()])};}
+      bundle:this.provenance.bundle,coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:UXCoordinates.GEOMETRY,annotationPolicy:UXCoordinates.LABEL_POLICY,annotationVersion:1,seq:this.seq,primaryGhost:this.primaryGhost,nodes:clone([...this.nodes.values()])};}
     emit(transient=false){this.rebase();this.listeners.forEach(fn=>fn(transient));}
     restore(s){s=UXCoordinates.prepare(s);this.nodes=new Map(s.nodes.map(v=>[v.id,Object.assign(new Node(v.id,v.type,v.name,v.parent,v.sourceId),clone(v))]));
       // 旧工程没有网格字段时，沿用当时的固定统计网格；不更换已有统计来源。
@@ -94,15 +93,17 @@
     endGesture(){if(!this.gesture)return;const before=this.gesture;this.gesture=null;if(JSON.stringify(before)!==JSON.stringify(this.snapshot())){this.history.push(before);if(this.history.length>100)this.history.shift();this.future=[];this.emit();}}
     undo(){if(!this.history.length)return;this.future.push(this.snapshot());this.restore(this.history.pop());this.emit();}
     redo(){if(!this.future.length)return;this.history.push(this.snapshot());this.restore(this.future.pop());this.emit();}
-    put(id,key,v){validParam(key,v);const n=this.nodes.get(id);if(!n)throw Error('对象不存在');
-      if(UXAnnotationState.is(n)&&!UXAnnotationState.STYLE.includes(key))throw Error('标注只接受字体、字号、显隐与输出样式；文字是自己的内容');
+    put(id,key,v){validParam(key,v);const n=this.nodes.get(id);if(!n)throw Error('对象不存在');const changed=JSON.stringify(this.resolve(id,key).value)!==JSON.stringify(v);
+      if(UXAnnotationState.is(n)&&!UXAnnotationState.STYLE.includes(key))throw Error('标注只接受字体、字号和启用状态；文字是自己的内容');
+      if(key==='labelEnabled'&&n.type!=='global'&&!UXAnnotationState.is(n))throw Error('标签启用状态只属于独立标注，不属于源模型');
       if(Object.hasOwn(GRID_DEFAULTS,key)){const cells=Object.keys(GRID_DEFAULTS).reduce((a,k)=>a*(k===key?v:this.resolve(id,k).value),1);if(cells>65536)throw Error('当前每分区最多65536格（资源限制）');}
       if(key==='black'||key==='white'){const low=key==='black'?v:this.resolve(id,'black').value,high=key==='white'?v:this.resolve(id,'white').value;if(high<=low)throw Error('白端必须高于黑端');}
-      if(n.type==='global'){n.values[key]=clone(v);return;}
-      if(!LOCAL.includes(key)||['reference','ghost','project'].includes(n.type))throw Error('此对象不能覆盖该参数');n.overrides[key]=clone(v);}
+      if(n.type==='global'){n.values[key]=clone(v);if(changed)UXAnnotationState.fontChanged(this,id,key);return;}
+      if(!LOCAL.includes(key)||['reference','ghost','project'].includes(n.type))throw Error('此对象不能覆盖该参数');n.overrides[key]=clone(v);if(changed)UXAnnotationState.fontChanged(this,id,key);}
     set(id,key,v){validParam(key,v);if(JSON.stringify(this.resolve(id,key).value)===JSON.stringify(v))return;this.commit(()=>this.put(id,key,v));}
     lock(id,key){this.commit(()=>this.put(id,key,clone(this.resolve(id,key).value)));}
-    inherit(id,key){if(id==='global')return;this.commit(()=>delete this.nodes.get(id).overrides[key]);}
+    drop(id,key){if(id==='global')return;const before=JSON.stringify(this.resolve(id,key).value);delete this.nodes.get(id).overrides[key];if(before!==JSON.stringify(this.resolve(id,key).value))UXAnnotationState.fontChanged(this,id,key);}
+    inherit(id,key){if(id==='global')return;this.commit(()=>this.drop(id,key));}
     rename(id,name){if(this.nodes.get(id).type==='label'){UXAnnotationState.text(this,id,String(name));return;}if(!['group','ghost','labelGroup'].includes(this.nodes.get(id).type))throw Error('只改操作组／毛坯／标签名，不改源张量身份');this.commit(()=>this.nodes.get(id).name=String(name).slice(0,120));}
     delta(ids,delta,operation=null){for(const id of this.roots(ids)){const n=this.nodes.get(id);if(['project','global','reference','annotationRoot'].includes(n.type))continue;
       if(UXAnnotationState.is(n)){UXAnnotationState.delta(this,id,delta,operation);continue;}
@@ -154,6 +155,7 @@
     createLabels(plan,append=false){return UXAnnotationState.create(this,plan,append);}
     setLabelText(id,text){UXAnnotationState.text(this,id,text);}
     setLabelCenter(id,value){UXAnnotationState.setCenter(this,id,value);}
+    setLabelAlignment(id,value){UXAnnotationState.setAlignment(this,id,value);}
     annotations(ids){return UXAnnotationState.exportLabels(this,ids);}
     newGhost(shape){let id;this.commit(()=>{id='ghost-'+Date.now().toString(36)+'-'+this.seq++;const n=new Node(id,'ghost','参照毛坯 '+this.seq,'refs');n.data={shape,dims:[25,40,25],radius:12.5,height:40,margin:2.5};this.nodes.set(id,n);if(!this.primaryGhost)this.primaryGhost=id;});return id;}
     ghostField(id,key,v){this.commit(()=>{const n=this.nodes.get(id);if(n.type!=='ghost'||!Number.isFinite(v)||(key==='margin'?v<0:v<=0))throw Error('毛坯尺寸须为正，预留可为零');
@@ -171,7 +173,7 @@
       for(const n of doc.nodes){if(!n||Object.keys(n).some(k=>!allowed.includes(k)))throw Error('对象含未知字段');
         if(typeof n.id!=='string'||map.has(n.id)||typeof n.name!=='string'||n.name.length>200||!kinds.includes(n.type))throw Error('对象身份无效');
         if(!Array.isArray(n.local)||n.local.length!==16||n.local.some(v=>!Number.isFinite(v))||Math.abs(matrix(n.local).determinant())<1e-12||Math.abs(n.local[3])+Math.abs(n.local[7])+Math.abs(n.local[11])>1e-8||Math.abs(n.local[15]-1)>1e-8)throw Error('变换矩阵无效');
-        for(const [key,v] of Object.entries(n.overrides||{})){if(!LOCAL.includes(key)||['global','project','reference','ghost'].includes(n.type))throw Error('非法局部参数');validParam(key,v);}
+        for(const [key,v] of Object.entries(n.overrides||{})){if(!LOCAL.includes(key)||['global','project','reference','ghost'].includes(n.type)||(key==='labelEnabled'&&!UXAnnotationState.is(n)))throw Error('非法局部参数');validParam(key,v);}
         if(n.type==='block'){if(n.id!==n.sourceId||(!this.topo.blocks.some(b=>b.id===n.sourceId)&&n.sourceId!=='mtp')||sources.has(n.sourceId))throw Error('源块身份不能重复或更换');sources.add(n.sourceId);}
         if(n.type==='ghost'){const d=n.data;if(!d||!['box','cylinder'].includes(d.shape)||!Array.isArray(d.dims)||d.dims.length!==3||[...d.dims,d.radius,d.height].some(v=>!Number.isFinite(v)||v<=0)||!Number.isFinite(d.margin)||d.margin<0)throw Error('毛坯属性无效');}
         map.set(n.id,n);

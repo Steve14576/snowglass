@@ -7,7 +7,7 @@
   const trs=(t,r,s=[1,1,1])=>new T.Matrix4().compose(new T.Vector3(...t),new T.Quaternion().setFromEuler(new T.Euler(...r,'XYZ')),new T.Vector3(...s));
   function fixture(){
     const m=fresh(),doc=m.snapshot(),nodes=new Map(doc.nodes.map(n=>[n.id,n])),bases=m.bases;
-    delete doc.coordinateSystem;delete doc.localGeometryBasis;
+    delete doc.coordinateSystem;delete doc.localGeometryBasis;delete doc.annotationPolicy;
     const head=trs([1,2,3],[.2,-.1,.3],[1.1,.8,1.3]),layer=trs([.4,-.2,.8],[0,.1,0]),down=trs([-1,.5,2],[0,0,.05],[.9,1.1,1]),ghost=trs([2,-3,1],[.15,.2,.05],[1.2,.8,1.5]);
     nodes.get('lm_head').local=head.toArray();nodes.get('layer-16').local=layer.toArray();nodes.get('L16.down').local=down.toArray();nodes.get('ghost-1').local=ghost.toArray();
     nodes.get('global').values.labelDy=1.2;nodes.get('global').values.labelDz=-3;nodes.get('L16.down').overrides={labelDy:.4,gridY:9};
@@ -39,13 +39,14 @@
     test('legacy_nodes_labels_ghosts_and_sparse_offsets',()=>{
       const converted=C.prepare(f.doc);assert(JSON.stringify(f.doc)===original,'转换改写了旧文档');m.load(f.doc);
       for(const [id,old] of Object.entries(f.expected))close(m.world(id).toArray(),C.basis().multiply(old).toArray(),'旧对象视觉矩阵未保持 '+id);
-      assert(m.resolve('L16.down','labelDz').own&&m.resolve('L16.down','labelDz').value===.4&&!m.resolve('L16.down','labelDy').own,'稀疏偏移的继承被破坏');
+      assert(C.OLD_LABEL_KEYS.every(k=>!Object.hasOwn(m.nodes.get('L16.down').overrides,k)&&!Object.hasOwn(m.nodes.get('global').values,k)),'旧标签字段仍在工程中');
+      assert(m.nodes.get('label-old').data.text==='旧文字坐标'&&m.resolve('label-old','labelEnabled').value===true,'新标签内容或显示状态丢失');
       assert(m.resolve('L16.down','gridY').value===9&&m.resolve('global','gridZ').value===32,'迁移重排了源数据网格');
       const r=m.nodes.get('label-group-old').data.recipe;assert(r.axis==='x'&&r.mode===1&&r.side==='+y'&&r.face==='+z','旧标注模式或正负方向错译');
       close(converted.view.camera,[25,-55,18],'旧相机未转换');close(converted.view.target,[3,-1,0],'旧目标未转换');
       const saved=m.snapshot(),other=fresh();other.load(saved);assert(JSON.stringify(other.snapshot())===JSON.stringify(saved),'新坐标往返重复转换');
       const invalid=CurveMath.copy(saved);invalid.coordinateSystem='unknown';let rejected=false;try{other.load(invalid);}catch(e){rejected=true;}assert(rejected,'接受了未知坐标版本');
-      return {matrix_preserved:true,sparse_offsets:true,grid_unchanged:true,recipe:r,roundtrip:true};
+      return {matrix_preserved:true,old_label_fields_ignored:true,grid_unchanged:true,recipe:r,roundtrip:true};
     });
     test('legacy_screen_projection_with_grid_and_glyph_local_coordinates',()=>{
       const oldCamera=new T.PerspectiveCamera(42,uxEditor.scene.camera.aspect,.001,2000),newCamera=oldCamera.clone();oldCamera.position.fromArray(f.doc.view.camera);oldCamera.lookAt(new T.Vector3(...f.doc.view.target));oldCamera.updateMatrixWorld();

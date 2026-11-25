@@ -18,7 +18,7 @@ def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','axes','coordinates','pivots','annotations','full'],default='full');parser.add_argument('--url',default='http://127.0.0.1:8128/');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--folder',type=Path,required=True);parser.add_argument('--phase',choices=['probe','axes','coordinates','pivots','single-labels','text-layout','annotations','full'],default='full');parser.add_argument('--url',default='http://127.0.0.1:8128/');args=parser.parse_args()
     bundle=args.folder.resolve();provenance=json.loads((bundle/'provenance.json').read_text(encoding='utf-8'))
     # 归档只改路径、不改内容：按 provenance.archived_paths 解析新位置，仍是同一份哈希。
     moved=provenance.get('archived_paths',{})
@@ -45,7 +45,7 @@ def main():
                 assert page.evaluate('()=>uxEditor.model.resolve("global","sourceConvention").value')=='gguf'
                 assert page.evaluate('()=>uxEditor.model.resolve("global","extraDiagnostics").value') is False
                 # 后续原有科学缓存回归明确选择其HF约定，不把旧缓存冒充新默认原值。
-                if args.phase not in ('axes','coordinates','pivots','annotations'):
+                if args.phase not in ('axes','coordinates','pivots','single-labels','text-layout','annotations'):
                     page.evaluate('()=>uxEditor.model.set("global","sourceConvention","hf")')
                     page.wait_for_function('uxEditor.results[0].settings.sourceConvention==="hf"')
             except Exception:
@@ -110,7 +110,76 @@ def main():
                 print(json.dumps({'annotation_math_cases':len(suite)},ensure_ascii=False),flush=True)
             if args.phase in ('pivots','full'):
                 cases.extend(page.evaluate('(source)=>{(0,eval)(source);return PivotTests.run();}',(ROOT/'tests/pivot_checks.js').read_text(encoding='utf-8')))
-            if args.phase=='pivots':
+            if args.phase in ('text-layout','full'):
+                cases.extend(page.evaluate('(source)=>{(0,eval)(source);return TextLayoutTests.run();}',(ROOT/'tests/text_layout_checks.js').read_text(encoding='utf-8')))
+            if args.phase in ('single-labels','full'):
+                single_suite=page.evaluate('(source)=>{(0,eval)(source);return SingleLabelTests.run();}',(ROOT/'tests/single_label_checks.js').read_text(encoding='utf-8'))
+                cases.extend(single_suite['cases'])
+            if args.phase=='text-layout':
+                starts=[];page.on('request',lambda r:starts.append(r.url) if '/api/slice1/start' in r.url else None)
+                before_source=page.evaluate('()=>({nodes:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.nodes.get(b.id).parent,uxEditor.model.world(b.id).toArray()]),request:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                group=page.evaluate('()=>{const a=uxEditor,g=a.model.createLabels(a.model.planLabels("L16.down"));const ids=a.model.children(g);a.model.setLabelText(ids[0].id,"短");a.model.setLabelText(ids[1].id,"这是较长的文字标签");a.select([g]);return g;}')
+                assert page.locator('#label-text-align').is_visible()
+                page.locator('#label-text-align').select_option('left')
+                page.locator('#field-labelSize').fill('1');page.locator('#field-labelSize').dispatch_event('change')
+                aligned=page.evaluate('''g=>{const m=uxEditor.model,ids=m.children(g).map(n=>n.id),guide=m.nodes.get(g).data.alignmentGuide;
+                    if(ids.some(id=>Math.abs(TextLayoutTests.span(m,g,id).left-guide)>1e-7))throw Error('实际左对齐或字号修改未保持边线');
+                    const sizes=ids.map(id=>UXAnnotationMath.shape(m,m.nodes.get(id)));if(sizes.some(s=>Math.abs(s.factor-sizes[0].factor)>1e-10))throw Error('控件字号标尺不统一');return {count:ids.length,factor:sizes[0].factor};}''',group)
+                for mode in ('right','center'):
+                    page.locator('#label-text-align').select_option(mode)
+                    assert page.evaluate('(value)=>{const m=uxEditor.model,g=uxEditor.selected[0];return m.children(g).every(n=>Math.abs(TextLayoutTests.span(m,g,n.id)[value]-m.nodes.get(g).data.alignmentGuide)<1e-7);}',mode)
+                doc=page.evaluate('async(g)=>uxEditor.mapping([g])',group)
+                assert all(a['font_sizing']=='font-reference.v1' and a['text_alignment'][0]['mode']=='center' for a in doc['annotations'])
+                after_source=page.evaluate('()=>({nodes:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.nodes.get(b.id).parent,uxEditor.model.world(b.id).toArray()]),request:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                assert before_source==after_source and not starts
+                saved=page.evaluate('()=>uxEditor.getProject()')
+                restored=browser.new_page(viewport={'width':1600,'height':1050})
+                restored.add_init_script('(doc=>localStorage.setItem("snowglass.editor-ux.20261122-055413-124110.v3-zup",JSON.stringify(doc)))('+json.dumps(saved)+')')
+                restored.goto(args.url,wait_until='domcontentloaded');restored.wait_for_function('(g)=>window.uxEditor?.model.nodes.get(g)?.data.textAlign==="center" && uxEditor.scene.annotationView.meshes.size===32',arg=group,timeout=45000)
+                assert restored.locator('#label-text-align').input_value()=='center'
+                assert restored.evaluate('()=>uxEditor.scene.renderedSnow')==0
+                restored.close();assert not errors,errors
+                cases.append({'name':'actual_text_alignment_font_size_controls_and_restore','result':{**aligned,'alignment_modes':3,'source_unchanged':True,'no_weight_job':True}})
+                browser.close()
+            elif args.phase=='single-labels':
+                starts=[];page.on('request',lambda r:starts.append(r.url) if '/api/slice1/start' in r.url else None)
+                source_state=page.evaluate('()=>({source:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.nodes.get(b.id).name,uxEditor.model.world(b.id).toArray()]),request:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                page.evaluate('async(doc)=>{await uxEditor.loadProject(doc);uxEditor.select(["L16.down"]);}',single_suite['legacy'])
+                assert page.locator('#generate-annotations').count()==1
+                for key in ('labels','labelText','labelOutput','labelDx','labelDy','labelDz'):
+                    assert page.locator('#field-'+key).count()==0
+                page.evaluate('(id)=>uxEditor.select([id])',single_suite['group'])
+                assert page.locator('#field-visible').count()==0 and page.locator('#field-labelOutput').count()==0
+                toggle=page.locator('#field-labelEnabled');assert toggle.is_checked()
+                state=page.evaluate('''async(g)=>{const a=uxEditor,doc=await a.mapping([g]);if(a.scene.labels||a.scene.annotationView.covered)throw Error('旧标签渲染链仍存在');
+                    if(doc.annotations.length!==31||doc.annotations.some(t=>!t.enabled||!t.output))throw Error('旧显示与输出未正确合并');
+                    const member=a.model.children(g)[0];if(member.data.text!=='保留的新标签'||a.model.nodes.get(g).data.transformCenter!=='individual')throw Error('新版内容或变换模式丢失');
+                    return {exported:doc.annotations.length,text:member.data.text};}''',single_suite['group'])
+                toggle.uncheck()
+                page.wait_for_function('uxEditor.scene.annotationView.hits.length===0')
+                off=page.evaluate('async(g)=>({mapped:(await uxEditor.mapping([g])).annotations,definitions:uxEditor.model.annotations([g]),nodes:uxEditor.scene.annotationView.meshes.size})',single_suite['group'])
+                assert not off['mapped'] and off['nodes']==32 and all(not a['enabled'] and not a['output'] for a in off['definitions'])
+                with page.expect_download(timeout=10000) as download:
+                    page.get_by_text('保存标注定义',exact=True).click()
+                assert download.value.suggested_filename.startswith('annotations_')
+                page.locator('#field-labelEnabled').check()
+                page.wait_for_function('uxEditor.scene.annotationView.hits.length===31')
+                camera=page.evaluate('''async(g)=>{const a=uxEditor,old=JSON.stringify((await a.mapping([g])).annotations);a.scene.camera.position.x+=15;a.scene.orbit.update();a.scene.render();
+                    const current=JSON.stringify((await a.mapping([g])).annotations);if(old!==current)throw Error('镜头改变标签输出');return true;}''',single_suite['group'])
+                after_state=page.evaluate('()=>({source:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.nodes.get(b.id).name,uxEditor.model.world(b.id).toArray()]),request:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
+                assert source_state==after_state and not starts
+                saved=page.evaluate('()=>uxEditor.getProject()')
+                restored=browser.new_page(viewport={'width':1600,'height':1050})
+                restored.add_init_script('(doc=>localStorage.setItem("snowglass.editor-ux.20261122-055413-124110.v3-zup",JSON.stringify(doc)))('+json.dumps(saved)+')')
+                restored.goto(args.url,wait_until='domcontentloaded');restored.wait_for_function('window.uxEditor?.scene.annotationView.hits.length===31',timeout=45000)
+                restored_state=restored.evaluate('()=>({doc:uxEditor.getProject(),mesh_count:uxEditor.scene.annotationView.meshes.size})')
+                assert restored_state['mesh_count']==32 and restored_state['doc']['annotationPolicy']=='explicit-enabled.v1'
+                for node in restored_state['doc']['nodes']:
+                    assert all(k not in (node.get('overrides',{})) and k not in (node.get('values',{})) for k in ('labels','labelText','labelOutput','labelDx','labelDy','labelDz'))
+                restored.close();assert not errors,errors
+                cases.append({'name':'single_label_ui_toggle_export_restore_without_weight_changes','result':{**state,'camera_independent':camera,'old_controls_removed':True,'disabled_retained_in_project':True}})
+                browser.close()
+            elif args.phase=='pivots':
                 starts=[];page.on('request',lambda r:starts.append(r.url) if '/api/slice1/start' in r.url else None)
                 source_state=page.evaluate('()=>({nodes:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.world(b.id).toArray()]),request:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
                 group=page.evaluate('()=>{const a=uxEditor,g=a.model.createLabels(a.model.planLabels("L16.down"));a.select([g]);return g;}')
@@ -201,7 +270,7 @@ def main():
                 view=page.evaluate('''()=>{
                     const a=uxEditor,s=a.scene,m=a.model,id=a.selected[0],mesh=s.annotationView.meshes.get(id),w=m.world(id).toArray();
                     if(!mesh.isMesh||mesh.isSprite)throw Error('仍是相机Sprite');const size=UXAnnotationMath.shape(m,m.nodes.get(id));
-                    if(Math.abs(new THREE.Vector3().setFromMatrixColumn(m.world(id),1).length()-.7)>1e-7)throw Error('字号不是字形高度');
+                    if(Math.abs(new THREE.Vector3().setFromMatrixColumn(m.world(id),1).length()-size.height)>1e-7||Math.abs(size.nominalHeight-.7)>1e-7)throw Error('字形高度与统一字号标尺不对应');
                     const c=mesh.material.map.image,pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let minX=c.width,maxX=-1,minY=c.height,maxY=-1;
                     for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(pixels[(y*c.width+x)*4+3]>20){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
                     if(minX<2||maxX>=c.width-2||minY<2||maxY>=c.height-2||maxX<0)throw Error('字形贴图裁切或未绘制');
@@ -215,7 +284,7 @@ def main():
                 after_state=page.evaluate('()=>({parents:uxEditor.model.topo.blocks.map(b=>[b.id,uxEditor.model.nodes.get(b.id).parent,uxEditor.model.world(b.id).toArray()]),requests:uxEditor.slicing.blocks().map(id=>uxEditor.slicing.requestFor(id))})')
                 assert before_state==after_state,'标注操作影响源块／切片参数'
                 picking=page.evaluate('''()=>{
-                    const a=uxEditor,m=a.model,s=a.scene,id=a.selected[0];for(const n of m.nodes.values())if(n.type==='label'&&n.id!==id)m.set(n.id,'visible',false);
+                    const a=uxEditor,m=a.model,s=a.scene,id=a.selected[0];for(const n of m.nodes.values())if(n.type==='label'&&n.id!==id)m.set(n.id,'labelEnabled',false);
                     s.setMode('off');s.structure();const center=m.bounds([id]).getCenter(new THREE.Vector3());s.orbit.target.copy(center);s.camera.position.copy(center).add(new THREE.Vector3(0,-.01,20));s.orbit.update();s.render();
                     const p=s.screen(id),hit=s.pick({clientX:p.x,clientY:p.y,altKey:false});if(hit!==id)throw Error('固定文字平面未参与点击命中');return {id,point:p};
                 }''')
@@ -244,7 +313,7 @@ def main():
                     const s=uxEditor.scene,r=s.renderer,g=r.getContext(),w=g.drawingBufferWidth,h=g.drawingBufferHeight;
                     function compare(){const on=new Uint8Array(w*h*4),off=new Uint8Array(w*h*4);s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,on);s.snow.visible=false;s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,off);s.snow.visible=true;
                         let count=0,max=0;for(let i=0;i<on.length;i+=4){if(on[i]!==off[i]||on[i+1]!==off[i+1]||on[i+2]!==off[i+2])count++;max=Math.max(max,on[i],on[i+1],on[i+2]);}return {pixels:count,max};}
-                    s.drawSnow(uxEditor.results);s.fit(['L16.down']);const normal=compare();s.frames.material.needsUpdate=true;s.shells.material.needsUpdate=true;const recompiled=compare();const objects=[s.frames,s.shells,s.proxy,s.ghosts,s.highlights,s.labels,s.gumball];const old=objects.map(o=>o.visible);objects.forEach(o=>o.visible=false);const isolated=compare();objects.forEach((o,i)=>o.visible=old[i]);s.render();
+                    s.drawSnow(uxEditor.results);s.fit(['L16.down']);const normal=compare();s.frames.material.needsUpdate=true;s.shells.material.needsUpdate=true;const recompiled=compare();const objects=[s.frames,s.shells,s.proxy,s.ghosts,s.highlights,s.annotationView.group,s.gumball];const old=objects.map(o=>o.visible);objects.forEach(o=>o.visible=false);const isolated=compare();objects.forEach((o,i)=>o.visible=old[i]);s.render();
                     const mesh=s.snow.children[0],mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);return {normal,recompiled,isolated,gl_error:g.getError(),lost:g.isContextLost(),buffer:[w,h],meshes:s.snow.children.length,count:s.renderedSnow,first_matrix:mat.toArray(),first_colors:Array.from(mesh.instanceColor.array.slice(0,9)),camera:s.camera.position.toArray()};
                 }''')
                 print(json.dumps({'render_probe':diag},ensure_ascii=False),flush=True);cases.append({'name':'render_probe','result':diag});browser.close()
@@ -505,24 +574,24 @@ def main():
                     if(h0-h1!==6)throw Error('壳厚0没有移除6块板');
                     let rejected=false;try{m.set('L16.down','frameT',-.1);}catch(e){rejected=true;}if(!rejected)throw Error('负厚度未拒绝');return {frames:[f0,f1],shells:[h0,h1]};
                 }''')
-                check('label_text_is_per_object','''()=>{
-                    const m=uxEditor.model,s=uxEditor.scene;
-                    m.set('L16.down','labels',true);m.set('L16.down','labelText','自定义标签');s.structure();
-                    if(s.labels.children.length<1)throw Error('标签未绘制');
-                    const own=m.resolve('L16.down','labelText').own;
-                    if(!own)throw Error('文字未建立局部覆盖');
-                    if(m.resolve('L16.up','labelText').value!=='')throw Error('其他对象不应该跟着改');return {labels:s.labels.children.length};
+                check('independent_label_text_is_per_object','''()=>{
+                    const m=uxEditor.model,s=uxEditor.scene,g=m.createLabels(m.planLabels('L16.down',{axis:'z',mode:2})),children=m.children(g),id=children.find(n=>n.data.members.includes('L16.down')).id,other=children.find(n=>n.id!==id).id,text=m.nodes.get(other).data.text;
+                    window.regressionLabel=id;m.setLabelText(id,'自定义标签');s.structure();
+                    if(!s.annotationView.meshes.get(id)?.visible||s.labels)throw Error('独立标签未绘制或旧标签仍存在');
+                    if(m.nodes.get(other).data.text!==text)throw Error('其他对象的文字跟着改');
+                    if(document.getElementById('field-labelText')||document.getElementById('field-labelOutput'))throw Error('旧标签控件仍存在');
+                    return {labels:s.annotationView.meshes.size,text:m.nodes.get(id).data.text};
                 }''')
-                check('label_is_part_of_output_contract','''async()=>{
-                    const m=uxEditor.model;m.set('L16.down','labelText','冻结的模型');m.set('L16.down','labelOutput',true);
-                    const doc=await uxEditor.mapping(['L16.down']),r=doc.results.find(x=>x.id==='L16.down');
-                    if(!r.label||r.label.text!=='冻结的模型'||r.label.output!==true)throw Error('文字未进入导出定义');
-                    if(!Array.isArray(r.label.anchor_world_mm)||r.label.anchor_world_mm.length!==3)throw Error('缺锚点位置');
-                    if(!Array.isArray(r.label.offset_mm)||r.label.offset_mm.length!==3)throw Error('缺偏移');
+                check('enabled_labels_are_the_only_output_contract','''async()=>{
+                    const m=uxEditor.model,id=window.regressionLabel;m.setLabelText(id,'冻结的模型');
+                    const doc=await uxEditor.mapping(['L16.down']),label=doc.annotations.find(a=>a.id===id),r=doc.results.find(x=>x.id==='L16.down');
+                    if(r.label||!label||label.text!=='冻结的模型'||!label.enabled||!label.output)throw Error('未仅输出新版启用标注');
+                    if(label.anchor_world_mm.length!==3||label.matrix_mm.length!==16||label.front_world.length!==3)throw Error('缺独立标注几何或方向');
                     if(!doc.label_pipeline)throw Error('缺管线边界说明');
-                    m.set('L16.down','labelOutput',false);const off=await uxEditor.mapping(['L16.down']);
-                    if(off.results[0].label.output!==false||off.results[0].label.screen_only!==true)throw Error('关闭输出未生效');
-                    return {text:r.label.text,font:r.label.font,size_mm:r.label.size_mm,output:r.label.output};
+                    m.set(id,'labelEnabled',false);const off=await uxEditor.mapping(['L16.down']);
+                    if(off.annotations.some(a=>a.id===id)||uxEditor.scene.annotationView.meshes.get(id).visible)throw Error('停用后仍显示或进入输出');
+                    if(!m.nodes.has(id)||m.annotations([id])[0].enabled!==false)throw Error('停用删除了工程定义');
+                    return {text:label.text,font:label.font,size_mm:label.size_mm,disabled_excluded:true};
                 }''')
                 page.evaluate('(s)=>{uxEditor.model.load(s);uxEditor.select(["L16.down"]);}',initial)
                 page.wait_for_function('uxEditor.selected[0]==="L16.down"')

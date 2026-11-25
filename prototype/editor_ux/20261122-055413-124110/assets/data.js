@@ -95,12 +95,7 @@
       for(const id of model.leaves(ids).filter(id=>model.nodes.get(id).type==='block')){
         const group=this.groups.get(id);if(group&&group.tensors.some(ref=>!this.sources(ref,id,model)?.matched))throw Error(id+'：选定约定／网格尚未生成，不保存旧数据冒充当前设置。');
         const r=await this.evaluate(id,model);
-        const node=model.nodes.get(id),center=model.bounds([id]).getCenter(new THREE.Vector3()).toArray();
-        const label={text:model.resolve(id,'labelText').value||node.name,font:model.resolve(id,'labelFont').value,
-          size_mm:model.resolve(id,'labelSize').value,offset_mm:[model.resolve(id,'labelDx').value,model.resolve(id,'labelDy').value,model.resolve(id,'labelDz').value],
-          anchor_world_mm:center,output:model.resolve(id,'labelOutput').value,screen_only:!model.resolve(id,'labelOutput').value,
-          orientation:'屏幕贴片朝镜头；导出需固定朝向，未核实',glyph_geometry:'未接入'};
-        results.push({id,status:r.status,include_in_work:model.resolve(id,'include').value,label,matrix_mm:model.world(id).toArray(),snow_size_mm:model.resolve(id,'snowSize').value,
+        results.push({id,status:r.status,include_in_work:model.resolve(id,'include').value,matrix_mm:model.world(id).toArray(),snow_size_mm:model.resolve(id,'snowSize').value,
           statistics_source:this.groups.get(id)?.slice_signature||this.manifest.source_run,settings:r.settings||null,
           pieces:r.pieces.map(p=>({tensor:p.key,name:p.name,channel:p.used,grid:p.grid,region:p.region,gray:Array.from(p.gray),mask:Array.from(p.mask),
             counts:p.counts,window:p.window,reference_white:p.reference,data_sha256:p.data_sha256,source_convention:p.source_convention,source_run:p.source_run}))});
@@ -109,8 +104,8 @@
         topology_sha256:model.provenance.topology_sha256,manifest_sha256:model.provenance.manifest_sha256,
         source_runs:this.manifest.source_runs||[this.manifest.source_run],
         approximation:{lut_size:4097,lookup:'linear',note:'贝塞尔数值映射使用查找表近似；预览与此文件共用同一求值规则'},
-        annotations:model.annotations(ids),
-        label_pipeline:'独立标注带固定世界位姿；旧块标签仍为屏幕贴片。字形轮廓与厂家读取契约未接入，本文件不是可加工文字。',
+        annotationPolicy:UXCoordinates.LABEL_POLICY,annotations:model.annotations(ids).filter(a=>a.enabled),
+        label_pipeline:'只输出启用的新版独立标注，显示与输出共用状态。停用对象留在工程／标注定义中，不进入切片内容。字形轮廓与厂家读取契约未接入。',
         disclaimer:'这是统计与灰度映射记录，不是已核实的厂家加工文件；未计算块没有补模拟数据。',results};
     }
   }

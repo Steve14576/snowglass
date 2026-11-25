@@ -1,7 +1,7 @@
 /* 标注分组与字体尺寸：只读模型几何，不读取权重。拍平只聚合成员身份。 */
 (() => {
   'use strict';
-  const EPS=1e-6,metricCache=new Map(),AXES=['x','y','z'];
+  const EPS=1e-6,FONT_SIZING='font-reference.v1',metricCache=new Map(),AXES=['x','y','z'];
   const MODES={
     x:[{name:'所选XY · 拍平Y',fixed:'z'},{name:'所选XZ · 拍平Z',fixed:'y'},{name:'整塔 · 每个YZ截面',fixed:null}],
     y:[{name:'所选XY · 拍平X',fixed:'z'},{name:'所选YZ · 拍平Z',fixed:'x'},{name:'整塔 · 每个XZ截面',fixed:null}],
@@ -16,7 +16,11 @@
     const result={text,font,cssFont:ctx.font,left,right,ascent,descent,width,height,padding:4,canvasWidth:Math.ceil(width+8),canvasHeight:Math.ceil(height+8)};
     if(metricCache.size>=256)metricCache.delete(metricCache.keys().next().value);metricCache.set(key,result);return result;
   }
-  function shape(model,node){const metric=measure(node.data.text,model.resolve(node.id,'labelFont').value),height=model.resolve(node.id,'labelSize').value;return {metric,width:metric.width/metric.height*height,height};}
+  function dimensions(text,font,nominalHeight,uniform=true){
+    const metric=measure(text,font),referenceHeight=uniform?64:metric.height,factor=nominalHeight/referenceHeight;
+    return {metric,factor,nominalHeight,referenceHeight,width:metric.width*factor,height:metric.height*factor};
+  }
+  function shape(model,node){return dimensions(node.data.text,model.resolve(node.id,'labelFont').value,model.resolve(node.id,'labelSize').value,node.data.fontSizing===FONT_SIZING);}
   function pose(model,id){
     const matrix=model.objectFrame(id),p=new THREE.Vector3(),q=new THREE.Quaternion();matrix.decompose(p,q,new THREE.Vector3());
     return new THREE.Matrix4().compose(p,q.normalize(),new THREE.Vector3(1,1,1));
@@ -59,15 +63,15 @@
     const bounds=model.bounds(scope.length?scope:[id]),font=model.resolve(id,'labelFont').value,height=model.resolve(id,'labelSize').value;
     const rotation=new THREE.Matrix4();if(face==='+z')rotation.makeRotationX(-Math.PI/2);
     const labels=groups.map((g,i)=>{
-      const text=selected.regular?caption(model,g,axis,i):(model.resolve(id,'labelText').value||selected.node.name),metric=measure(text,font),position=selectedCenter.clone();position[axis]=g.coordinate;
-      const width=metric.width/metric.height*height,sideAxis=side[1],half=sideAxis==='x'?width/2:sideAxis===(face==='+z'?'y':'z')?height/2:0;
+      const text=selected.regular?caption(model,g,axis,i):selected.node.name,size=dimensions(text,font,height),position=selectedCenter.clone();position[axis]=g.coordinate;
+      const {width}=size,sideAxis=side[1],half=sideAxis==='x'?width/2:sideAxis===(face==='+z'?'y':'z')?size.height/2:0;
       position[sideAxis]=side[0]==='+'?bounds.max[sideAxis]+gap+half:bounds.min[sideAxis]-gap-half;
       const matrix=new THREE.Matrix4().makeTranslation(...position.toArray()).multiply(rotation);
-      return {text,members:g.members.map(r=>r.id),matrix:matrix.toArray(),width,height};
+      return {text,members:g.members.map(r=>r.id),matrix:matrix.toArray(),width,height:size.height};
     });
     const center=labels.reduce((sum,l)=>sum.add(new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().fromArray(l.matrix))),new THREE.Vector3()).multiplyScalar(1/labels.length);
     return {sourceId:id,axis,mode,side,face,gap,tolerance:EPS,scopeIds:groups.flatMap(g=>g.members.map(r=>r.id)),font,height,center:center.toArray(),labels};
   }
   function nodeName(model,id){return model.nodes.get(id).name;}
-  window.UXAnnotationMath={EPS,MODES,measure,shape,pose,aggregate,source,generate};
+  window.UXAnnotationMath={EPS,FONT_SIZING,MODES,measure,dimensions,shape,pose,aggregate,source,generate};
 })();

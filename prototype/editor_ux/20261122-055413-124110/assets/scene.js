@@ -13,7 +13,7 @@
       // r128首帧编译前就分配实例颜色，防止之后仍用不含灰度的白色材质程序。
       this.frames.setColorAt(0,new T.Color(0,0,0));this.shells.setColorAt(0,new T.Color(0,0,0));
       [this.frames,this.shells,this.proxy].forEach(m=>{m.count=0;m.frustumCulled=false;this.scene.add(m);});
-      this.highlights=new T.Group();this.ghosts=new T.Group();this.snow=new T.Group();this.labels=new T.Group();[this.highlights,this.ghosts,this.snow,this.labels].forEach(g=>this.scene.add(g));this.annotationView=new UXAnnotationView(this);
+      this.highlights=new T.Group();this.ghosts=new T.Group();this.snow=new T.Group();[this.highlights,this.ghosts,this.snow].forEach(g=>this.scene.add(g));this.annotationView=new UXAnnotationView(this);
       this.pivot=new T.Object3D();this.scene.add(this.pivot);this.gumball=new T.TransformControls(this.camera,this.renderer.domElement);this.gumball.setSize(.75);this.scene.add(this.gumball);this.gumball.addEventListener('change',()=>this.render());this.mode='translate';
       this.gumball.addEventListener('dragging-changed',e=>{this.orbit.enabled=!e.value;if(e.value){model.beginGesture();this.startPivot=this.pivot.matrixWorld.clone();this.startLocals=new Map(model.roots(this.selected).flatMap(id=>[id,...model.descendants(id)]).map(id=>[id,model.nodes.get(id).local.slice()]));}
         else{model.endGesture();this.syncPivot();this.onGesture(false);}});
@@ -89,8 +89,8 @@
     pick(e){const r=this.renderer.domElement.getBoundingClientRect();this.mouse.set((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2);this.scene.updateMatrixWorld();this.ray.setFromCamera(this.mouse,this.camera);
       if(e.altKey){const h=this.ray.intersectObjects(this.ghostHits||[],false)[0];return h?.object.userData.id||null;}const label=this.annotationView.pick(this.ray),hit=this.ray.intersectObject(this.proxy,false)[0];return label&&(!hit||label.distance<hit.distance)?label.object.userData.id:hit?this.blockIds[hit.instanceId]:null;}
     structure(){
-      const T=THREE,M=this.model;let fi=0,si=0,pi=0;this.blockIds=[];this.clear(this.highlights);this.clear(this.labels);
-      const selected=new Set(M.leaves(this.selected)),observed=new Set(M.leaves(this.observation).filter(id=>M.nodes.get(id).type==='block')),covered=this.annotationView.covered();
+      const T=THREE,M=this.model;let fi=0,si=0,pi=0;this.blockIds=[];this.clear(this.highlights);
+      const selected=new Set(M.leaves(this.selected)),observed=new Set(M.leaves(this.observation).filter(id=>M.nodes.get(id).type==='block'));
       for(const n of M.nodes.values())if(n.type==='block'&&M.resolve(n.id,'visible').value&&(!this.isolate||!observed.size||observed.has(n.id))){
         const m=M.world(n.id),dims=[0,1,2].map(i=>new T.Vector3().setFromMatrixColumn(m,i).length()),[x,y,z]=dims;
         const t=Math.min(M.resolve(n.id,'frameT').value,Math.min(...dims)/2),sh=Math.min(M.resolve(n.id,'shellT').value,Math.min(...dims)/2);
@@ -115,9 +115,6 @@
           const glow=new T.Mesh(this.unit,new T.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.10,depthWrite:false,side:T.BackSide}));
           glow.matrixAutoUpdate=false;glow.matrix.copy(m).multiply(new T.Matrix4().makeScale(1.045,1.045,1.045));this.highlights.add(glow);
         }
-        if(M.resolve(n.id,'labels').value&&!covered.has(n.id)){const text=M.resolve(n.id,'labelText').value||n.name;const font=M.resolve(n.id,'labelFont').value||'Microsoft YaHei';const c=document.createElement('canvas'),ctx=c.getContext('2d');c.width=512;c.height=64;ctx.font='22px '+font+',sans-serif';ctx.fillStyle='#f3d79a';ctx.fillText(text,8,36);
-          const sp=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(c),depthTest:false})),size=M.resolve(n.id,'labelSize').value;sp.scale.set(size*8,size,1);
-          sp.position.copy(new T.Vector3().setFromMatrixPosition(m)).add(new T.Vector3(M.resolve(n.id,'labelDx').value,M.resolve(n.id,'labelDy').value,M.resolve(n.id,'labelDz').value));this.labels.add(sp);}
       }
       this.frames.count=fi;this.shells.count=si;this.proxy.count=pi;for(const mesh of [this.frames,this.shells,this.proxy]){mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
       this.clear(this.ghosts);this.ghostHits=[];

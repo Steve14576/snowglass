@@ -1,0 +1,174 @@
+{
+  "phase": "text-layout",
+  "passed": true,
+  "failure": null,
+  "page_errors": [],
+  "diagnostic": {},
+  "cases": [
+    {
+      "name": "startup_real_geometry_and_layout",
+      "result": {
+        "nodes": 437,
+        "blocks": 370,
+        "real_count": 8192,
+        "dimensions": [
+          38.925,
+          7.13,
+          26.391999999999996
+        ],
+        "sidebar_right": 380,
+        "view_left": 385,
+        "tree_y": 40,
+        "properties_y": 335,
+        "slice_disabled": false
+      }
+    },
+    {
+      "name": "world_axes_projection_and_view_only",
+      "result": {
+        "front": [
+          {
+            "axis": "X",
+            "sign": -1,
+            "label": "-X",
+            "x": 42,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "X",
+            "sign": 1,
+            "label": "+X",
+            "x": 102,
+            "y": 54,
+            "depth": 0
+          },
+          {
+            "axis": "Y",
+            "sign": -1,
+            "label": "-Y",
+            "x": 72,
+            "y": 54.00000000000001,
+            "depth": 1
+          },
+          {
+            "axis": "Y",
+            "sign": 1,
+            "label": "+Y",
+            "x": 72,
+            "y": 53.99999999999999,
+            "depth": -1
+          },
+          {
+            "axis": "Z",
+            "sign": -1,
+            "label": "-Z",
+            "x": 72,
+            "y": 84,
+            "depth": -2.220446049250313e-16
+          },
+          {
+            "axis": "Z",
+            "sign": 1,
+            "label": "+Z",
+            "x": 72,
+            "y": 24,
+            "depth": 2.220446049250313e-16
+          }
+        ],
+        "side": {
+          "axis": "X",
+          "sign": 1,
+          "label": "+X",
+          "x": 72,
+          "y": 54,
+          "depth": 1
+        },
+        "pixels": 1707,
+        "model_unchanged": true,
+        "mouse_passthrough": true
+      }
+    },
+    {
+      "name": "same_font_same_size_uses_one_scale_not_per_text_height",
+      "result": {
+        "uniform_factor": 0.0109375,
+        "reference_height": 64,
+        "nominal_height": 0.7,
+        "individual_override_preserved": true
+      }
+    },
+    {
+      "name": "left_right_center_move_only_and_keep_other_coordinates",
+      "result": {
+        "alignments": 3,
+        "no_stretch_or_spacing_change": true,
+        "undo_redo": true
+      }
+    },
+    {
+      "name": "edited_text_font_and_size_keep_selected_guide",
+      "result": {
+        "text_font_size_reflow": true,
+        "guide_fixed": true,
+        "single_manual_edit": true
+      }
+    },
+    {
+      "name": "alignment_in_rotated_scaled_group_with_individual_pivot",
+      "result": {
+        "local_group_axis": true,
+        "individual_pivot": true,
+        "follow_preserved": true
+      }
+    },
+    {
+      "name": "old_labels_keep_size_and_new_layout_roundtrips",
+      "result": {
+        "legacy_preserved": true,
+        "uniform_on_size_edit": true,
+        "roundtrip": true,
+        "no_justify": true
+      }
+    },
+    {
+      "name": "actual_text_alignment_font_size_controls_and_restore",
+      "result": {
+        "count": 32,
+        "factor": 0.015625,
+        "alignment_modes": 3,
+        "source_unchanged": true,
+        "no_weight_job": true
+      }
+    }
+  ],
+  "source_unchanged": true,
+  "frozen_math_sha256": {
+    "survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16"
+  },
+  "assets_sha256": {
+    "index.html": "502bc703339d28fa4e7ecb5b125c9a63f1c64f59554cd6cc59d6a87358e78c9d",
+    "assets\\annotation_math.js": "48d8fa705a6cb7e970189c90d0f436afa5675ac263fa59d3aba0147451124420",
+    "assets\\annotation_state.js": "3a87909f098b921cfd91d18b48cac8ccac1216be243db78a831d3a8ee6e12e06",
+    "assets\\annotation_ui.js": "8c7ff01461407b2183b763e39aea49c67ea7dbde08b701c75db14cc90390cba9",
+    "assets\\annotation_view.js": "32862cce2430d55f562fe3900f29d132d01dd8aca11d27fec7c48bb36c9ddb5c",
+    "assets\\app.js": "d65200c85545b9f773770d6ab1730488e9ad077ef003d7e9430978fed6e7534c",
+    "assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "assets\\checks.js": "0faa7cc978955f03a0dc14402a6c92bc25025cc0df43d968d69e2fbd3f6d36ea",
+    "assets\\coordinates.js": "9c2edb9c18d2092a0643967de5c62566f4baec472de1ed69dcf912d4075bb7d7",
+    "assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "assets\\data.js": "bc96eee1a4a093bc3cd03ba8c19ed9f6197b8aa0c5bb619aa8c60f83713fb631",
+    "assets\\editor.css": "72bb41d234dff5540381b0f75420f1e1f084db9e8689edda00fc7a4476bb9288",
+    "assets\\inspector.js": "d9159c89b1a837e6750161d0f8f218889f9844f3fe4f8632e4576584ffcd1edb",
+    "assets\\layout.js": "8503ad5a3f2dec2a589895e4ad242b0e3361c66af7ca183e8389bfeb1c461058",
+    "assets\\model.js": "3004b82fb57ba3ba7aad1842cac117274ac50fe7b920aeeb796b0d5b66e02283",
+    "assets\\scene.js": "4a89e504462b132bd86c85736deb74115d6ca907fa2b7d480225bc2016758002",
+    "assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "assets\\tree.js": "cb1fc950f50ae27fa98b4183a149d949cd3184e4fb34cf3b1ccd9b874a30dff4"
+  },
+  "test_sha256": "c1c16588bcc84f24e8735c9bc76b812184002e43854735de64a9bb658841b0db",
+  "seconds": 50.09299999999348
+}

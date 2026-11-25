@@ -6,7 +6,6 @@
     gridX:[1,64,1],gridY:[1,64,1],gridZ:[1,64,1],
     frameT:[0,.5,.001],shellT:[0,.5,.001],frameGray:[0,1,.005],shellGray:[0,1,.002],
     snowSize:[.002,.08,.001],gap:[-.3,.3,.005],labelSize:[.1,4,.05],
-    labelDx:[-30,30,.1],labelDy:[-30,30,.1],labelDz:[-30,30,.1],
     black:[-.5,1.5,.01],white:[-.5,2.5,.01],cutoff:[0,1,.005],
     squash:[.2,2,.01],depth:[1,30,.1],pitch:[.02,.3,.005],dotUm:[20,120,1],speed:[500,20000,100]
   };
@@ -44,7 +43,7 @@
       }
       const button=document.createElement('button');button.className='inherit-button';const global=ids.every(id=>id==='global'),allOwn=resolved.every(v=>v.own);
       button.textContent=global?'—':allOwn?'继':'锁';button.disabled=global;button.title=allOwn?'恢复继承，读取上级当前值':'固定当前有效值为本地覆盖';button.setAttribute('aria-label',label+' 继承状态');
-      button.onclick=()=>this.safe(()=>M.commit(()=>ids.forEach(id=>{if(allOwn)delete M.nodes.get(id).overrides[key];else M.put(id,key,CurveMath.copy(M.resolve(id,key).value));})));
+      button.onclick=()=>this.safe(()=>M.commit(()=>ids.forEach(id=>{if(allOwn)M.drop(id,key);else M.put(id,key,CurveMath.copy(M.resolve(id,key).value));})));
       const source=document.createElement('div');source.className='prop-source'+(allOwn?' local':'');source.textContent=mixed?'混合值 · 查看成员差异':global?'全局默认':allOwn?'本地覆盖':'继承自：'+M.nodes.get(r.source).name;
       row.append(lab,button);if(wrap===input)row.append(input);else row.append(wrap);row.append(source);body.append(row);
     }
@@ -56,7 +55,7 @@
       input.onchange=()=>this.safe(()=>M.commit(()=>ids.forEach(id=>M.put(id,key,input.value))));
       const button=document.createElement('button');button.className='inherit-button';const allOwn=resolved.every(v=>v.own);
       button.textContent=allOwn?'继':'锁';button.title=allOwn?'恢复继承':'固定当前文字为本地值';
-      button.onclick=()=>this.safe(()=>M.commit(()=>ids.forEach(id=>{if(allOwn)delete M.nodes.get(id).overrides[key];else M.put(id,key,M.resolve(id,key).value);})));
+      button.onclick=()=>this.safe(()=>M.commit(()=>ids.forEach(id=>{if(allOwn)M.drop(id,key);else M.put(id,key,M.resolve(id,key).value);})));
       const source=document.createElement('div');source.className='prop-source'+(allOwn?' local':'');
       source.textContent=ids.every(id=>id==='global')?'全局默认':allOwn?'本地覆盖':'继承自：'+M.nodes.get(r.source).name;
       row.append(lab,button,input,source);body.append(row);
@@ -149,14 +148,10 @@
       const compose=this.section('compose','显示与作品组成');this.field(compose,'visible','屏幕可见');this.field(compose,'include','进入作品');this.note(compose,'屏幕隐藏不等于不进作品；两者分开。');
       const label=this.section('labels','文字与输出');
       if(ids.length===1&&first.type==='block')UXAnnotationUI.controls(this,label,first.id);
-      this.field(label,'labels','屏幕上显示');
-      this.field(label,'labelOutput','随作品／切片输出');
-      this.textField(label,'labelText','标签文字','留空则用对象自身名字');
-      this.textField(label,'labelFont','字体族','如 Microsoft YaHei');
-      this.field(label,'labelSize','标签高度 mm');
-      this.field(label,'labelDx','标签偏移 X mm');this.field(label,'labelDy','标签偏移 Y mm');this.field(label,'labelDz','标签偏移 Z mm');
-      this.note(label,'文字是对象自己的属性，打组不改成员文字。“屏幕上显示”只管预览；“随作品输出”才会写进导出清单。');
-      this.note(label,'当前导出管线未接入：文字定义（内容、字体、毫米字号、三轴偏移、锚点位置）会写入灰度映射 JSON，但尚未转成可加工字形几何；朝向、中文字形与轮廓授权仍待核实。',true);
+      this.textField(label,'labelFont','新标签默认字体','如 Microsoft YaHei');
+      this.field(label,'labelSize','新标签默认字号标尺 mm');
+      this.note(label,'这里只设新建标签的默认样式，不自动贴名字。文字、启用状态与位置在生成后的标注对象上编辑；临时查身份用鼠标悬停。');
+      this.note(label,'启用的新标签显示并进入输出；字形轮廓与厂家加工读取契约仍未接入。',true);
       if(global){const machine=this.section('machine','全局机台与后验参照');for(const [key,text] of [['pitch','机台点距 mm'],['dotUm','爆点点径 μm'],['speed','打点速度 / 秒']])this.field(machine,key,text);this.note(machine,'仅作未核实的工艺参照，不能推断可辨灰阶或安全。',true);}
       const calculation=this.section('calculation','后续计算边界');this.note(calculation,'一级切片已接本机任务服务；统计网格可配置，统计来源按需生成；仅谱来源沿用原SVD配方。任意解析式、自适应、字体几何及厂家OBJ/STL导出仍未接入。每格合并量n不是另行拍板的固定值，以实际 counts 为准。',true);
       this.resultsBody=this.section('results','所选真实统计与来源');this.note(this.resultsBody,'正在载入所选对象的已有统计……');

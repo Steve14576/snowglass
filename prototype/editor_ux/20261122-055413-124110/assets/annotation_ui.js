@@ -12,10 +12,20 @@
       input.onchange=()=>ins.safe(()=>M.setLabelText(single.id,input.value));row.append(label,input);body.append(row);
       ins.note(body,'对应源块：'+single.data.members.join('、'));
     }
-    ins.field(body,'visible','屏幕上显示');ins.field(body,'labelOutput','随作品／切片输出');ins.textField(body,'labelFont','字体族');ins.field(body,'labelSize','实际字形高度 mm');
+    if(single?.type==='labelGroup'){
+      const row=document.createElement('div');row.className='prop-row';const label=document.createElement('label');label.textContent='组内文字对齐';label.htmlFor='label-text-align';
+      const input=document.createElement('select');input.id=label.htmlFor;if(!single.data.textAlign){const option=new Option('选择对齐方式（保留当前位置）','');option.disabled=true;input.add(option);}
+      for(const [value,text] of [['left','左对齐'],['right','右对齐'],['center','居中对齐']])input.add(new Option(text,value));input.value=single.data.textAlign||'';
+      input.onchange=()=>ins.safe(()=>M.setLabelAlignment(single.id,input.value));row.append(label,input);body.append(row);
+      ins.note(body,'整组文字贴齐共同左边、右边或中线，只移动位置；不拉伸字宽、不改字间距。按组的局部X方向判定左右，单个手动变换仍可调。');
+    }
+    ins.field(body,'labelEnabled','启用标签（显示并输出）');ins.textField(body,'labelFont','字体族');ins.field(body,'labelSize','统一字号标尺 mm');
+    ins.note(body,'新组的成员默认继承同一字号，同一字体共用统一标尺，不再逐条文字按墨迹高度缩放。不同字符实际墨迹高度可以不同；单标签字号覆盖和手动缩放仍保留。');
+    if(single?.type==='labelGroup'&&M.leaves([single.id]).some(id=>M.nodes.get(id).data.fontSizing!==UXAnnotationMath.FONT_SIZING))ins.note(body,'此组含旧字号口径的标签，先保留原尺寸；实际修改本组字号时，跟随它的成员采用统一标尺。仅查看或锁定同值不改变尺寸。');
     const f=single&&UXAnnotationState.effective(M,single.id);
     if(f)ins.note(body,f.lostSource?'源块已删除：'+f.lostSource+'；保留最后位置，跟随已解除。':'跟随源块：'+f.sourceId+'；跟随平移／旋转，不继承源缩放。');
     if(single?.data.recipe){const r=single.data.recipe;ins.note(body,r.sourceId+' · '+UXAnnotationMath.MODES[r.axis][r.mode].name+' · 初始放置'+r.side+' · 初始朝向'+r.face+'；包含'+M.leaves([single.id]).length+'个标签。');}
+    ins.note(body,'启用就显示并进入输出；停用后不进入切片内容，但对象留在工程里。未覆盖成员跟随组的启用状态，已锁定成员保留自己的值。镜头外或背面不等于停用。');
     ins.note(body,'组只继承样式，不继承文字内容；用变换数字或gumball调位置／朝向。');note(ins,body);
     const save=document.createElement('button');save.textContent='保存标注定义';save.onclick=()=>ins.actions.saveAnnotations?.(ids.slice());body.append(save);
     return true;
@@ -46,7 +56,7 @@
     form.append(button);body.append(form);selectOptions();preview();
     const related=[...M.nodes.values()].filter(n=>n.type==='labelGroup'&&n.data.recipe?.sourceId===id);
     for(const n of related){const jump=document.createElement('button');jump.className='annotation-jump';jump.textContent='定位 '+n.name;jump.onclick=()=>ins.actions.select([n.id]);body.append(jump);}
-    ins.note(body,'生成的成员不再重复显示旧自动块标签；旧覆盖值保留，移除显式标注后可恢复。');
+    ins.note(body,'只生成新版独立标签，旧自动标签已移除。需要临时查身份可悬停源块；生成后到标注分支调整。');
   }
   function identity(model,node){
     const f=UXAnnotationState.effective(model,node.id),lines=[];

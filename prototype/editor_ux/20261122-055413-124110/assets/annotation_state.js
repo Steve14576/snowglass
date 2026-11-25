@@ -1,7 +1,7 @@
 /* 独立标注节点：操作父级唯一，源块跟随是独立引用，不迁移模型身份。 */
 (() => {
   'use strict';
-  const TYPES=['annotationRoot','labelGroup','label'],STYLE=['visible','labelFont','labelSize','labelOutput'],I=()=>new THREE.Matrix4(),mat=a=>new THREE.Matrix4().fromArray(a),copy=CurveMath.copy;
+  const TYPES=['annotationRoot','labelGroup','label'],STYLE=['labelEnabled','labelFont','labelSize'],I=()=>new THREE.Matrix4(),mat=a=>new THREE.Matrix4().fromArray(a),copy=CurveMath.copy;
   const is=n=>!!n&&TYPES.includes(n.type);
   function ensureRoot(model){if(!model.nodes.has('annotations'))model.nodes.set('annotations',new UXModel.Node('annotations','annotationRoot','标注','project'));}
   function effective(model,id){let n=model.nodes.get(id);while(is(n)){if(n.data?.follow)return n.data.follow;n=model.nodes.get(n.parent);}return null;}
@@ -18,6 +18,30 @@
     const n=model.nodes.get(id),result=frame(model,id);if(n.type==='label'){const size=UXAnnotationMath.shape(model,n);result.multiply(UXCoordinates.basis()).multiply(I().makeScale(size.width,size.height,1));}return result;
   }
   function setFrame(model,id,w){model.nodes.get(id).local=beforeLocal(model,id).invert().multiply(w).toArray();}
+  function alignRows(model,id,reset=false){
+    const group=model.nodes.get(id);if(group?.type!=='labelGroup'||!group.data.textAlign)return;
+    const groupFrame=frame(model,id),inverse=groupFrame.clone().invert(),records=model.leaves([id]).filter(child=>model.nodes.get(child).type==='label').map(child=>{
+      const w=world(model,child),box=new THREE.Box3();for(const x of [-.5,.5])for(const y of [-.5,.5])box.expandByPoint(new THREE.Vector3(x,y,0).applyMatrix4(w).applyMatrix4(inverse));
+      return {id:child,frame:frame(model,child),left:box.min.x,right:box.max.x};
+    });if(!records.length)return;
+    const left=Math.min(...records.map(r=>r.left)),right=Math.max(...records.map(r=>r.right)),mode=group.data.textAlign;
+    if(reset||group.data.alignmentGuide===undefined)group.data.alignmentGuide=mode==='left'?left:mode==='right'?right:(left+right)/2;
+    const direction=new THREE.Vector3().setFromMatrixColumn(groupFrame,0);
+    for(const r of records){const edge=mode==='left'?r.left:mode==='right'?r.right:(r.left+r.right)/2,position=new THREE.Vector3().setFromMatrixPosition(r.frame).addScaledVector(direction,group.data.alignmentGuide-edge);setFrame(model,r.id,r.frame.setPosition(position));}
+  }
+  function setAlignment(model,id,value){if(model.nodes.get(id)?.type!=='labelGroup'||!['left','right','center'].includes(value))throw Error('标签组文字对齐无效');model.commit(()=>{model.nodes.get(id).data.textAlign=value;alignRows(model,id,true);});}
+  function refreshAlignment(model,labels){
+    const groups=new Set(labels.flatMap(id=>model.ancestors(id)).filter(id=>model.nodes.get(id)?.type==='labelGroup'&&model.nodes.get(id).data.textAlign));
+    [...groups].sort((a,b)=>model.ancestors(b).length-model.ancestors(a).length).forEach(id=>alignRows(model,id));
+  }
+  function fontChanged(model,id,key){
+    if(!['labelFont','labelSize'].includes(key))return;
+    const node=model.nodes.get(id);if(id!=='global'&&!is(node))return;
+    const descendants=new Set(model.descendants(id)),labels=(id==='global'?[...model.nodes.values()].filter(n=>n.type==='label').map(n=>n.id):model.leaves([id]).filter(child=>model.nodes.get(child).type==='label')).filter(child=>{
+      const source=model.resolve(child,key).source;return id==='global'?source==='global':source===id||!descendants.has(source);
+    });
+    labels.forEach(child=>model.nodes.get(child).data.fontSizing=UXAnnotationMath.FONT_SIZING);refreshAlignment(model,labels);
+  }
   function centerMode(model,id){return model.nodes.get(id)?.data?.transformCenter||'group';}
   function setCenter(model,id,value){if(model.nodes.get(id)?.type!=='labelGroup'||!['group','individual'].includes(value))throw Error('标签组旋转／缩放中心无效');model.commit(()=>model.nodes.get(id).data.transformCenter=value);}
   function linearIdentity(m){return [0,1,2,4,5,6,8,9,10].every(i=>Math.abs(m.elements[i]-I().elements[i])<1e-10);}
@@ -65,8 +89,8 @@
       const origin=I().makeTranslation(...plan.center),id=next(model,'label-group'),n=new UXModel.Node(id,'labelGroup',plan.sourceId+' · '+plan.axis.toUpperCase()+'标注','annotations');
       const recipe=copy(plan);delete recipe.labels;delete recipe.center;
       n.data={base:origin.toArray(),recipe,follow:{sourceId:plan.sourceId,reference:UXAnnotationMath.pose(model,plan.sourceId).toArray()}};
-      n.overrides={visible:true,labelFont:plan.font,labelSize:plan.height,labelOutput:model.resolve(plan.sourceId,'labelOutput').value};model.nodes.set(id,n);
-      for(const l of plan.labels){const labelId=next(model,'label'),child=new UXModel.Node(labelId,'label',l.text,id);child.data={text:l.text,members:l.members.slice(),base:origin.clone().invert().multiply(mat(l.matrix)).toArray()};model.nodes.set(labelId,child);}
+      n.overrides={labelEnabled:true,labelFont:plan.font,labelSize:plan.height};model.nodes.set(id,n);
+      for(const l of plan.labels){const labelId=next(model,'label'),child=new UXModel.Node(labelId,'label',l.text,id);child.data={text:l.text,fontSizing:UXAnnotationMath.FONT_SIZING,members:l.members.slice(),base:origin.clone().invert().multiply(mat(l.matrix)).toArray()};model.nodes.set(labelId,child);}
       model.validate(model.snapshot());result=id;
     });return result;
   }
@@ -81,7 +105,7 @@
       if(!model.nodes.has(model.primaryGhost))model.primaryGhost=[...model.nodes.values()].find(n=>n.type==='ghost')?.id||null;
     });
   }
-  function text(model,id,value){UXAnnotationMath.measure(value,model.resolve(id,'labelFont').value);model.commit(()=>{const n=model.nodes.get(id);if(n.type!=='label')throw Error('只修改标签自己的文字');n.data.text=value;n.name=value;});}
+  function text(model,id,value){UXAnnotationMath.measure(value,model.resolve(id,'labelFont').value);model.commit(()=>{const n=model.nodes.get(id);if(n.type!=='label')throw Error('只修改标签自己的文字');n.data.text=value;n.name=value;n.data.fontSizing=UXAnnotationMath.FONT_SIZING;refreshAlignment(model,[id]);});}
   function validateMatrix(a){if(!Array.isArray(a)||a.length!==16||a.some(v=>!Number.isFinite(v))||Math.abs(mat(a).determinant())<1e-12||Math.abs(a[3])+Math.abs(a[7])+Math.abs(a[11])>1e-8||Math.abs(a[15]-1)>1e-8)throw Error('标注参考矩阵无效');}
   function validateRigid(a){validateMatrix(a);const m=mat(a),axes=[0,1,2].map(i=>new THREE.Vector3().setFromMatrixColumn(m,i));if(axes.some(v=>Math.abs(v.lengthSq()-1)>1e-6)||Math.abs(axes[0].dot(axes[1]))>1e-6||Math.abs(axes[0].dot(axes[2]))>1e-6||Math.abs(axes[1].dot(axes[2]))>1e-6||Math.abs(m.determinant()-1)>1e-6)throw Error('跟随参考必须为刚性位姿，不能含缩放或剪切');}
   function validate(model,map){
@@ -92,8 +116,10 @@
       if(n.sourceId!==null||Object.keys(n.overrides||{}).some(k=>!STYLE.includes(k)))throw Error('非法标注身份或属性');
       if(n.type==='annotationRoot'){if(n.id!=='annotations'||n.parent!=='project'||n.local.some((v,i)=>v!==I().elements[i])||n.data)throw Error('标注根无效');continue;}
       if(!['annotationRoot','labelGroup'].includes(map.get(n.parent)?.type))throw Error('标签上级必须在标注分支');
-      const d=n.data;if(!d||Object.keys(d).some(k=>!(n.type==='label'?['text','members','base','follow']:['recipe','base','follow','transformCenter']).includes(k)))throw Error('标注数据字段无效');validateMatrix(d.base);
+      const d=n.data;if(!d||Object.keys(d).some(k=>!(n.type==='label'?['text','members','base','follow','fontSizing']:['recipe','base','follow','transformCenter','textAlign','alignmentGuide']).includes(k)))throw Error('标注数据字段无效');validateMatrix(d.base);
       if(n.type==='labelGroup'&&d.transformCenter!==undefined&&!['group','individual'].includes(d.transformCenter))throw Error('标签组变换中心无效');
+      if(n.type==='label'&&d.fontSizing!==undefined&&d.fontSizing!==UXAnnotationMath.FONT_SIZING)throw Error('标签字号标尺无效');
+      if(n.type==='labelGroup'&&((d.textAlign!==undefined&&!['left','right','center'].includes(d.textAlign))||(d.alignmentGuide!==undefined&&(!d.textAlign||!Number.isFinite(d.alignmentGuide)))))throw Error('标签组对齐属性无效');
       if(n.type==='label'){if(!ids(d.members)||!d.members.length)throw Error('标签成员身份无效');UXAnnotationMath.measure(d.text,'Microsoft YaHei');}
       if(n.type==='labelGroup'&&d.recipe!==null){const r=d.recipe;if(!r||Object.keys(r).some(k=>!['sourceId','axis','mode','side','face','gap','tolerance','scopeIds','font','height'].includes(k))||!known.has(r.sourceId)||!['x','y','z'].includes(r.axis)||!Number.isInteger(r.mode)||r.mode<0||r.mode>2||!ids(r.scopeIds)||!r.scopeIds.length||!Number.isFinite(r.gap)||r.gap<0||!/^[-+][xyz]$/.test(r.side)||!['-y','+z'].includes(r.face)||r.tolerance!==UXAnnotationMath.EPS)throw Error('标注生成配方无效');UXModel.validParam('labelFont',r.font);UXModel.validParam('labelSize',r.height);}
       if(d.follow){const f=d.follow;if(Object.keys(f).some(k=>!['sourceId','reference','frozen','lostSource'].includes(k)))throw Error('跟随字段无效');
@@ -106,11 +132,12 @@
     const scope=new Set(ids.flatMap(id=>[id,...model.descendants(id)])),all=scope.has('work')||scope.has('project');
     return [...model.nodes.values()].filter(n=>n.type==='label'&&(all||scope.has(n.id)||n.data.members.some(id=>scope.has(id)))).map(n=>{
       const w=world(model,n.id),box=model.bounds([n.id]),normal=new THREE.Vector3(0,0,1).applyMatrix3(new THREE.Matrix3().getNormalMatrix(w)).normalize(),size=UXAnnotationMath.shape(model,n);
-      return {id:n.id,parent:n.parent,coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:'glyph-xy-plane',text:n.data.text,members:n.data.members.slice(),font:model.resolve(n.id,'labelFont').value,size_mm:new THREE.Vector3().setFromMatrixColumn(w,1).length(),nominal_height_mm:size.height,
+      return {id:n.id,parent:n.parent,coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:'glyph-xy-plane',text:n.data.text,members:n.data.members.slice(),font:model.resolve(n.id,'labelFont').value,size_mm:new THREE.Vector3().setFromMatrixColumn(w,1).length(),nominal_height_mm:size.nominalHeight,font_sizing:n.data.fontSizing||'legacy-ink-height',
         glyph_width_mm:new THREE.Vector3().setFromMatrixColumn(w,0).length(),matrix_mm:w.toArray(),anchor_world_mm:box.getCenter(new THREE.Vector3()).toArray(),front_world:normal.toArray(),
-        output:model.resolve(n.id,'labelOutput').value,screen_only:!model.resolve(n.id,'labelOutput').value,visible:model.resolve(n.id,'visible').value,follow:copy(effective(model,n.id)),
+        enabled:model.resolve(n.id,'labelEnabled').value,output:model.resolve(n.id,'labelEnabled').value,follow:copy(effective(model,n.id)),
+        text_alignment:model.ancestors(n.id).filter(id=>model.nodes.get(id)?.data?.textAlign).map(id=>({group:id,mode:model.nodes.get(id).data.textAlign,guide_local_x:model.nodes.get(id).data.alignmentGuide})),
         glyph_geometry:'未接入：仅固定朝向纹理平面，不是可加工文字轮廓'};
     });
   }
-  window.UXAnnotationState={TYPES,STYLE,is,ensureRoot,effective,follow,beforeLocal,frame,world,setFrame,setLocal,centerMode,setCenter,delta,inBranch,move,group,ungroup,create,remove,text,validate,exportLabels};
+  window.UXAnnotationState={TYPES,STYLE,is,ensureRoot,effective,follow,beforeLocal,frame,world,setFrame,setLocal,alignRows,setAlignment,fontChanged,centerMode,setCenter,delta,inBranch,move,group,ungroup,create,remove,text,validate,exportLabels};
 })();

@@ -9,7 +9,7 @@
     const records=[];for(let x=0;x<3;x++)for(let y=0;y<4;y++)for(let z=0;z<2;z++)records.push({id:`b-${x}-${y}-${z}`,center:new T.Vector3(x*5,y*5,z*5)});
     const nodes=new Map(records.map(r=>[r.id,{id:r.id,type:'block',sourceId:r.id,name:'测试块'}])),byId=new Map(records.map(r=>[r.id,r]));
     const model={nodes,topo:{blocks:records.map(r=>({id:r.id,layer:r.center.z/5})),model:{layer_types:Array(4).fill('full_attention')}},
-      world:id=>new T.Matrix4().makeTranslation(...byId.get(id).center.toArray()),resolve:(id,key)=>({value:{labelFont:'Microsoft YaHei',labelSize:.7,labelText:''}[key]}),
+      world:id=>new T.Matrix4().makeTranslation(...byId.get(id).center.toArray()),resolve:(id,key)=>({value:{labelFont:'Microsoft YaHei',labelSize:.7}[key]}),
       bounds:ids=>{const box=new T.Box3();ids.forEach(id=>{const p=byId.get(id).center;box.expandByPoint(p.clone().addScalar(-.5));box.expandByPoint(p.clone().addScalar(.5));});return box;}};
     return {model,records};
   }
@@ -77,7 +77,7 @@
     check('migration_export_and_invalid_annotations',()=>{
       const m=fresh(),legacy=m.snapshot();legacy.nodes=legacy.nodes.filter(n=>n.id!=='annotations');delete legacy.annotationVersion;m.load(legacy);assert(m.children('annotations').length===0,'旧工程未补空根');
       const group=m.createLabels(m.planLabels('lm_head')),label=m.children(group)[0].id,saved=m.snapshot(),other=fresh();other.load(saved);assert(JSON.stringify(other.snapshot())===JSON.stringify(saved),'新工程往返不一致');
-      const n=other.annotations([group])[0];assert(n.text&&n.follow.sourceId==='lm_head'&&n.matrix_mm.length===16,'导出字段缺失');close(n.front_world,[0,-1,0],'导出方向错误');other.set(label,'labelOutput',false);assert(other.annotations([group])[0].output===false,'输出开关失效');
+      const n=other.annotations([group])[0];assert(n.text&&n.follow.sourceId==='lm_head'&&n.matrix_mm.length===16,'导出字段缺失');close(n.front_world,[0,-1,0],'导出方向错误');other.set(label,'labelEnabled',false);assert(other.annotations([group])[0].output===false&&other.annotations([group])[0].enabled===false,'单一启用状态失效');
       for(const modify of [d=>d.nodes.find(n=>n.id===group).parent=label,d=>d.nodes.find(n=>n.id===group).data.follow.sourceId=label,d=>d.nodes.find(n=>n.id===label).data.members=['fake-source'],d=>d.nodes.find(n=>n.id==='lm_head').parent=group]){
         const bad=CurveMath.copy(saved);modify(bad);let rejected=false;try{other.load(bad);}catch(e){rejected=true;}assert(rejected,'接受非法标注引用');
       }

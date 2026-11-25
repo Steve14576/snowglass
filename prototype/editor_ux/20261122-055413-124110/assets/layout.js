@@ -15,7 +15,7 @@ function boundsOf(solids) {
 }
 
 function layout() {
-  const solids = [], labels = [], warns = [], slots = [];
+  const solids = [], warns = [], slots = [];
   const c = topo.model, sq = P.squash, fix = c.n_layers > 45 ? .72 : 1;
   const h = .72 * sq * fix, pitch = 1.17 * sq * fix, H = c.n_layers * pitch, depth = P.depth;
   const global = assembly.clone().multiply(new THREE.Matrix4().makeScale(P.scale,P.scale,P.scale));
@@ -40,19 +40,15 @@ function layout() {
   }
   const headH = Math.max(1.4,2.5*sq);
   add(blockById.embed,[0,-H/2-headH/2-1.2,0],[14,headH,depth*1.15]);
-  labels.push({text:"Token Embedding",x:0,y:-H/2-headH-2.2});
   for (let i=0;i<c.n_layers;i++) {
     const y = -H/2+(i+.5)*pitch, items = topo.blocks.filter(b=>b.layer===i);
     add(items.find(b=>b.slot==="norm1"),[-10.2,y,0],[.65,h,depth*.6]);
     group(items.filter(b=>b.slot==="mixer"),RECIPE.mixerStart,RECIPE.mixerWidth,RECIPE.mixerGap,y);
     add(items.find(b=>b.slot==="norm2"),[-.55,y,0],[.65,h,depth*.6]);
     group(items.filter(b=>b.slot==="ffn"),RECIPE.ffnStart,RECIPE.ffnWidth,RECIPE.ffnGap,y);
-    if(i%(c.n_layers>45?8:4)===0||i===c.n_layers-1||topo.layers[i].kind==="full")
-      labels.push({text:"L"+i+" · "+(topo.layers[i].kind==="full"?"Full":"GDN"),x:-14.1,y});
   }
   add(blockById.final_norm,[0,H/2+.85,0],[6.5,Math.max(.4,.6*sq),depth*.6]);
   add(blockById.lm_head,[0,H/2+headH/2+1.8,0],[14,headH,depth*1.15]);
-  labels.push({text:"LM Head",x:0,y:H/2+headH+2.8});
   if(topo.geometry_only.some(b=>b.id==="mtp")) add({id:"mtp",role:"mtp",label:"MTP · 权重未收录",tensors:[],params:0},
     [10.5,H/2+headH/2+1.8,0],[4.2,headH*.85,depth*.9],"mtp");
   if(P.vision&&c.vision_layers) {
@@ -63,16 +59,14 @@ function layout() {
       const y=-span/2+(i+.5)*vp, tag="V"+String(i).padStart(2,"0");
       [["norm1",-4.5,.45,.5],["attn",-2.1,3.6,.85],["norm2",.3,.45,.5],["mlp",2.9,4,.85]].forEach(([slot,dx,w,d])=>
         add(blockById[tag+"."+slot],[x+dx,y,0],[w,vh,depth*d]));
-      if(i%6===0||i===c.vision_layers-1) labels.push({text:"V"+i,x:x+6.4,y});
     }
-    labels.push({text:"Vision Patch",x,y:-span/2-2.9},{text:"Merger / Projector",x,y:span/2+3.2});
   }
   // 槽位尺度独立于间隙；实际外沿可内缩，不推动邻居或改层节距。
   const slotBounds = new THREE.Box3(); solids.forEach(s=>{
     const slotM=s.anchor.clone().multiply(new THREE.Matrix4().makeScale(...s.slot.size));
     for(const x of [-.5,.5])for(const y of [-.5,.5])for(const z of [-.5,.5])slotBounds.expandByPoint(new THREE.Vector3(x,y,z).applyMatrix4(slotM));
   });
-  return {solids,labels,warns,H,pitch,bounds:boundsOf(solids),slotBounds,overlaps:[]};
+  return {solids,warns,H,pitch,bounds:boundsOf(solids),slotBounds,overlaps:[]};
 }
 
 /* ============================================================
