@@ -82,6 +82,24 @@ class Jobs:
         (job / 'cancel').touch(exist_ok=True)
         return {'id': ident, 'state': 'cancelling'}
 
+    def listing(self):
+        """只列任务编号与进度；不启动、不续跑、不改任何结果。"""
+        found = []
+        root = self.store / 'jobs'
+        if root.is_dir():
+            for job in sorted(root.iterdir(), reverse=True):
+                if not job.is_dir() or not job.name.startswith('slice-'):
+                    continue
+                try:
+                    status = slice1.read_json(job / 'status.json')
+                except (OSError, ValueError, KeyError):
+                    continue
+                found.append({'id': job.name, 'state': status.get('state'), 'completed': status.get('completed'),
+                              'total': status.get('total'), 'failed': status.get('failed')})
+                if len(found) >= 200:
+                    break
+        return {'jobs': found}
+
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, bundle, jobs, port, **kwargs):
@@ -132,6 +150,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({'kind': 'snowglass.slice1-service.v1', 'token': self.jobs.token,
                                 'active': self.jobs.active(), 'recipe': 'on-demand-v1', 'default_grid': slice1.DEFAULT_GRID,
                                                                 'sources': list(slice1.CHANNELS), 'conventions': ['gguf','hf'], 'optional_diagnostics': True})
+            elif path == '/api/slice1/jobs':
+                self.send_json(self.jobs.listing())
             elif path.startswith('/api/slice1/jobs/'):
                 parts = path.split('/')
                 if len(parts) != 6:

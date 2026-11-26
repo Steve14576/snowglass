@@ -1,0 +1,167 @@
+{
+  "passed": true,
+  "failure": null,
+  "cases": [
+    {
+      "name": "no_project_reads_completed_full_slice_and_says_labels_are_missing",
+      "result": {
+        "autoTask": "slice-20261123-015539-615436",
+        "groups": 369,
+        "notice": "当前地址没有读到主工程，因此没有你的文字标签。 雪花来自最近完成的一级切片任务 slice-20261123-015539-615436（1 个任务）。主页面若在另一个地址打开，点“切换地址读取”；也可载入主页面保存的工程文件。",
+        "ratio": 1.25,
+        "renderer": "ANGLE (Intel, Intel(R) Arc(TM) 140T GPU (16GB) (0x00007D51) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      }
+    },
+    {
+      "name": "full_range_slice_matches_369_blocks_and_3620608_cells",
+      "result": {
+        "requested": 369,
+        "blocks": 369,
+        "cells": 3620608,
+        "failures": []
+      }
+    },
+    {
+      "name": "actual_main_storage_import_preserves_labels_layout_and_camera",
+      "result": {
+        "labels": 32,
+        "enabled": 31,
+        "storage_unchanged": true
+      }
+    },
+    {
+      "name": "resolution_switch_preserves_all_gray_instance_and_label_bytes",
+      "result": {
+        "a": 1.25,
+        "b": 1.75,
+        "snow": 8192,
+        "one_webgl_canvas": true
+      }
+    },
+    {
+      "name": "filter_only_changes_sampling_not_text_size_or_snow",
+      "result": {
+        "ratio": 1.25,
+        "filter": "anisotropic",
+        "requestedFilter": "anisotropic",
+        "anisotropy": 8,
+        "warning": ""
+      }
+    },
+    {
+      "name": "actual_benchmark_controls_preserve_scene_and_storage",
+      "result": {
+        "samples": 5,
+        "unit": "ms",
+        "method": "renderer.render＋gl.finish；含CPU提交和GPU完成等待，非完整编辑器帧率",
+        "profiles": {
+          "a": {
+            "ratio": 1.25,
+            "filter": "linear",
+            "median": 0.800000011920929,
+            "min": 0.699999988079071,
+            "max": 1.0999999642372131,
+            "samples": [
+              0.9000000357627869,
+              0.699999988079071,
+              0.7999999523162842,
+              1.0999999642372131,
+              0.800000011920929
+            ]
+          },
+          "b": {
+            "ratio": 1.25,
+            "filter": "mipmap",
+            "median": 0.8999999761581421,
+            "min": 0.800000011920929,
+            "max": 1.300000011920929,
+            "samples": [
+              0.800000011920929,
+              1.300000011920929,
+              0.9000000357627869,
+              0.8999999761581421,
+              0.8999999761581421
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "existing_slice_task_manifest_is_restored_without_computation",
+      "result": {
+        "tasks": [
+          "slice-20261123-015006-356543"
+        ],
+        "warnings": [],
+        "groups": 151
+      }
+    },
+    {
+      "name": "actual_file_import_and_invalid_file_keep_previous_scene",
+      "result": true
+    },
+    {
+      "name": "restore_source_camera_after_view_only_navigation",
+      "result": true
+    },
+    {
+      "name": "mobile_layout_has_no_horizontal_overflow",
+      "result": true
+    }
+  ],
+  "page_errors": [],
+  "non_get_requests": [],
+  "main_files_unchanged": true,
+  "main_sha256": {
+    "prototype\\editor_ux\\20261122-055413-124110\\index.html": "502bc703339d28fa4e7ecb5b125c9a63f1c64f59554cd6cc59d6a87358e78c9d",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_math.js": "48d8fa705a6cb7e970189c90d0f436afa5675ac263fa59d3aba0147451124420",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_state.js": "3a87909f098b921cfd91d18b48cac8ccac1216be243db78a831d3a8ee6e12e06",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_ui.js": "8c7ff01461407b2183b763e39aea49c67ea7dbde08b701c75db14cc90390cba9",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_view.js": "32862cce2430d55f562fe3900f29d132d01dd8aca11d27fec7c48bb36c9ddb5c",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\app.js": "d65200c85545b9f773770d6ab1730488e9ad077ef003d7e9430978fed6e7534c",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\checks.js": "0faa7cc978955f03a0dc14402a6c92bc25025cc0df43d968d69e2fbd3f6d36ea",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\coordinates.js": "9c2edb9c18d2092a0643967de5c62566f4baec472de1ed69dcf912d4075bb7d7",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\data.js": "bc96eee1a4a093bc3cd03ba8c19ed9f6197b8aa0c5bb619aa8c60f83713fb631",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\editor.css": "72bb41d234dff5540381b0f75420f1e1f084db9e8689edda00fc7a4476bb9288",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\inspector.js": "d9159c89b1a837e6750161d0f8f218889f9844f3fe4f8632e4576584ffcd1edb",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\layout.js": "8503ad5a3f2dec2a589895e4ad242b0e3361c66af7ca183e8389bfeb1c461058",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\model.js": "3004b82fb57ba3ba7aad1842cac117274ac50fe7b920aeeb796b0d5b66e02283",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\scene.js": "4a89e504462b132bd86c85736deb74115d6ca907fa2b7d480225bc2016758002",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\tree.js": "cb1fc950f50ae27fa98b4183a149d949cd3184e4fb34cf3b1ccd9b874a30dff4",
+    "scripts\\analyze_gray_support.py": "c56ffaa7a0ce4711107628d051b7c94d53963a63057b2cab4ae5d7ca179efec6",
+    "scripts\\build_topology_qwen35.py": "0c9a22ce910cf8fb10bff75da0b288d5b0bf5c5777ac1d30160276325976616a",
+    "scripts\\compare_gray_samples.py": "98c0ede0e9d5a58dcbf07d5056dbcec452ffc622634fe3d3ab813f427c51d8bc",
+    "scripts\\compare_quant_visual.py": "441bfa11dae9b8a2d2b8803721dfab5b6467b7e4b22d917c7a8e2e1631995680",
+    "scripts\\compare_spectral_pooling.py": "f4553741efb5c60d26ad52cfd0c4489f79bd577b3401b38db3b69d88743b0348",
+    "scripts\\download_gguf.py": "16a480777e38149d72a7cf168e4e6812e85d9c279331174f33ea59a142b655d7",
+    "scripts\\gguf_inventory.py": "75965079fcba543e0358c12385242ceee576d2155bca14b449122d7ad81c6da1",
+    "scripts\\list_tensors.py": "3513f2a9f9e33a918f1f662e3619b291f89dd82c95d3d62c2cd3c7427592b53c",
+    "scripts\\plot_grammar_candidates.py": "5d5c9da511ddcb29c8d1ed0841d2126b18ad2e116802f6fac221338c6ec6924f",
+    "scripts\\plot_quant_maps.py": "70e6f9620b0834435b6c81a7943a4b120409e209432ddce0f6dbc7641d18d7e1",
+    "scripts\\prepare_contrast_survey.py": "1577ca5acc7f6e997240682685bd5b42a1cd42cfd07f3c69fac94a2ec7ac9cd0",
+    "scripts\\prepare_editor_ux.py": "d35c90e7460721402ac55fcddde4f8bd8dd591e29292d397167161b3ed3d3ebc",
+    "scripts\\preprocess.py": "e172864f3b395833aaf4af499da4353c36003c1218c6ada437559e771d830b52",
+    "scripts\\preview_gray_samples.py": "8d9e6b61a56e044bd4f00a271862efa3a458cb36209cb79b28d790474ca0ed62",
+    "scripts\\preview_type_survey.py": "8e61337a3e1ccff79a58ae4fe84f64b34e4731144a5d77d36e0d48ba3d554e93",
+    "scripts\\probe_gguf_repos.py": "e1ff9a18bee456ae096134de29d6940978e5668ddb11a09b0860f236c16cbb75",
+    "scripts\\probe_repo.py": "f0dcca43630fcb711e521cffa69a4fece3f1202d25e4260db3fa8cbb900a3162",
+    "scripts\\probe_shards.py": "c9bb27267110b57307ae68a7f9d721680fa2513ab0c225cee4ccc50955532382",
+    "scripts\\refine_gray_samples.py": "dc8c776a7a54ffd3558ccc320867e18081905b885bc1f87997b99ab907a4e6de",
+    "scripts\\run_type_survey.py": "33f95251b804ad9b3ab36b91f8dc25289a2585c63a6f0be25f35146ffd028c16",
+    "scripts\\serve_editor.py": "2e290eeb8f8839d663ed5a6fea0d69c6ba08c40f5602af95b48c6718fddf9ed9",
+    "scripts\\slice1.py": "32bc6d688f0c75ffc96de0b87558afd111affe2de4d3e747e84d54b157377461",
+    "scripts\\summarize_type_survey.py": "384d28b1257e9aea5bcc08182ed4779a0245ebee58a30bbced0e5736bc7738ad",
+    "scripts\\survey_data.py": "5f575e82eb3ecac72b1f983651cf3043770cff97da9c638cbce9d9d32a20952f",
+    "scripts\\survey_math.py": "185d454ede44535f3e2641a6535e56b86311ca7e8041d1cca5a91c6930d2f62d",
+    "scripts\\test_quant_visibility.py": "2f840ca07e5a52736ebf7e89c6d10bdb566517b07f44ff8fc6803534aaa49bdb",
+    "scripts\\try_one_block.py": "3626b91cdfb3d45cf34f658c0d3dbda0c1c8e8d8bb47d4d08bd044999553744a",
+    "scripts\\verify_gguf_1d.py": "b065d1adc8e6ce39ee87e07aa7aff69e41f17dff2c16d39d336fd8524f359c93",
+    "scripts\\verify_gguf_decode.py": "c394ed55fc731675edf158403580d9f071bdc7843ee144299c2c4699021e28db",
+    "scripts\\verify_gguf_gdn_order.py": "641a2cbb47298a95cdfc43e9ca47ff6eb0bcbe53f67fff9bf2b889bd3a2421fc"
+  },
+  "note": "隔离的Edge WebGL功能核验，实际后端见首项renderer；不截图、不读取原权重。短测不冒称完整编辑器FPS"
+}

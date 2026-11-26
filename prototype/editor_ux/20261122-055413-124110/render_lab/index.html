@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="使用主工程文字标签和已完成一级切片缓存，独立比较画布分辨率与文字贴图过滤，不计算原权重。">
+  <base href="../">
+  <title>snowglass · 画质对照</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23ccc' d='M8 0l8 8-8 8-8-8z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/editor.css">
+  <link rel="stylesheet" href="render_lab/lab.css">
+</head>
+<body class="lab-body">
+<header class="lab-header">
+  <div><h1>snowglass <span>画质对照</span></h1><p>独立只读展示 · 主文件不改 · 不重新切片</p></div>
+  <div class="lab-files">
+    <button id="read-project" type="button">读取主页面自动保存</button>
+    <label class="file-button">载入主工程文件<input id="project-file" type="file" accept=".json,application/json"></label>
+    <button id="switch-host" type="button">切换地址读取</button>
+    <button id="source-camera" type="button">恢复工程取景</button>
+  </div>
+</header>
+<section class="lab-toolbar" aria-label="画质与取景">
+  <div class="lab-tabs" role="group" aria-label="对照档位">
+    <button id="profile-a" class="active" type="button" aria-pressed="true">A · 主文件画质 [1]</button>
+    <button id="profile-b" type="button" aria-pressed="false">B · 对照画质 [2]</button>
+  </div>
+  <label>比较项目<select id="comparison">
+    <option value="layered" selected>整场高清／雪花适度＋文字高清</option>
+    <option value="resolution">只比分辨率</option>
+    <option value="filter">只比文字过滤</option>
+    <option value="combined">分辨率＋文字过滤</option>
+    <option value="custom">自定义B档</option>
+  </select></label>
+  <label><span id="ratio-label">最终画布像素比（A/B共用）</span><select id="ratio-b">
+    <option value="cap125">随设备 · 上限1.25</option>
+    <option value="cap175">随设备 · 上限1.75</option>
+    <option value="cap2" selected>随设备 · 上限2</option>
+    <option value="1">固定1</option><option value="1.25">固定1.25</option>
+    <option value="1.75">固定1.75</option><option value="2">固定2</option>
+  </select></label>
+  <label id="scene-ratio-row">B雪花／结构像素比<select id="scene-ratio">
+    <option value="cap125" selected>随设备 · 上限1.25</option><option value="1">固定1</option>
+    <option value="1.25">固定1.25</option><option value="1.5">固定1.5</option><option value="1.75">固定1.75</option>
+  </select></label>
+  <label><span id="filter-label">文字过滤（A/B共用）</span><select id="filter-b">
+    <option value="linear">线性 · 无mipmap</option>
+    <option value="mipmap">mipmap · 缩小预过滤</option>
+    <option value="anisotropic">mipmap＋斜视过滤</option>
+  </select></label>
+  <label>展示范围<select id="scope">
+    <option value="all">全部已有缓存 · 与主预览一致</option>
+    <option value="selected">主工程所选来源</option>
+    <option value="none">只看结构 · 不载入雪花</option>
+  </select></label>
+  <button id="front" type="button">正面</button><button id="fit" type="button">全景</button>
+  <button id="benchmark" type="button">短测A／B耗时</button>
+</section>
+<div id="lab-notice" class="lab-notice" role="status" hidden></div>
+<main id="view" aria-label="同一标签和雪花的画质对照视口">
+  <div id="marquee" hidden></div><div id="hover-card" hidden></div>
+  <div class="lab-badge" id="profile-description">正在准备同一份场景…</div>
+  <div class="lab-help">左键转动 · 右键平移 · 滚轮缩放 · 1／2切换画质<br>标签保持三维固定朝向，切换A／B不会改取景</div>
+  <div id="lab-loading" class="lab-loading" role="status" aria-live="polite"><p id="loading-text">载入主文件模块…</p><progress id="loading-progress"></progress></div>
+  <div id="view-caption">只读取现成统计，不读取原权重；未计算块不补模拟。</div>
+</main>
+<section class="lab-readout" aria-label="对照证据">
+  <p id="source-summary">工程来源待核对</p>
+  <p id="render-summary">画布参数待核对</p>
+  <p id="sample-summary">文字贴图待核对</p>
+  <p id="pipeline-summary">分层路径待核对</p>
+  <p id="benchmark-summary">短测是实际绘制完成耗时，不是完整编辑器操作耗时；软件WebGL不代表你的显卡。</p>
+  <details><summary>这页比较什么／不比较什么</summary>
+    <p>默认比较分层管线：A在最终画布分辨率绘整个场景；B先在较低分辨率绘雪花和结构的颜色／深度，再合成画面并高清绘原来的三维文字。A/B最终画布、文字贴图与过滤设置相同；一份实例、一台相机、一个GL上下文。没有抽减雪花，也没有渐进加载或拖动降级。</p>
+    <p>分层B保留不透明几何的遮挡：深度最近邻传到高清画布，颜色线性放大。轮廓边缘有近似误差；透明框壳先合成、文字最后画，混合顺序可能不同。两档沿用相同的实际抗锯齿采样数；B有额外缓冲与合成成本，不能预先保证更快。低DPI下两档分辨率可能相同，可显式选固定2作对照。</p>
+    <p>切回“只比分辨率／只比文字过滤”时，A仍是主文件画质（像素比上限1.25、线性无mipmap）；B改所选参数。mipmap是缩小预过滤，斜视过滤用于倾斜平面。这些只影响绘制，不改变字号、字距、朝向、灰度或实例数量。</p>
+    <p>自动保存按浏览器和网站地址隔离：主页面用localhost，这页也用localhost；主页面用127.0.0.1，这页也用127.0.0.1。读不到工程时请在主页面保存工程文件，再在这里载入；不会生成临时文字替代你的标签。</p>
+    <p>切片任务只读取工程中的现成清单和成功张量。缺少数据、旧统计不匹配、标签为空都会明示。更换画质不重新计算权重，也不写回主页面自动保存。关页即可结束展示。</p>
+  </details>
+</section>
+<footer class="lab-footer"><span id="status" role="status" aria-live="polite">初始化…</span></footer>
+<script src="assets/curve_math.js"></script><script src="assets/coordinates.js"></script><script src="assets/layout.js"></script>
+<script src="assets/model.js"></script><script src="assets/annotation_math.js"></script><script src="assets/annotation_state.js"></script>
+<script src="assets/annotation_view.js"></script><script src="assets/data.js"></script><script src="assets/checks.js"></script><script src="assets/scene.js"></script>
+<script src="render_lab/io.js"></script><script src="render_lab/layered.js"></script><script src="render_lab/view.js"></script><script src="render_lab/lab.js"></script>
+</body>
+</html>
