@@ -6,7 +6,7 @@
   const LEGACY_DEFAULTS={...GRID_DEFAULTS,sourceConvention:'hf',extraDiagnostics:false};
   const DEFAULTS={...GRID_DEFAULTS,sourceConvention:'gguf',extraDiagnostics:false,channel:'full',windowMode:'range',black:0,white:1,curve:CurveMath.linear(),filter:false,cutoff:.25,
     frameT:.04,shellT:.02,frameGray:.18,shellGray:.024,snowSize:.012,gap:0,widthMode:'equal',visible:true,include:true,
-    labelEnabled:true,labelFont:'Microsoft YaHei',labelSize:.7,squash:.55,depth:6.2,pitch:.08,dotUm:60,speed:4500};
+    labelEnabled:true,labelFont:'Microsoft YaHei',labelSize:.7,labelDepth:.1,labelGray:.5,squash:.55,depth:6.2,pitch:.08,dotUm:60,speed:4500};
   const LOCAL=Object.keys(DEFAULTS).filter(k=>!['squash','depth','pitch','dotUm','speed'].includes(k));
   function validParam(key,v){
     if(!Object.hasOwn(DEFAULTS,key))throw Error('未知参数 '+key);
@@ -15,9 +15,10 @@
     if(key==='labelFont'){if(typeof v!=='string'||!v.trim()||v.length>60)throw Error('字体名不能为空且不超过60字');return true;}
     if(typeof v!==typeof DEFAULTS[key]||(typeof v==='number'&&!Number.isFinite(v)))throw Error('参数类型无效');
     // 框／壳厚度允许 0：语义是“没有这个结构件”，与灰度0（几何仍在但不显影）不同。
-    if(['frameT','shellT','frameGray','shellGray'].includes(key)&&v<0)throw Error('厚度与灰度不能为负；0 表示没有该结构件／不显影');
+    if(['frameT','shellT','frameGray','shellGray','labelDepth','labelGray'].includes(key)&&v<0)throw Error('厚度与灰度不能为负；0 表示没有该结构件／不显影');
+    if(key==='labelDepth'&&v>5)throw Error('文字厚度不能超过5 mm');
     if(['snowSize','labelSize','squash','depth','pitch','dotUm','speed'].includes(key)&&v<=0)throw Error('尺寸与精度必须为正');
-    if(['frameGray','shellGray','cutoff'].includes(key)&&(v<0||v>1))throw Error('灰度／门槛范围是0–1');
+    if(['frameGray','shellGray','labelGray','cutoff'].includes(key)&&(v<0||v>1))throw Error('灰度／门槛范围是0–1');
     if(key==='sourceConvention'&&!['gguf','hf'].includes(v))throw Error('权重数值约定无效');
     if(key==='channel'&&!['full','feature','rowcol','residual'].includes(v))throw Error('统计通道无效');
     if(key==='windowMode'&&!['range','reference'].includes(v))throw Error('窗口模式无效');
@@ -72,8 +73,8 @@
       bundle:this.provenance.bundle,coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:UXCoordinates.GEOMETRY,annotationPolicy:UXCoordinates.LABEL_POLICY,annotationVersion:1,seq:this.seq,primaryGhost:this.primaryGhost,nodes:clone([...this.nodes.values()])};}
     emit(transient=false){this.rebase();this.listeners.forEach(fn=>fn(transient));}
     restore(s){s=UXCoordinates.prepare(s);this.nodes=new Map(s.nodes.map(v=>[v.id,Object.assign(new Node(v.id,v.type,v.name,v.parent,v.sourceId),clone(v))]));
-      // 旧工程没有网格字段时，沿用当时的固定统计网格；不更换已有统计来源。
-      this.nodes.get('global').values={...LEGACY_DEFAULTS,...this.nodes.get('global').values};this.seq=s.seq;this.primaryGhost=s.primaryGhost;UXAnnotationState.ensureRoot(this);this.rebase();}
+      // 旧工程没有网格字段时，沿用当时的固定统计网格；不更换已有统计来源。新增参数（如文字厚度、灰度）缺值时回落当前默认。
+      this.nodes.get('global').values={...DEFAULTS,...LEGACY_DEFAULTS,...this.nodes.get('global').values};this.seq=s.seq;this.primaryGhost=s.primaryGhost;UXAnnotationState.ensureRoot(this);this.rebase();}
     commit(fn,preserveWorld=false){
       const before=this.snapshot(),worlds=preserveWorld?new Map(this.leaves(['work','refs','annotations']).map(id=>[id,UXAnnotationState.is(this.nodes.get(id))?this.chain(id):this.world(id)])):null;
       try{fn();
@@ -94,7 +95,7 @@
     undo(){if(!this.history.length)return;this.future.push(this.snapshot());this.restore(this.history.pop());this.emit();}
     redo(){if(!this.future.length)return;this.history.push(this.snapshot());this.restore(this.future.pop());this.emit();}
     put(id,key,v){validParam(key,v);const n=this.nodes.get(id);if(!n)throw Error('对象不存在');const changed=JSON.stringify(this.resolve(id,key).value)!==JSON.stringify(v);
-      if(UXAnnotationState.is(n)&&!UXAnnotationState.STYLE.includes(key))throw Error('标注只接受字体、字号和启用状态；文字是自己的内容');
+      if(UXAnnotationState.is(n)&&!UXAnnotationState.STYLE.includes(key))throw Error('标注只接受字体、字号、厚度、灰度和启用状态；文字是自己的内容');
       if(key==='labelEnabled'&&n.type!=='global'&&!UXAnnotationState.is(n))throw Error('标签启用状态只属于独立标注，不属于源模型');
       if(Object.hasOwn(GRID_DEFAULTS,key)){const cells=Object.keys(GRID_DEFAULTS).reduce((a,k)=>a*(k===key?v:this.resolve(id,k).value),1);if(cells>65536)throw Error('当前每分区最多65536格（资源限制）');}
       if(key==='black'||key==='white'){const low=key==='black'?v:this.resolve(id,'black').value,high=key==='white'?v:this.resolve(id,'white').value;if(high<=low)throw Error('白端必须高于黑端');}
@@ -181,7 +182,7 @@
       const roots={project:['project',null],global:['global','project'],work:['root','project'],text:['tower','work'],vision:['tower','work'],refs:['reference','project']};
       for(const [id,[type,parent]] of Object.entries(roots))if(map.get(id)?.type!==type||map.get(id).parent!==parent)throw Error('系统根身份或上级无效');
       if(Object.keys(map.get('global').values||{}).some(k=>!Object.hasOwn(DEFAULTS,k)))throw Error('未知全局配置');
-      for(const key of Object.keys(DEFAULTS))validParam(key,map.get('global').values?.[key]===undefined?LEGACY_DEFAULTS[key]:map.get('global').values[key]);
+      for(const key of Object.keys(DEFAULTS))validParam(key,map.get('global').values?.[key]===undefined?(LEGACY_DEFAULTS[key]??DEFAULTS[key]):map.get('global').values[key]);
       for(const n of map.values()){
         if(n.parent!==null&&!['project','root','tower','reference','layer','group','annotationRoot','labelGroup'].includes(map.get(n.parent)?.type))throw Error('上级不能是数据叶节点');
         let p=n,seen=new Set();while(p.parent!==null){if(seen.has(p.id)||!map.has(p.parent))throw Error('对象树循环或上级缺失');seen.add(p.id);p=map.get(p.parent);}if(p.id!=='project')throw Error('对象不属于工程');

@@ -102,10 +102,11 @@
       else badge.hidden=true;
       const state=scene?.progressive?.status();$('preview-render').hidden=viewMode!=='preview';
       if(state&&viewMode==='preview'){
-        const phase=state.interacting?'交互概览':state.paused?'已暂停细化':previewLoad.budget||state.budget?'显示资源上限':state.settled?'细节已完成':'正在分批细化';
+        const phase=state.mode==='overview'?'始终轻量':previewLoad.budget||state.budget?'显示资源上限'
+          :state.interacting?(state.mode==='always'?'转动中仍画完整':'拖动概览'):state.settled?'细节已完成':'正在分批细化';
         $('preview-render-text').textContent=phase+' · 统计 '+previewLoad.done+'/'+previewLoad.total+' 块 · 细节 '+state.ready+'/'+state.pieces+' 分区';
-        $('preview-render').title=previewLoad.budget?'当前显示工作集达到上限；其余统计仍保存在磁盘。选择焦点后重新进入预览可优先载入。':'概览来自真实格子，细化只影响显示；统计结果和加工输出不变。';
-        $('preview-pause').textContent=state.paused?'继续细化':'暂停细化';$('preview-pause').setAttribute('aria-pressed',String(state.paused));
+        $('preview-render').title=previewLoad.budget?'当前显示工作集达到上限；其余统计仍保存在磁盘。选择焦点后重新进入预览可优先载入。':'概览来自真实格子，粒度只影响显示；统计结果和加工输出不变。';
+        $('preview-detail').value=state.mode;
       }
       slicing?.render();
     }
@@ -183,7 +184,7 @@
     tree=new UXTree(model,data,select,reparent);inspector=new UXInspector(model,message,{select:ids=>{tree.reveal=true;select(ids);},confirm:confirmAction,message,saveAnnotations});
     scene=new UXScene($('view'),model,(ids,mode)=>{tree.reveal=true;select(ids,mode);},hover,()=>inspector.updateTransform());
     scene.renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));scene.pixelLayers=new UXPixelLayers(scene);scene.progressive=new UXProgressiveSnow(scene,()=>renderViewState());scene.resize();
-    $('preview-pause').onclick=()=>scene.progressive.pause(!scene.progressive.paused);
+    $('preview-detail').onchange=()=>{scene.progressive.setMode($('preview-detail').value);renderViewState();};
     window.addEventListener('pagehide',()=>{scene.pixelLayers.dispose();data.reader?.close();},{once:true});model.listeners.push(refresh);
     async function group(){try{const ids=model.roots(selected),parents=ids.map(id=>model.ancestors(id));if(!ids.length)throw Error('先多选或框选对象');
       const parent=parents[0].find(p=>parents.every(a=>a.includes(p))),changes=ids.flatMap(id=>model.changes(id,parent));

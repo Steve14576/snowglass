@@ -28,7 +28,7 @@
       return this.target;
     }
     render(){
-      const s=this.owner;s.progressive?.beforeRender();
+      const s=this.owner;s.progressive?.beforeRender();s.annotationView?.applyDetail(s.progressive?.mode||'settle',!!s.progressive?.interacting);
       if(!this.active||!this.supported){this.direct();return;}
       const r=s.renderer,gl=r.getContext();if(gl.isContextLost())return;
       const target=this.ensure(),annotation=s.annotationView.group;

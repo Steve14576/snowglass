@@ -5,7 +5,7 @@
   const RANGES={
     gridX:[1,64,1],gridY:[1,64,1],gridZ:[1,64,1],
     frameT:[0,.5,.001],shellT:[0,.5,.001],frameGray:[0,1,.005],shellGray:[0,1,.002],
-    snowSize:[.002,.08,.001],gap:[-.3,.3,.005],labelSize:[.1,4,.05],
+    snowSize:[.002,.08,.001],gap:[-.3,.3,.005],labelSize:[.1,4,.05],labelDepth:[0,5,.01],labelGray:[0,1,.005],
     black:[-.5,1.5,.01],white:[-.5,2.5,.01],cutoff:[0,1,.005],
     squash:[.2,2,.01],depth:[1,30,.1],pitch:[.02,.3,.005],dotUm:[20,120,1],speed:[500,20000,100]
   };
@@ -150,10 +150,11 @@
       if(ids.length===1&&first.type==='block')UXAnnotationUI.controls(this,label,first.id);
       this.textField(label,'labelFont','新标签默认字体','如 Microsoft YaHei');
       this.field(label,'labelSize','新标签默认字号标尺 mm');
-      this.note(label,'这里只设新建标签的默认样式，不自动贴名字。文字、启用状态与位置在生成后的标注对象上编辑；临时查身份用鼠标悬停。');
-      this.note(label,'启用的新标签显示并进入输出；字形轮廓与厂家加工读取契约仍未接入。',true);
+      this.field(label,'labelDepth','新标签默认厚度 mm');this.field(label,'labelGray','新标签默认灰度');
+      this.note(label,'这里只设新建标签的默认样式，不自动贴名字。文字、启用状态与位置在生成后的标注对象上编辑；临时查身份用鼠标悬停。厚度与灰度可全局、组、单标签逐级覆盖。');
+      this.note(label,'厚度与灰度可逐级继承。细分时显示带灰度的字形挤出实体，轻化时仍是贴图；加工点化与厂家读取契约未接入。',true);
       if(global){const machine=this.section('machine','全局机台与后验参照');for(const [key,text] of [['pitch','机台点距 mm'],['dotUm','爆点点径 μm'],['speed','打点速度 / 秒']])this.field(machine,key,text);this.note(machine,'仅作未核实的工艺参照，不能推断可辨灰阶或安全。',true);}
-      const calculation=this.section('calculation','后续计算边界');this.note(calculation,'一级切片已接本机任务服务；统计网格可配置，统计来源按需生成；仅谱来源沿用原SVD配方。任意解析式、自适应、字体几何及厂家OBJ/STL导出仍未接入。每格合并量n不是另行拍板的固定值，以实际 counts 为准。',true);
+      const calculation=this.section('calculation','后续计算边界');this.note(calculation,'一级切片已接本机任务服务；统计网格可配置，统计来源按需生成；仅谱来源沿用原SVD配方。文字已有字形轮廓与挤出，但加工点化、任意解析式、自适应及厂家OBJ/STL读取契约仍未接入。每格合并量n不是另行拍板的固定值，以实际 counts 为准。',true);
       this.resultsBody=this.section('results','所选真实统计与来源');this.note(this.resultsBody,'正在载入所选对象的已有统计……');
     }
     selection(ids){this.ids=ids;this.render();}

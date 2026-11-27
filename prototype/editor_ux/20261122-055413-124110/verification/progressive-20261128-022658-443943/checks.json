@@ -1,0 +1,272 @@
+{
+  "passed": false,
+  "failure": "",
+  "cases": [
+    {
+      "name": "main_high_resolution_prepare_without_snow",
+      "result": {
+        "ratio": 2,
+        "snow": 0,
+        "prepared": "prepare"
+      }
+    },
+    {
+      "name": "preview_entry_immediate_and_overview_mode_without_modal",
+      "result": {
+        "view": "preview",
+        "mode": "overview",
+        "modal": true,
+        "elapsed": 57.799999952316284
+      }
+    },
+    {
+      "name": "return_prepare_cancels_loading_and_keeps_slice",
+      "result": {
+        "tasks": [
+          "slice-20261123-015539-615436"
+        ],
+        "active": null
+      }
+    },
+    {
+      "name": "full_real_statistics_progressively_built_with_ui_ticks",
+      "result": {
+        "status": {
+          "enabled": true,
+          "mode": "settle",
+          "paused": false,
+          "interacting": false,
+          "loading": false,
+          "budget": false,
+          "pieces": 809,
+          "ready": 809,
+          "built": 3620608,
+          "allocated": 3620608,
+          "overviewPoints": 89051,
+          "settled": true,
+          "limits": {
+            "batchCells": 4096,
+            "batchMs": 6,
+            "detailCells": 4000000,
+            "loadedCells": 8000000,
+            "overviewPoints": 128000
+          },
+          "load": {
+            "loading": false,
+            "done": 369,
+            "total": 369,
+            "budget": false,
+            "failures": []
+          }
+        },
+        "ratio": {
+          "sceneBuffer": [
+            1318,
+            1235
+          ],
+          "finalRatio": 2,
+          "sceneRatio": 1.25,
+          "samples": 4,
+          "allocations": 1
+        },
+        "labels": 32,
+        "ticks": 758
+      }
+    },
+    {
+      "name": "all_detail_gpu_color_buffers_have_correct_capacity",
+      "result": {
+        "meshes": 1204,
+        "bytes": 43447296,
+        "positive": 10859532
+      }
+    },
+    {
+      "name": "stationary_pixels_match_original_normal_snow_rendering",
+      "result": {
+        "progressive": {
+          "affected": 820914,
+          "delta": 93272125,
+          "bright": 753302
+        },
+        "legacy": {
+          "affected": 820914,
+          "delta": 93272125,
+          "bright": 753302
+        }
+      }
+    },
+    {
+      "name": "actual_camera_drag_uses_real_overview_and_retains_detail",
+      "result": {
+        "motion": true,
+        "snow": 0,
+        "points": 89051,
+        "labelRatio": 2,
+        "after_release_pixels": {
+          "affected": 914473,
+          "delta": 50784668,
+          "bright": 717141
+        }
+      }
+    },
+    {
+      "name": "three_detail_modes_switch_without_touching_data",
+      "result": {
+        "overview": {
+          "mode": "overview",
+          "snow": 0,
+          "allocated": 3620608,
+          "ready": 809
+        },
+        "always": {
+          "during": 3620608,
+          "mode": "always"
+        }
+      }
+    },
+    {
+      "name": "chunk_matrix_and_gray_match_original_drawing_rule",
+      "result": {
+        "source": "L16.down",
+        "from": 0,
+        "count": 4096
+      }
+    },
+    {
+      "name": "label_depth_and_gray_inherit_override_export_and_legacy_default",
+      "result": {
+        "props": {
+          "group": "label-group-1",
+          "inherited": {
+            "depth": {
+              "value": 0.8,
+              "source": "label-group-1",
+              "own": false
+            },
+            "gray": {
+              "value": 0.7,
+              "source": "label-group-1",
+              "own": false
+            }
+          },
+          "own": {
+            "value": 1.2,
+            "source": "label-2",
+            "own": true
+          },
+          "sibling": {
+            "value": 0.8,
+            "source": "label-group-1",
+            "own": false
+          },
+          "exported": {
+            "depth_mm": 1.2,
+            "gray": 0.7
+          }
+        },
+        "legacy": {
+          "globalDepth": 0.3,
+          "globalGray": 0.5,
+          "groupKept": 0.8
+        }
+      }
+    },
+    {
+      "name": "world_origin_stays_centered_when_zooming",
+      "result": {
+        "fit": {
+          "target": [
+            0,
+            0,
+            0
+          ],
+          "pan": true,
+          "ndc": [
+            -3.312850231196945e-18,
+            1.6980033978523608e-16
+          ],
+          "distance": 81.75898440194987
+        },
+        "zoomed": {
+          "ndc": [
+            -1.1333435001463235e-16,
+            -1.2511603984175296e-15
+          ],
+          "target": [
+            0,
+            0,
+            0
+          ],
+          "distance": 77.67103518185235
+        }
+      }
+    },
+    {
+      "name": "right_drag_pans_view_without_changing_selection",
+      "result": {
+        "before": {
+          "camera": [
+            22.12061127923103,
+            -73.7353709307701,
+            10.32295193030782
+          ],
+          "target": [
+            0,
+            0,
+            0
+          ],
+          "selected": [
+            "L16.down"
+          ],
+          "distance": 77.67103518185235
+        },
+        "after": {
+          "camera": [
+            16.814067984141055,
+            -74.95047383323009,
+            13.014809687927448
+          ],
+          "target": [
+            -5.306543295089919,
+            -1.2151029024602267,
+            2.6918577576196387
+          ],
+          "selected": [
+            "L16.down"
+          ],
+          "distance": 77.6710351818521,
+          "gizmo": true
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "posts": [],
+  "code_unchanged": true,
+  "sha256": {
+    "prototype\\editor_ux\\20261122-055413-124110\\index.html": "e59970af24500b2e5cc7f688ce3618270cea72d4f51b1393c2fcd61c7c588122",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_math.js": "48d8fa705a6cb7e970189c90d0f436afa5675ac263fa59d3aba0147451124420",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_state.js": "b34d70a1316a2a0c85dc00f26bccd3ff38b1b0e8f0719dc044f95c603395be2a",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_ui.js": "6c0806798eec2d8981136bc7f5075c8079aafcf4205d30df9cf3f5546a3e2f15",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\annotation_view.js": "32862cce2430d55f562fe3900f29d132d01dd8aca11d27fec7c48bb36c9ddb5c",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\app.js": "fa598e171f7cec276237db279f17765c1478d813536df0d22f0631af8756c5fb",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\base.css": "4ee00b2657865c856124064487fdeb10b2a215ffac821e741560e388fea2a16e",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\checks.js": "0faa7cc978955f03a0dc14402a6c92bc25025cc0df43d968d69e2fbd3f6d36ea",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\coordinates.js": "9c2edb9c18d2092a0643967de5c62566f4baec472de1ed69dcf912d4075bb7d7",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\curve_math.js": "af0c286cae85a0f57cdc89bb2c2b3db4d62c358cd18318f5d7b9b51f777fa91c",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\curve_ui.js": "49f4e3ceb73db83bd22ef3720ac3bede8e83800195d3351e8c7cd047bb957085",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\data.js": "b75c68201e054b86047a4426f8e306b6621196c23907314efb640cdb9850aac4",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\editor.css": "93c1b6e94e2e4dedffebb2de79693332fb7791a0dcfb0f2ed250a01b3dbd1f5b",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\inspector.js": "089457a36dc9e037005de488220e320af5c1a26d77bd074d327bc1c1552a71b5",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\layout.js": "8503ad5a3f2dec2a589895e4ad242b0e3361c66af7ca183e8389bfeb1c461058",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\model.js": "e2ef52c22be70f5046f605a43fd6ad3a9235ae01532816f2c6820bf94fba9828",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\pixel_layers.js": "8ff829b2f253d0d465df9dad3b897a2d63c3fce048c6849a1b1f9d8e75b9f32c",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\progressive_snow.js": "6b29af38026f460f55fe2c389481097dc0a2c718949d298c9a2ceeab5eb7bd9e",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\scene.js": "d50ebe35a958e8c00ff242ea339f9ce6d195377bf69ed069f64ec5b8db3a6a9d",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\slicing.js": "f3d346c74380a8c591193576df1963ffd198a809a4c85971b8de8f8e1c956fdd",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\stat_cache_worker.js": "aa14999e274dca56b98b4cfe29a205791f2bfb7b6fe6b2482d97d577e73a6876",
+    "prototype\\editor_ux\\20261122-055413-124110\\assets\\tree.js": "cb1fc950f50ae27fa98b4183a149d949cd3184e4fb34cf3b1ccd9b874a30dff4",
+    "tests\\test_progressive_preview.py": "76a23686ecd508415aeda46be7b5bb84d873fe107cbf865e36b3708ae5555dbb"
+  }
+}

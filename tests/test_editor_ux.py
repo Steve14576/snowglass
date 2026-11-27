@@ -577,10 +577,13 @@ def main():
                 check('independent_label_text_is_per_object','''()=>{
                     const m=uxEditor.model,s=uxEditor.scene,g=m.createLabels(m.planLabels('L16.down',{axis:'z',mode:2})),children=m.children(g),id=children.find(n=>n.data.members.includes('L16.down')).id,other=children.find(n=>n.id!==id).id,text=m.nodes.get(other).data.text;
                     window.regressionLabel=id;m.setLabelText(id,'自定义标签');s.structure();
-                    if(!s.annotationView.meshes.get(id)?.visible||s.labels)throw Error('独立标签未绘制或旧标签仍存在');
+                                        // 标签现在有两种表示：轻化贴图、细化实体；至少要有一个在画面上。
+                                        const view=s.annotationView,mesh=view.meshes.get(id),solid=view.solids.get(id);
+                                        view.applyDetail('settle',false);
+                    if(!(mesh?.visible||solid?.mesh?.visible)||s.labels)throw Error('独立标签未绘制或旧标签仍存在');
                     if(m.nodes.get(other).data.text!==text)throw Error('其他对象的文字跟着改');
                     if(document.getElementById('field-labelText')||document.getElementById('field-labelOutput'))throw Error('旧标签控件仍存在');
-                    return {labels:s.annotationView.meshes.size,text:m.nodes.get(id).data.text};
+                    return {labels:s.annotationView.meshes.size,solids:s.annotationView.solids.size,text:m.nodes.get(id).data.text};
                 }''')
                 check('enabled_labels_are_the_only_output_contract','''async()=>{
                     const m=uxEditor.model,id=window.regressionLabel;m.setLabelText(id,'冻结的模型');

@@ -6,6 +6,8 @@
   class ProgressiveSnow {
     constructor(scene,changed=()=>{}){
       this.scene=scene;scene.progressive=this;this.changed=changed;this.records=new Map();this.enabled=false;this.paused=false;this.interacting=false;
+      // 显示精度：overview 始终只画概览；settle 拖动用概览、停下补细节；always 转动时也画完整细节。
+      this.mode='settle';
       this.loading=false;this.frame=null;this.allocated=0;this.points=0;this.waiters=[];this.motion=new Set();this.endTimer=null;this.budget=false;
       this.overview=new THREE.Group();scene.snow.add(this.overview);
       scene.orbit.addEventListener('start',()=>this.motionStart('orbit'));
@@ -18,12 +20,20 @@
     }
     status(){
       const records=[...this.records.values()],built=records.reduce((s,r)=>s+r.count,0),ready=records.filter(r=>r.ready).length;
-      return {enabled:this.enabled,paused:this.paused,interacting:this.interacting,loading:this.loading,budget:this.budget,
-        pieces:records.length,ready,built,allocated:this.allocated,overviewPoints:this.points,settled:!this.loading&&(this.paused||this.budget||ready===records.length),limits:LIMITS};
+      return {enabled:this.enabled,mode:this.mode,paused:this.paused,interacting:this.interacting,loading:this.loading,budget:this.budget,
+        pieces:records.length,ready,built,allocated:this.allocated,overviewPoints:this.points,
+        settled:!this.loading&&(this.paused||this.mode==='overview'||this.budget||ready===records.length),limits:LIMITS};
     }
     notify(){this.changed(this.status());}
     wake(){const list=this.waiters.splice(0);list.forEach(resolve=>resolve());}
-    async waitActive(current){while(this.enabled&&(this.paused||this.interacting)){await new Promise(resolve=>this.waiters.push(resolve));if(!current())return false;}return this.enabled&&current();}
+    // 只有“停下后细化”把拖动当成暂缓；始终轻量要保持概览，始终完整则无需等。
+    blocked(){return this.paused||(this.mode==='settle'&&this.interacting);}
+    async waitActive(current){while(this.enabled&&this.blocked()){await new Promise(resolve=>this.waiters.push(resolve));if(!current())return false;}return this.enabled&&current();}
+    setMode(mode){
+      if(!['overview','settle','always'].includes(mode))return this.mode;
+      this.mode=mode;if(mode==='overview'&&this.frame!==null){cancelAnimationFrame(this.frame);this.frame=null;}
+      this.wake();this.notify();this.scene.render();this.schedule();return this.mode;
+    }
     begin(ids){
       this.enabled=true;this.loading=true;this.budget=false;this.order=new Map(ids.map((id,i)=>[id,i]));this.samples=Math.max(1,Math.min(128,Math.floor(LIMITS.overviewPoints/Math.max(1,ids.length*3))));
       const keep=new Set(ids);for(const [key,r] of this.records)if(!keep.has(r.id)){this.remove(r);this.records.delete(key);}
@@ -32,7 +42,7 @@
     finish(){this.loading=false;this.notify();this.schedule();}
     motionStart(kind){
       this.motion.add(kind);clearTimeout(this.endTimer);this.interacting=true;
-      if(this.frame!==null){cancelAnimationFrame(this.frame);this.frame=null;}if(this.enabled){this.beforeRender();this.scene.render();this.notify();}
+      if(this.frame!==null){cancelAnimationFrame(this.frame);this.frame=null;}if(this.enabled){this.beforeRender();this.scene.render();this.notify();if(this.mode==='always')this.schedule();}
     }
     motionEnd(kind){
       this.motion.delete(kind);clearTimeout(this.endTimer);
@@ -78,18 +88,20 @@
         if(!s.model.nodes.has(r.id)){r.light.visible=false;r.chunks.forEach(m=>m.visible=false);continue;}
         if(!worlds.has(r.id))worlds.set(r.id,s.model.world(r.id));const world=worlds.get(r.id);
         const current=JSON.stringify([world.elements,s.model.resolve(r.id,'snowSize').value,r.p.region,r.p.grid])===r.geometry;
-        const visible=s.model.resolve(r.id,'visible').value,detail=visible&&current&&r.ready&&!this.interacting&&!this.paused;
+        // overview 不展示细节；always 连转动时也展示；settle 只在停下后展示。
+        const moving=this.interacting&&this.mode!=='always';
+        const visible=s.model.resolve(r.id,'visible').value,detail=visible&&current&&r.ready&&!moving&&!this.paused&&this.mode!=='overview';
         r.light.matrix.copy(world);r.light.matrixWorldNeedsUpdate=true;r.light.visible=visible&&!detail;
         for(const mesh of r.chunks)mesh.visible=detail;if(detail)displayed+=r.count;
       }
       s.renderedSnow=displayed;
     }
     schedule(){
-      if(!this.enabled||this.paused||this.interacting||this.budget||this.frame!==null||![...this.records.values()].some(r=>!r.ready))return;
+      if(!this.enabled||this.paused||this.mode==='overview'||(this.interacting&&this.mode!=='always')||this.budget||this.frame!==null||![...this.records.values()].some(r=>!r.ready))return;
       this.frame=requestAnimationFrame(()=>{this.frame=null;this.step();});
     }
     step(){
-      if(!this.enabled||this.paused||this.interacting)return;
+      if(!this.enabled||this.paused||this.mode==='overview'||(this.interacting&&this.mode!=='always'))return;
       const start=performance.now(),pending=[...this.records.values()].filter(r=>!r.ready).sort((a,b)=>(this.order?.get(a.id)||0)-(this.order?.get(b.id)||0));let chunks=0;
       for(const r of pending){
         while(!r.ready&&chunks<4&&performance.now()-start<LIMITS.batchMs){

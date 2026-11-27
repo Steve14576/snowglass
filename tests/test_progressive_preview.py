@@ -47,15 +47,18 @@ def main():
             page.evaluate('async doc=>{await uxEditor.loadProject(doc);uxEditor.select(["L16.down"]);}',fixture)
             page.wait_for_function('uxEditor.scene.annotationView.meshes.size===32 && uxEditor.results[0]?.id==="L16.down"',timeout=45000)
             fixed=page.evaluate('()=>JSON.stringify(uxEditor.model.snapshot())')
-            page.evaluate('''()=>{window.previewStarted=performance.now();window.uiTicks=0;window.tickTimer=setInterval(()=>uiTicks++,10);document.getElementById('view-preview').click();document.getElementById('preview-pause').click();}''')
-            paused=page.evaluate('()=>({view:uxEditor.viewMode,paused:uxEditor.previewStatus.paused,modal:document.getElementById("progress").hidden,elapsed:performance.now()-previewStarted})')
-            assert paused['view']=='preview' and paused['paused'] and paused['modal'],paused
-            cases.append({'name':'preview_entry_immediate_and_pause_without_modal','result':paused})
+            page.evaluate('''()=>{window.previewStarted=performance.now();window.uiTicks=0;window.tickTimer=setInterval(()=>uiTicks++,10);document.getElementById('view-preview').click();
+                const sel=document.getElementById('preview-detail');sel.value='overview';sel.dispatchEvent(new Event('change'));}''')
+            paused=page.evaluate('()=>({view:uxEditor.viewMode,mode:uxEditor.previewStatus.mode,modal:document.getElementById("progress").hidden,elapsed:performance.now()-previewStarted})')
+            assert paused['view']=='preview' and paused['mode']=='overview' and paused['modal'],paused
+            cases.append({'name':'preview_entry_immediate_and_overview_mode_without_modal','result':paused})
             page.locator('#view-prepare').click()
             page.wait_for_function('uxEditor.viewMode==="prepare" && uxEditor.scene.renderedSnow===0')
             assert page.evaluate('()=>uxEditor.scene.snowMeshes.size')==0
             cases.append({'name':'return_prepare_cancels_loading_and_keeps_slice','result':page.evaluate('()=>uxEditor.slicing.snapshot()')})
             page.locator('#view-preview').click()
+            # 上一轮选的是“始终轻量”；重进预览后切回默认的“停下后细化”再核验完整建立。
+            page.locator('#preview-detail').select_option('settle')
             page.wait_for_function('uxEditor.previewStatus.settled && uxEditor.results.length===369 && uxEditor.scene.renderedSnow===3620608',timeout=180000)
             ready=page.evaluate('()=>({status:uxEditor.previewStatus,ratio:uxEditor.scene.pixelLayers.last,labels:uxEditor.scene.annotationView.meshes.size,ticks:uiTicks})')
             assert ready['labels']==32 and ready['ticks']>0 and ready['status']['allocated']<=ready['status']['limits']['detailCells'],ready
@@ -119,13 +122,21 @@ def main():
             restored_pixels=page.evaluate(pixel_probe)
             assert restored_pixels['bright']>0 and restored_pixels['delta']>0,restored_pixels
             cases.append({'name':'actual_camera_drag_uses_real_overview_and_retains_detail','result':{**during,'after_release_pixels':restored_pixels}})
-            page.locator('#preview-pause').click()
-            hold=page.evaluate('()=>({paused:uxEditor.previewStatus.paused,snow:uxEditor.scene.renderedSnow,allocated:uxEditor.previewStatus.allocated})')
-            assert hold['paused'] and hold['snow']==0
+            # 三档显示精度：始终轻量只留概览；停下后细化恢复全部；始终完整在转动时仍画细节。
+            page.locator('#preview-detail').select_option('overview')
+            hold=page.evaluate('()=>({mode:uxEditor.previewStatus.mode,snow:uxEditor.scene.renderedSnow,allocated:uxEditor.previewStatus.allocated,ready:uxEditor.previewStatus.ready})')
+            assert hold['mode']=='overview' and hold['snow']==0,hold
             page.wait_for_timeout(150)
-            page.locator('#preview-pause').click();page.wait_for_function('uxEditor.scene.renderedSnow===3620608')
+            page.locator('#preview-detail').select_option('settle');page.wait_for_function('uxEditor.scene.renderedSnow===3620608')
             assert page.evaluate(invariant)==data
-            cases.append({'name':'actual_pause_keeps_overview_resume_reuses_detail','result':hold})
+            always=page.evaluate('''()=>{const p=uxEditor.scene.progressive;p.setMode('always');p.motionStart('diag');uxEditor.scene.render();
+                const during=uxEditor.scene.renderedSnow;p.motionEnd('diag');return {during,mode:p.mode};}''')
+            assert always['during']==3620608,(always,)
+            page.wait_for_timeout(300)
+            page.evaluate('()=>uxEditor.scene.progressive.setMode("settle")')
+            page.wait_for_function('uxEditor.scene.renderedSnow===3620608')
+            assert page.evaluate(invariant)==data
+            cases.append({'name':'three_detail_modes_switch_without_touching_data','result':{'overview':hold,'always':always}})
             # 核对分批建出的每个矩阵／灰度仍使用原主绘制规则。
             sample=page.evaluate('''()=>{const s=uxEditor.scene,m=uxEditor.model;
                 for(const r of s.progressive.records.values())for(const mesh of r.chunks){
@@ -140,6 +151,56 @@ def main():
                     return {source:r.id,from,count:mesh.count};
                 }throw Error('没有可核验实例');}''')
             cases.append({'name':'chunk_matrix_and_gray_match_original_drawing_rule','result':sample})
+            # 标签厚度／灰度：全局→组→单标签三级继承与锁定；导出带定义；旧工程缺键回落默认。
+            label_props=page.evaluate('''()=>{const M=uxEditor.model,g=[...M.nodes.values()].find(n=>n.type==='labelGroup');
+                const members=M.children(g.id).filter(n=>n.type==='label'),first=members[0],second=members[1];
+                M.commit(()=>{M.put(g.id,'labelDepth',.8);M.put(g.id,'labelGray',.7);});
+                const inherited={depth:M.resolve(first.id,'labelDepth'),gray:M.resolve(first.id,'labelGray')};
+                M.commit(()=>M.put(first.id,'labelDepth',1.2));
+                const own=M.resolve(first.id,'labelDepth'),sibling=M.resolve(second.id,'labelDepth');
+                const row=UXAnnotationState.exportLabels(M,[g.id]).find(a=>a.id===first.id);
+                const result={group:g.id,inherited,own,sibling,exported:{depth_mm:row.depth_mm,gray:row.gray}};
+                // 撤回本次探针改动，保持后续“模型未变”的基线。
+                M.commit(()=>{M.drop(first.id,'labelDepth');M.drop(g.id,'labelDepth');M.drop(g.id,'labelGray');});
+                return result;}''')
+            assert label_props['inherited']['depth']['value']==.8 and label_props['inherited']['depth']['source']==label_props['group'],label_props
+            assert label_props['inherited']['gray']['value']==.7,label_props
+            assert label_props['own']['value']==1.2 and label_props['own']['own'],label_props
+            assert label_props['sibling']['value']==.8,label_props
+            assert label_props['exported']=={'depth_mm':1.2,'gray':.7},label_props
+            # 旧工程没有这两个键时，全局回落到当前默认值；组的已有覆盖不受影响。
+            legacy_keys=page.evaluate('''()=>{const M=uxEditor.model,doc=JSON.parse(JSON.stringify(M.snapshot()));
+                const values=doc.nodes.find(n=>n.id==='global').values;delete values.labelDepth;delete values.labelGray;
+                const groupNode=doc.nodes.find(n=>n.type==='labelGroup');groupNode.overrides={...groupNode.overrides,labelDepth:.9};
+                const probe=new UXModel.Model(M.topo,M.provenance);probe.load(doc);
+                return {globalDepth:probe.resolve('global','labelDepth').value,globalGray:probe.resolve('global','labelGray').value,
+                    groupKept:probe.resolve(groupNode.id,'labelDepth').value};}''')
+            assert legacy_keys=={'globalDepth':.1,'globalGray':.5,'groupKept':.9},legacy_keys
+            cases.append({'name':'label_depth_and_gray_inherit_override_export_and_legacy_default','result':{'props':label_props,'legacy':legacy_keys}})
+            # 实体真实存在：有顶点、z 跨度等于厚度；三档切换只改表示，不改数据。
+            glyph=page.evaluate('''()=>{const M=uxEditor.model,s=uxEditor.scene,v=s.annotationView,p=s.progressive;
+                const g=[...M.nodes.values()].find(n=>n.type==='labelGroup');
+                const snap=()=>{s.render();const solids=[...v.solids.values()].filter(i=>i.mesh.visible),planes=[...v.meshes.values()].filter(m=>m.visible);
+                    const first=solids[0];let zSpan=null,vertices=0;if(first){first.mesh.geometry.computeBoundingBox();const bb=first.mesh.geometry.boundingBox;zSpan=bb.max.z-bb.min.z;vertices=first.mesh.geometry.attributes.position.count;}
+                    return {solids:solids.length,planes:planes.length,zSpan,vertices};};
+                p.interacting=false;p.setMode('settle');const settle=snap();
+                p.setMode('overview');const overview=snap();
+                p.interacting=true;p.setMode('always');const always=snap();
+                p.interacting=false;p.setMode('settle');
+                M.commit(()=>M.put(g.id,'labelDepth',1.2));const thicker=snap();
+                M.commit(()=>M.drop(g.id,'labelDepth'));p.setMode('settle');s.render();
+                const outline=UXGlyph.outline(UXAnnotationMath.measure('o','Microsoft YaHei'));
+                const exported=UXAnnotationState.exportLabels(M,[g.id]).filter(a=>a.glyph_outline);
+                return {settle,overview,always,thicker,holeRings:outline.groups.length?outline.groups[0].holes.length:0,
+                    exported:exported.length,firstContour:exported[0]?.glyph_outline?.contours?.[0]?.outer?.length||0,extent:exported[0]?.glyph_outline?.extent_mm||null};}''')
+            assert glyph['settle']['solids']>0 and glyph['settle']['planes']==0,(glyph,)
+            assert glyph['settle']['vertices']>100 and abs(glyph['settle']['zSpan']-.1)<1e-6,(glyph,)
+            assert glyph['overview']['solids']==0 and glyph['overview']['planes']>0,(glyph,)
+            assert glyph['always']['solids']>0,(glyph,)
+            assert abs(glyph['thicker']['zSpan']-1.2)<1e-6,(glyph,)
+            assert glyph['holeRings']>0,(glyph,)
+            assert glyph['exported']>0 and glyph['firstContour']>=3 and glyph['extent'][0]>0,(glyph,)
+            cases.append({'name':'label_solid_geometry_and_modes_switch_are_real','result':glyph})
             # 取景基准：焦点固定世界原点，原点恒在画面正中；平移关闭；放大也不漂。
             anchor=page.evaluate('''()=>{const s=uxEditor.scene;s.fit(['work']);s.render();
                 const p=new THREE.Vector3(0,0,0).project(s.camera);

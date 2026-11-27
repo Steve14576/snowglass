@@ -1,7 +1,7 @@
 /* 独立标注节点：操作父级唯一，源块跟随是独立引用，不迁移模型身份。 */
 (() => {
   'use strict';
-  const TYPES=['annotationRoot','labelGroup','label'],STYLE=['labelEnabled','labelFont','labelSize'],I=()=>new THREE.Matrix4(),mat=a=>new THREE.Matrix4().fromArray(a),copy=CurveMath.copy;
+  const TYPES=['annotationRoot','labelGroup','label'],STYLE=['labelEnabled','labelFont','labelSize','labelDepth','labelGray'],I=()=>new THREE.Matrix4(),mat=a=>new THREE.Matrix4().fromArray(a),copy=CurveMath.copy;
   const is=n=>!!n&&TYPES.includes(n.type);
   function ensureRoot(model){if(!model.nodes.has('annotations'))model.nodes.set('annotations',new UXModel.Node('annotations','annotationRoot','标注','project'));}
   function effective(model,id){let n=model.nodes.get(id);while(is(n)){if(n.data?.follow)return n.data.follow;n=model.nodes.get(n.parent);}return null;}
@@ -132,11 +132,22 @@
     const scope=new Set(ids.flatMap(id=>[id,...model.descendants(id)])),all=scope.has('work')||scope.has('project');
     return [...model.nodes.values()].filter(n=>n.type==='label'&&(all||scope.has(n.id)||n.data.members.some(id=>scope.has(id)))).map(n=>{
       const w=world(model,n.id),box=model.bounds([n.id]),normal=new THREE.Vector3(0,0,1).applyMatrix3(new THREE.Matrix3().getNormalMatrix(w)).normalize(),size=UXAnnotationMath.shape(model,n);
+      const depth=model.resolve(n.id,'labelDepth').value,gray=model.resolve(n.id,'labelGray').value;
+      // 实体真源：字形轮廓（归一化局部坐标，乘 extent_mm 得毫米）＋挤出厚度＋灰度。加工点化不在这里。
+      const outline=depth>0&&window.UXGlyph?window.UXGlyph.outline(size.metric):null,round=v=>Math.round(v*1e6)/1e6;
       return {id:n.id,parent:n.parent,coordinateSystem:UXCoordinates.SYSTEM,localGeometryBasis:'glyph-xy-plane',text:n.data.text,members:n.data.members.slice(),font:model.resolve(n.id,'labelFont').value,size_mm:new THREE.Vector3().setFromMatrixColumn(w,1).length(),nominal_height_mm:size.nominalHeight,font_sizing:n.data.fontSizing||'legacy-ink-height',
+              depth_mm:depth,gray,
+              glyph_solid:depth>0&&outline&&outline.groups.length?'带灰度的字形挤出实体（与雪花小块同层）；加工点化未做':'厚度为0：仅固定朝向纹理平面',
+              glyph_outline:depth>0&&outline&&outline.groups.length?{
+                basis:'glyph-local-normalized',z_unit:'mm',extent_mm:[round(size.width),round(size.height)],depth_mm:depth,gray,
+                threshold:UXGlyph.THRESHOLD,
+                contours:outline.groups.map(group=>({outer:group.outer.map(([x,y])=>[round(x),round(y)]),
+                  holes:group.holes.map(hole=>hole.map(([x,y])=>[round(x),round(y)]))}))
+              }:null,
         glyph_width_mm:new THREE.Vector3().setFromMatrixColumn(w,0).length(),matrix_mm:w.toArray(),anchor_world_mm:box.getCenter(new THREE.Vector3()).toArray(),front_world:normal.toArray(),
         enabled:model.resolve(n.id,'labelEnabled').value,output:model.resolve(n.id,'labelEnabled').value,follow:copy(effective(model,n.id)),
         text_alignment:model.ancestors(n.id).filter(id=>model.nodes.get(id)?.data?.textAlign).map(id=>({group:id,mode:model.nodes.get(id).data.textAlign,guide_local_x:model.nodes.get(id).data.alignmentGuide})),
-        glyph_geometry:'未接入：仅固定朝向纹理平面，不是可加工文字轮廓'};
+        glyph_geometry:depth>0&&outline&&outline.groups.length?'字形轮廓＋沿法向挤出；加工点化与厂家读取契约未接入':'未接入：仅固定朝向纹理平面'};
     });
   }
   window.UXAnnotationState={TYPES,STYLE,is,ensureRoot,effective,follow,beforeLocal,frame,world,setFrame,setLocal,alignRows,setAlignment,fontChanged,centerMode,setCenter,delta,inBranch,move,group,ungroup,create,remove,text,validate,exportLabels};

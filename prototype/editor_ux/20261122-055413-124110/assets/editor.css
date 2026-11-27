@@ -291,4 +291,5 @@ dialog pre{white-space:pre-wrap;font:11px/1.6 inherit;max-height:46vh;overflow:a
 /* 显示进度不遮挡操作；计算任务仍使用原居中进度区。 */
 #preview-render{position:absolute;left:8px;top:48px;z-index:3;display:flex;align-items:center;gap:8px;max-width:calc(100% - 16px);padding:4px 7px;background:hsl(var(--panel)/.9);border:1px solid hsl(var(--border));border-radius:4px;color:hsl(var(--muted));font-size:10px}
 #preview-render-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#preview-pause{flex-shrink:0;color:hsl(var(--info));border-color:hsl(var(--info)/.5)}
+#preview-detail-label{flex-shrink:0;display:flex;align-items:center;gap:4px;color:hsl(var(--muted))}
+#preview-detail{font:inherit;font-size:10px;color:hsl(var(--ink));background:hsl(var(--surface));border:1px solid hsl(var(--info)/.5);border-radius:3px;padding:1px 3px;cursor:pointer}
