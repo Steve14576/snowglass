@@ -6,7 +6,7 @@
       const T=THREE;this.model=model;this.element=element;this.onSelect=onSelect;this.onHover=onHover;this.onGesture=onGesture;this.selected=[];this.exposure=1;this.scopeAll=false;this.snowMeshes=new Map();this.isolate=false;this.observation=[];
       this.renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));this.renderer.setClearColor(0x000000);element.append(this.renderer.domElement);
       this.initWorldAxes();
-      this.scene=new T.Scene();this.camera=new T.PerspectiveCamera(42,1,.001,2000);this.camera.up.set(0,0,1);this.orbit=new T.OrbitControls(this.camera,this.renderer.domElement);this.orbit.addEventListener('change',()=>this.render());
+      this.scene=new T.Scene();this.camera=new T.PerspectiveCamera(42,1,.001,2000);this.camera.up.set(0,0,1);this.orbit=new T.OrbitControls(this.camera,this.renderer.domElement);this.orbit.enablePan=false;this.orbit.addEventListener('change',()=>this.render());
       this.unit=new T.BoxGeometry(1,1,1);this.frames=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending}),5000);
       this.shells=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide}),2500);
       this.proxy=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({visible:false}),1000);
@@ -83,8 +83,17 @@
       if(ids.length===1){const q=new T.Quaternion();this.model.objectFrame(ids[0]).decompose(new T.Vector3(),q,new T.Vector3());this.pivot.quaternion.copy(q);}
       else this.pivot.quaternion.identity();
       this.pivot.scale.set(1,1,1);this.pivot.updateMatrixWorld();this.gumball.attach(this.pivot);this.gumball.setMode(this.mode);this.render();}
-    fit(ids=['work'],front=false){const box=this.model.bounds(ids);if(box.isEmpty())return;const size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3()),d=Math.max(size.x,size.y,size.z,.5)*1.9;
-      this.camera.position.copy(center).add(new THREE.Vector3(front?0:d*.3,-d,front?0:d*.14));this.orbit.target.copy(center);this.orbit.update();this.render();}
+    fit(ids=['work'],front=false){
+      // 旋转中心固定为世界原点：转动与缩放都绕它，原点恒在画面正中（SolidWorks 式取景）。距离只决定作品能否完整入镜。
+      const box=this.model.bounds(ids);if(box.isEmpty())return;const T=THREE,dir=new T.Vector3(front?0:.3,-1,front?0:.14).normalize();
+      const probe=new T.PerspectiveCamera(this.camera.fov,this.camera.aspect,this.camera.near,this.camera.far);
+      probe.up.copy(this.camera.up);probe.position.copy(dir);probe.lookAt(0,0,0);probe.updateMatrixWorld(true);
+      const view=probe.matrixWorld.clone().invert(),tanY=Math.tan(this.camera.fov*Math.PI/360),tanX=tanY*Math.max(this.camera.aspect,.0001),corner=new T.Vector3();
+      let need=0;for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
+        corner.set(x,y,z).applyMatrix4(view);need=Math.max(need,corner.z+Math.max(Math.abs(corner.x)/tanX,Math.abs(corner.y)/tanY));
+      }
+      const distance=Math.max(1+need,.5)*1.06;
+      this.orbit.target.set(0,0,0);this.camera.position.copy(dir).multiplyScalar(distance);this.orbit.update();this.render();}
     screen(id){const p=this.model.bounds([id]).getCenter(new THREE.Vector3()).project(this.camera),r=this.renderer.domElement.getBoundingClientRect();return {x:r.left+(p.x+1)*r.width/2,y:r.top+(1-p.y)*r.height/2};}
     pick(e){const r=this.renderer.domElement.getBoundingClientRect();this.mouse.set((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2);this.scene.updateMatrixWorld();this.ray.setFromCamera(this.mouse,this.camera);
       if(e.altKey){const h=this.ray.intersectObjects(this.ghostHits||[],false)[0];return h?.object.userData.id||null;}const label=this.annotationView.pick(this.ray),hit=this.ray.intersectObject(this.proxy,false)[0];return label&&(!hit||label.distance<hit.distance)?label.object.userData.id:hit?this.blockIds[hit.instanceId]:null;}

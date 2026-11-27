@@ -1,7 +1,14 @@
 /* 只载入独立复制的已完成统计。没有计算接口，不制造未计算纹理。 */
 (() => {
   'use strict';
-  const clip=CurveMath.clip;
+  const clip=CurveMath.clip,yieldUI=()=>globalThis.scheduler?.yield?globalThis.scheduler.yield():new Promise(resolve=>setTimeout(resolve,0));
+  class CacheReader {
+    constructor(){this.worker=new Worker(new URL('assets/stat_cache_worker.js',document.baseURI));this.seq=0;this.pending=new Map();
+      this.worker.onmessage=({data})=>{const task=this.pending.get(data.id);if(!task)return;this.pending.delete(data.id);data.error?task.reject(Error(data.error)):task.resolve(data.value);};
+      this.worker.onerror=()=>{for(const task of this.pending.values())task.reject(Error('统计读取线程失败'));this.pending.clear();};}
+    read(url,key){return new Promise((resolve,reject)=>{const id=++this.seq;this.pending.set(id,{resolve,reject});this.worker.postMessage({id,url:new URL(url,document.baseURI).href,key});});}
+    close(){this.worker.terminate();for(const task of this.pending.values())task.reject(Error('统计读取已关闭'));this.pending.clear();}
+  }
   function region(index,total){
     const cols=Math.min(3,total),rows=Math.ceil(total/cols),width=.90/cols,height=.90/rows;
     return {min:[-.45+(index%cols)*width+.03*width,-.45+Math.floor(index/cols)*height+.03*height,-.44],
@@ -10,7 +17,7 @@
   function position(piece,i){const d=piece.grid,r=piece.region,x=Math.floor(i/(d[1]*d[2])),y=Math.floor(i/d[2])%d[1],z=i%d[2];
     return [x,y,z].map((v,a)=>r.min[a]+(v+.5)*r.size[a]/d[a]);}
   class Data {
-    constructor(manifest){this.manifest=manifest;this.groups=new Map(manifest.blocks.map(b=>[b.id,b]));this.tensors=new Map();this.providers=new Map();this.cache=new Map();this.combined=new Map();this.luts=new Map();this.evaluated=new Map();manifest.tensors.forEach(t=>this.register({...t,source_run:manifest.source_run}));}
+    constructor(manifest){this.manifest=manifest;this.groups=new Map(manifest.blocks.map(b=>[b.id,b]));this.tensors=new Map();this.providers=new Map();this.cache=new Map();this.combined=new Map();this.luts=new Map();this.evaluated=new Map();this.pendingFiles=new Map();this.reader=null;manifest.tensors.forEach(t=>this.register({...t,source_run:manifest.source_run}));}
     compatibility(index){return JSON.stringify([index.grid||[16,16,32],index.sourceConvention||'hf']);}
     desired(id,model){return JSON.stringify([['gridX','gridY','gridZ'].map(k=>model.resolve(id,k).value),model.resolve(id,'sourceConvention').value]);}
     register(index){
@@ -40,10 +47,20 @@
     }
     async file(index,key){
       const url=index.url||('data/tensors/'+index.data_file);
-      if(!this.cache.has(url)){const response=await fetch(url,{cache:'no-store'});if(!response.ok)throw Error('统计载入失败 '+response.status);
-        const t=await response.json();if(t.key!==key||!t.parts?.length)throw Error('张量缓存身份无效');this.cache.set(url,t);}
+      if(!this.cache.has(url)){
+        if(!this.pendingFiles.has(url))this.pendingFiles.set(url,(async()=>{
+          let t;
+          if(typeof Worker!=='undefined'){if(!this.reader)this.reader=new CacheReader();t=await this.reader.read(url,key);}
+          else{const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(30000)});if(!response.ok)throw Error('统计载入失败 '+response.status);t=await response.json();}
+          if(t.key!==key||!t.parts?.length)throw Error('张量缓存身份无效');
+          if(this.cache.size>=128)this.cache.delete(this.cache.keys().next().value);this.cache.set(url,t);return t;
+        })());
+        try{await this.pendingFiles.get(url);}finally{this.pendingFiles.delete(url);}
+      }
       const t=this.cache.get(url);if(t.packed_sha256)index.packed_sha256=t.packed_sha256;return t;
     }
+    prune(ids){const keep=new Set(ids);for(const id of this.evaluated.keys())if(!keep.has(id))this.evaluated.delete(id);this.combined.clear();this.cache.clear();}
+
     async tensor(ref,model=null,id=null){
       const key=ref.file+':'+ref.gguf,s=this.sources(ref,id,model);if(!s)throw Error('缺少已完成张量 '+key);
       const channel=id&&model?model.resolve(id,'channel').value:'full',providers=s.providers;
@@ -51,6 +68,7 @@
       const diagnostic=id&&model&&model.resolve(id,'extraDiagnostics').value?providers.signed:null;
       const signature=JSON.stringify([key,channel,providers.full.data_sha256,providers[channel].data_sha256,diagnostic?.data_sha256,s.matched]);
       if(this.combined.has(signature))return this.combined.get(signature);
+      if(this.combined.size>=128)this.combined.delete(this.combined.keys().next().value);
       const full=await this.file(providers.full,key),chosen=await this.file(providers[channel],key),diag=diagnostic?await this.file(diagnostic,key):null;
       if(full.packed_sha256!==chosen.packed_sha256){delete providers[channel];throw Error('通道来自不同原张量，拒绝混用，请重新切片。');}
       if(diag&&diag.packed_sha256!==full.packed_sha256){delete providers.signed;throw Error('诊断来自不同原张量，请重新切片。');}
@@ -61,7 +79,7 @@
                 channel_runs:{full:providers.full.source_run,[channel]:providers[channel].source_run}};
       this.combined.set(signature,t);return t;
     }
-    async evaluate(id,model){
+    async evaluate(id,model,options={}){
       const group=this.groups.get(id);if(!group)return {id,status:id==='mtp'?'权重未收录':'该层尚未计算',pieces:[],count:0,positive:0};
       const tensors=await Promise.all(group.tensors.map(t=>this.tensor(t,model,id)));
       const keys=['channel','sourceConvention','extraDiagnostics','gridX','gridY','gridZ','windowMode','black','white','curve','filter','cutoff'];
@@ -77,6 +95,7 @@
         if(used==='feature'&&t.spectral.rank_capped)caveats.push(t.name+'：谱方向达到原批次上限，仍为截断结果');
         const w=t.windows[used],raw=part[used],gray=new Float64Array(raw.length),mask=new Uint8Array(raw.length),reference=t.reference_white;
         for(let i=0;i<raw.length;i++){
+          if(i%8192===0){if(options.isCurrent&&!options.isCurrent())throw new DOMException('显示任务已替换','AbortError');await yieldUI();}
           const u=p.windowMode==='range'&&w.high>w.low?(raw[i]-w.low)/(w.high-w.low):(reference>0?raw[i]/reference:0);
           const x=clip((u-p.black)/(p.white-p.black)),keep=!p.filter||x>p.cutoff;
           gray[i]=keep?CurveMath.lookup(lut,x):0;mask[i]=keep?1:0;

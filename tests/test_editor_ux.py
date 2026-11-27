@@ -36,7 +36,7 @@ def main():
     cases=[];errors=[];pending=set();diagnostic={};start=time.monotonic();failure=None
     try:
         with sync_playwright() as p:
-            browser=p.chromium.launch(channel='msedge',headless=True,args=['--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+            browser=p.chromium.launch(channel='msedge',headless=True)
             page=browser.new_page(viewport={'width':1600,'height':1050});page.on('pageerror',lambda e:errors.append(str(e)))
             page.on('request',lambda r:pending.add(r.url));page.on('requestfinished',lambda r:pending.discard(r.url));page.on('requestfailed',lambda r:pending.discard(r.url))
             try:
@@ -314,7 +314,7 @@ def main():
                     function compare(){const on=new Uint8Array(w*h*4),off=new Uint8Array(w*h*4);s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,on);s.snow.visible=false;s.render();g.readPixels(0,0,w,h,g.RGBA,g.UNSIGNED_BYTE,off);s.snow.visible=true;
                         let count=0,max=0;for(let i=0;i<on.length;i+=4){if(on[i]!==off[i]||on[i+1]!==off[i+1]||on[i+2]!==off[i+2])count++;max=Math.max(max,on[i],on[i+1],on[i+2]);}return {pixels:count,max};}
                     s.drawSnow(uxEditor.results);s.fit(['L16.down']);const normal=compare();s.frames.material.needsUpdate=true;s.shells.material.needsUpdate=true;const recompiled=compare();const objects=[s.frames,s.shells,s.proxy,s.ghosts,s.highlights,s.annotationView.group,s.gumball];const old=objects.map(o=>o.visible);objects.forEach(o=>o.visible=false);const isolated=compare();objects.forEach((o,i)=>o.visible=old[i]);s.render();
-                    const mesh=s.snow.children[0],mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);return {normal,recompiled,isolated,gl_error:g.getError(),lost:g.isContextLost(),buffer:[w,h],meshes:s.snow.children.length,count:s.renderedSnow,first_matrix:mat.toArray(),first_colors:Array.from(mesh.instanceColor.array.slice(0,9)),camera:s.camera.position.toArray()};
+                    const mesh=s.snow.children.find(m=>m.isInstancedMesh),mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);return {normal,recompiled,isolated,gl_error:g.getError(),lost:g.isContextLost(),buffer:[w,h],meshes:s.snow.children.length,count:s.renderedSnow,first_matrix:mat.toArray(),first_colors:Array.from(mesh.instanceColor.array.slice(0,9)),camera:s.camera.position.toArray()};
                 }''')
                 print(json.dumps({'render_probe':diag},ensure_ascii=False),flush=True);cases.append({'name':'render_probe','result':diag});browser.close()
             else:
@@ -371,7 +371,7 @@ def main():
                 check('fixed_mm_transform_and_reparent','''async()=>{
                     const a=uxEditor,m=a.model,g=testGroup;await a.data.evaluate('L16.down',m);const raw=a.data.evaluated.get('L16.down').pieces[0].raw.slice();
                     m.transform([g],new THREE.Matrix4().makeTranslation(2,3,4).multiply(new THREE.Matrix4().makeRotationZ(.3)).multiply(new THREE.Matrix4().makeScale(1.3,.8,1.1)));
-                    a.select([g]);await a.refreshData();a.scene.drawSnow(a.results);const mesh=a.scene.snow.children[0],mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);
+                    a.select([g]);await a.refreshData();a.scene.drawSnow(a.results);const mesh=a.scene.snow.children.find(n=>n.isInstancedMesh&&n.userData.sourceId==='L16.down'),mat=new THREE.Matrix4();mesh.getMatrixAt(0,mat);
                     const side=m.resolve('L16.down','snowSize').value;for(let i=0;i<3;i++)if(Math.abs(new THREE.Vector3().setFromMatrixColumn(mat,i).length()-side)>1e-6)throw Error('小块随包络缩放');
                     const actual=a.results.find(r=>r.id==='L16.down');if(!actual||raw.some((v,i)=>v!==actual.pieces[0].raw[i]))throw Error('变换改了源值');
                     const next=m.group(['L00.up']);window.nextGroup=next;m.set(next,'frameGray',.7);m.set('L16.down','frameGray',.6);
@@ -535,7 +535,7 @@ def main():
                     return {top_buttons:top.length,tree_tools:treeTools};
                 }''')
                 page.evaluate('() => document.getElementById("view-preview").click()')
-                page.wait_for_function('document.getElementById("view-preview").getAttribute("aria-selected")==="true"',timeout=180000)
+                page.wait_for_function('document.getElementById("view-preview").getAttribute("aria-selected")==="true" && uxEditor.previewStatus.settled && uxEditor.results.length===65',timeout=180000)
                 prev=page.evaluate('() => ({snow:uxEditor.scene.renderedSnow,blocks:uxEditor.results.length,meshes:uxEditor.scene.snowMeshes.size,hidden:document.getElementById("progress").hidden,badge:document.getElementById("preview-state").textContent,positive:uxEditor.results.reduce((n,r)=>n+r.positive,0)})')
                 assert prev['snow']>0 and prev['hidden'],prev
                 assert prev['blocks']==65 and prev['meshes']>=65,prev

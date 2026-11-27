@@ -288,3 +288,7 @@ dialog pre{white-space:pre-wrap;font:11px/1.6 inherit;max-height:46vh;overflow:a
   .focus .workspace{grid-template-rows:1fr}
   .curve-wrap svg{height:140px}
 }
+/* 显示进度不遮挡操作；计算任务仍使用原居中进度区。 */
+#preview-render{position:absolute;left:8px;top:48px;z-index:3;display:flex;align-items:center;gap:8px;max-width:calc(100% - 16px);padding:4px 7px;background:hsl(var(--panel)/.9);border:1px solid hsl(var(--border));border-radius:4px;color:hsl(var(--muted));font-size:10px}
+#preview-render-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#preview-pause{flex-shrink:0;color:hsl(var(--info));border-color:hsl(var(--info)/.5)}

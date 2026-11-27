@@ -36,27 +36,36 @@
   try{
     const [topo,manifest,provenance]=await Promise.all([json('data/topology.json'),json('data/manifest.json'),json('provenance.json')]);await libraries();
     const model=new UXModel.Model(topo,provenance),data=new UXData.Data(manifest);let selected=['L16.down'],preview=['L16.down'],results=[],serial=0,saveTimer,inspector,tree,scene,dataTimer=null,structPending=false,viewMode='prepare',previewLoading=false,previewResults=[],slicing=null,bootDoc=null;
+    const previewLoad={loading:false,done:0,total:0,budget:false,failures:[]};
     const observed=()=>selected.length===1&&selected[0]==='global'?preview:selected;
     const snapshot=()=>({...model.snapshot(),slice:slicing?.snapshot(),view:{selected:selected.slice(),preview:preview.slice(),isolate:scene.isolate,exposure:scene.exposure,camera:scene.camera.position.toArray(),target:scene.orbit.target.toArray(),open:[...tree.open]}});
     const safe=fn=>{try{return fn();}catch(e){message(e.message);}};
     async function refreshData(){
-      const token=++serial;
-      // 预览态画全部有缓存的块；准备态只求值当前观察对象但不画雪花。
-      const sourceIds=viewMode==='preview'?[...data.groups.keys()]:model.leaves(observed());
-      const ids=sourceIds.filter(id=>model.nodes.get(id)?.type==='block');
-      try{const values=await Promise.all(ids.map(id=>data.evaluate(id,model)));if(token!==serial)return;results=values;
-        scene.drawSnow(viewMode==='preview'?values:[]);if(viewMode==='preview')previewResults=values;
-        const selectedIds=new Set(model.leaves(observed()));inspector.results(values.filter(r=>selectedIds.has(r.id)));
-        renderViewState();slicing?.render();
-        const count=values.reduce((n,r)=>n+r.count,0),missing=values.filter(r=>!r.pieces.length).length;
-        const reference=selected.length===1&&selected[0]==='global'?`编辑全局；参考预览 ${preview.join('、')}，曲线来源 ${ids[0]?model.nodes.get(model.resolve(ids[0],'curve').source).name:'无'}。`:'当前对象预览。';
-        const coverage=slicing?.summary();
-        $('view-caption').textContent=`${viewMode==='prepare'?'准备：不显示雪花。':reference}${ids.length} 个功能块 · ${count} 候选格 · ${coverage?coverage.total-coverage.ready:missing} 块待切片；旧统计若不匹配会保留并标记，不填模拟。`;renderReport();
-      }catch(e){if(token===serial){
-        const same=ids.length===results.length&&ids.every(id=>results.some(r=>r.id===id));if(!same){results=[];scene.drawSnow([]);}
-        $('view-caption').textContent=same?'当前窗口／缓存无效，保留上一有效灰度预览；当前设置尚未应用。':'所选统计无法载入，未填充任何替代纹理。';
-        message(e.message+'；没有重新计算权重。');
-      }}
+      const token=++serial,isPreview=viewMode==='preview',current=()=>token===serial&&isPreview===(viewMode==='preview');
+      const sourceIds=isPreview?[...data.groups.keys()]:model.leaves(observed());
+      const priority=new Set(model.leaves(observed())),distances=new Map(sourceIds.filter(id=>model.nodes.get(id)?.type==='block').map(id=>[id,model.bounds([id]).getCenter(new THREE.Vector3()).distanceToSquared(scene.camera.position)]));
+      const ordered=[...distances.keys()].sort((a,b)=>Number(priority.has(b))-Number(priority.has(a))||distances.get(a)-distances.get(b)),ids=isPreview?ordered:ordered.slice(0,8);
+      const loaded=[],queue=ids.slice();let cells=0;
+      if(isPreview){Object.assign(previewLoad,{loading:true,done:0,total:ids.length,budget:false,failures:[]});scene.progressive.begin(ids);renderViewState();}
+      try{
+        await Promise.all(Array.from({length:Math.min(3,ids.length)},async()=>{
+          while(queue.length&&current()&&(!isPreview||!previewLoad.budget)){
+            if(isPreview&&!await scene.progressive.waitActive(current))break;const id=queue.shift();if(!id)break;
+            try{
+              const result=await data.evaluate(id,model,{isCurrent:current});if(!current())return;
+              if(isPreview&&cells+result.count>scene.progressive.status().limits.loadedCells){previewLoad.budget=true;break;}
+              cells+=result.count;loaded.push(result);
+              if(isPreview){results=loaded.slice();previewResults=results;scene.progressive.offer(result);previewLoad.done=loaded.length;renderViewState();}
+            }catch(e){if(e.name==='AbortError')return;if(!isPreview)throw e;previewLoad.failures.push(id+'：'+e.message);}
+          }
+        }));
+        if(!current())return;results=loaded;previewResults=isPreview?loaded:[];
+        if(isPreview){previewLoad.loading=false;scene.progressive.finish();}else scene.drawSnow([]);
+        const chosen=new Set(model.leaves(observed()));inspector.results(results.filter(r=>chosen.has(r.id)));renderViewState();slicing?.render();renderReport();
+        const coverage=slicing?.summary(),count=results.reduce((n,r)=>n+r.count,0);
+        $('view-caption').textContent=`${isPreview?'预览：真实缓存，分批绘制。':'准备：不显示雪花。'}${results.length} 个功能块 · ${count} 候选格 · ${coverage?coverage.total-coverage.ready:0} 块待切片；旧统计不匹配会标明，不填模拟。`;
+        if(previewLoad.failures.length)message('部分统计未载入：'+previewLoad.failures.slice(0,2).join('；'));
+      }catch(e){if(current()){previewLoad.loading=false;if(isPreview)scene.progressive.finish();message(e.message+'；没有重新计算权重。');}}
     }
     function renderReport(){
       if($('report').hidden)return;const report=UXChecks.run(model),root=$('report');root.textContent='';
@@ -91,36 +100,30 @@
       const badge=$('preview-state');
       if(viewMode==='preview'&&previewResults.length){badge.hidden=false;badge.textContent=`${previewResults.length} 块 · ${previewResults.reduce((n,r)=>n+r.count,0)} 候选格`;}
       else badge.hidden=true;
+      const state=scene?.progressive?.status();$('preview-render').hidden=viewMode!=='preview';
+      if(state&&viewMode==='preview'){
+        const phase=state.interacting?'交互概览':state.paused?'已暂停细化':previewLoad.budget||state.budget?'显示资源上限':state.settled?'细节已完成':'正在分批细化';
+        $('preview-render-text').textContent=phase+' · 统计 '+previewLoad.done+'/'+previewLoad.total+' 块 · 细节 '+state.ready+'/'+state.pieces+' 分区';
+        $('preview-render').title=previewLoad.budget?'当前显示工作集达到上限；其余统计仍保存在磁盘。选择焦点后重新进入预览可优先载入。':'概览来自真实格子，细化只影响显示；统计结果和加工输出不变。';
+        $('preview-pause').textContent=state.paused?'继续细化':'暂停细化';$('preview-pause').setAttribute('aria-pressed',String(state.paused));
+      }
       slicing?.render();
     }
     function showProgress(done,total,text){$('progress').hidden=false;$('progress-text').textContent=text;$('progress-fill').style.width=(total?Math.round(done/total*100):0)+'%';}
     function hideProgress(){$('progress').hidden=true;}
     async function enterPreview(){
-      const ids=previewIds(),total=ids.length;const token=++serial;showProgress(0,total,'正在载入统计缓存…');
-      $('progress-note').textContent='读取已有统计并绘制；此步骤不读取原权重、不重新切片。';
-      try{
-        const loaded=[];const queue=ids.map((id,i)=>i);let done=0;
-        await Promise.all(Array.from({length:6},async()=>{
-          while(queue.length){const i=queue.shift();loaded[i]=await data.evaluate(ids[i],model);done++;
-            showProgress(done,total,`已载入 ${done} / ${total} 组`);await new Promise(r=>setTimeout(r,0));}
-        }));
-        if(scene.isolate){scene.isolate=false;const b=$('isolate-view');b.classList.remove('active');b.setAttribute('aria-checked','false');}
-        if(token!==serial){hideProgress();return;}
-        previewResults=loaded;viewMode='preview';results=loaded;
-        scene.observation=ids;scene.structure();scene.drawSnow(loaded);
-        hideProgress();renderViewState();renderReport();
-        const scope=new Set(model.leaves(observed()));inspector.results(loaded.filter(r=>scope.has(r.id)));
-        message(`预览：${total} 块已有统计；其余块只有结构，不补模拟。`);
-      }catch(e){hideProgress();message('预览载入失败：'+e.message);}
+      viewMode='preview';previewLoading=true;scene.isolate=false;$('isolate-view').classList.remove('active');$('isolate-view').setAttribute('aria-checked','false');
+      scene.observation=previewIds();scene.structure();hideProgress();renderViewState();
+      message('预览已进入；读取现成统计并分批显示，仍可转动、暂停或返回准备。');
+      try{await refreshData();}finally{previewLoading=false;}
     }
     function exitPreview(){
-      viewMode='prepare';previewResults=[];scene.drawSnow([]);hideProgress();renderViewState();
-      message('准备：结构编辑，不显示雪花。');refreshData();
+      ++serial;viewMode='prepare';previewLoading=false;previewLoad.loading=false;previewResults=[];scene.progressive.clear();hideProgress();renderViewState();
+      data.prune(model.leaves(observed()));message('准备：结构编辑；切片结果保留，不显示雪花。');refreshData();
     }
     async function setView(mode){
-      if(mode===viewMode||previewLoading)return;
-      if(mode==='prepare'){exitPreview();return;}
-      previewLoading=true;try{await enterPreview();}finally{previewLoading=false;}
+      if(mode==='prepare'){if(viewMode!=='prepare')exitPreview();return;}
+      if(viewMode!=='preview')await enterPreview();
     }
     function renderIdentity(){
       const el=$('identity');el.textContent='';
@@ -178,7 +181,10 @@
     function hover(id,event){const card=$('hover-card');if(!id){card.hidden=true;return;}const n=model.nodes.get(id),source=topo.blocks.find(b=>b.id===n.sourceId);card.textContent=n.name+' · '+n.id+'\n'+(source?.tensors||[]).map(t=>t.gguf+' '+t.shape.join('×')).join('\n');
       const r=$('view').getBoundingClientRect();card.style.left=Math.max(8,Math.min(event.clientX-r.left+15,r.width-370))+'px';card.style.top=Math.max(8,Math.min(event.clientY-r.top+15,r.height-100))+'px';card.hidden=false;}
     tree=new UXTree(model,data,select,reparent);inspector=new UXInspector(model,message,{select:ids=>{tree.reveal=true;select(ids);},confirm:confirmAction,message,saveAnnotations});
-    scene=new UXScene($('view'),model,(ids,mode)=>{tree.reveal=true;select(ids,mode);},hover,()=>inspector.updateTransform());model.listeners.push(refresh);
+    scene=new UXScene($('view'),model,(ids,mode)=>{tree.reveal=true;select(ids,mode);},hover,()=>inspector.updateTransform());
+    scene.renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));scene.pixelLayers=new UXPixelLayers(scene);scene.progressive=new UXProgressiveSnow(scene,()=>renderViewState());scene.resize();
+    $('preview-pause').onclick=()=>scene.progressive.pause(!scene.progressive.paused);
+    window.addEventListener('pagehide',()=>{scene.pixelLayers.dispose();data.reader?.close();},{once:true});model.listeners.push(refresh);
     async function group(){try{const ids=model.roots(selected),parents=ids.map(id=>model.ancestors(id));if(!ids.length)throw Error('先多选或框选对象');
       const parent=parents[0].find(p=>parents.every(a=>a.includes(p))),changes=ids.flatMap(id=>model.changes(id,parent));
       if(changes.length&&!await confirmAction('打组将改变部分继承参数','成员移动到共同上级下的新组，以下参数的继承来源将变化：\n'+[...new Set(changes)].join('、')+'\n世界变换保留；不会复制整套参数。'))return;
@@ -212,10 +218,15 @@
     $('fit-all').onclick=()=>{isolation(false);scene.fit(['work']);closePop();};
     $('fit-selected').onclick=()=>{scene.fit(observed());closePop();};
     $('front-view').onclick=()=>{scene.fit(observed().length?observed():['work'],true);closePop();};
-    $('exposure').oninput=()=>{scene.exposure=+$('exposure').value;$('exposure-out').textContent=scene.exposure.toFixed(2);scene.drawSnow(viewMode==='preview'?results:[]);};
+    $('exposure').oninput=()=>{scene.exposure=+$('exposure').value;$('exposure-out').textContent=scene.exposure.toFixed(2);refreshData();};
     $('report-toggle').onclick=()=>{$('report').hidden=!$('report').hidden;renderReport();};$('focus-toggle').onclick=()=>{document.body.classList.toggle('focus');scene.resize();};
     $('save-project').onclick=()=>download(snapshot(),'snowglass_ux_'+stamp()+'.json');$('open-project').onclick=()=>$('project-file').click();
-    function restoreCamera(doc){if(doc.view?.camera&&doc.view.camera.length===3&&[...doc.view.camera,...doc.view.target].every(Number.isFinite)){scene.camera.position.fromArray(doc.view.camera);scene.orbit.target.fromArray(doc.view.target);scene.orbit.update();scene.render();}}
+    // 工程里保存的是当时的观察方向与距离；焦点一律归到世界原点，避免旧工程带着偏高的中心把模型推出画面。
+    function restoreCamera(doc){
+      const camera=doc.view?.camera,target=doc.view?.target;if(!Array.isArray(camera)||camera.length!==3||!Array.isArray(target))return;
+      const savedTarget=new THREE.Vector3().fromArray(target);if(![...camera,...target].every(Number.isFinite))return;
+      scene.orbit.target.set(0,0,0);scene.camera.position.fromArray(camera).sub(savedTarget);scene.orbit.update();scene.render();
+    }
     $('project-file').onchange=async()=>{try{const doc=UXCoordinates.prepare(JSON.parse(await $('project-file').files[0].text()));model.load(doc);restoreCamera(doc);
         if(Array.isArray(doc.view?.open))tree.open=new Set(doc.view.open);preview=(doc.view?.preview||['L16.down']).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);$('isolate-view').classList.toggle('active',scene.isolate);$('isolate-view').setAttribute('aria-checked',String(scene.isolate));
         await slicing.restore(doc);select((doc.view?.selected||['work']).filter(id=>model.nodes.has(id)));message('新版工程已恢复，继承关系、覆盖与切片引用保留');}catch(e){message('打开失败：'+e.message);}finally{$('project-file').value='';}};
@@ -261,10 +272,10 @@
     });
     try{const stored=localStorage.getItem(storageKey)||localStorage.getItem(legacyStorageKey);if(stored){const doc=UXCoordinates.prepare(JSON.parse(stored));bootDoc=doc;model.validate(doc);model.restore(doc);selected=(doc.view?.selected||selected).filter(id=>model.nodes.has(id));preview=(doc.view?.preview||preview).filter(id=>model.nodes.has(id));scene.isolate=doc.view?.isolate??false;scene.exposure=doc.view?.exposure??1;$('exposure').value=scene.exposure;$('exposure-out').textContent=scene.exposure.toFixed(2);const iso=$('isolate-view');iso.classList.toggle('active',scene.isolate);iso.setAttribute('aria-checked',String(scene.isolate));}}catch(e){message('自动保存不兼容，保留文件并用新工程启动：'+e.message);}
     slicing=new UXSlicing(model,data,{selected:()=>selected,view:()=>viewMode,message,confirm:confirmAction,progress:showProgress,hideProgress,
-      dataChanged:async(autoPreview)=>{++serial;scene.drawSnow([]);inspector.render();tree.render();renderIdentity();
+      dataChanged:async(autoPreview)=>{++serial;scene.progressive.clear();inspector.render();tree.render();renderIdentity();
         clearTimeout(saveTimer);saveTimer=setTimeout(()=>localStorage.setItem(storageKey,JSON.stringify(snapshot())),400);
         if(!autoPreview)await refreshData();},preview:async()=>{await enterPreview();}});
-    window.uxEditor={model,data,scene,tree,inspector,slicing,select,get selected(){return selected;},get results(){return results;},get viewMode(){return viewMode;},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,renderIdentity,
+    window.uxEditor={model,data,scene,tree,inspector,slicing,select,get selected(){return selected;},get results(){return results;},get viewMode(){return viewMode;},get previewStatus(){return {...scene.progressive.status(),load:{...previewLoad}};},refreshData,refresh,group,ungroup,reparent,getProject:snapshot,renderIdentity,
       loadProject:async doc=>{doc=UXCoordinates.prepare(doc);model.load(doc);await slicing.restore(doc);restoreCamera(doc);select(['work']);},mapping:ids=>data.mapping(ids.length===1&&ids[0]==='global'?['work']:ids,model),saveAnnotations,storageKey};
     await slicing.initialize(bootDoc);
     $('coverage').textContent='已有统计可预览 · 一级切片须显式确认';renderViewState();select(selected);mode('translate');scene.fit(['work']);if(bootDoc){restoreCamera(bootDoc);try{localStorage.setItem(storageKey,JSON.stringify(snapshot()));}catch(e){message('新坐标自动保存失败，请保存工程文件：'+e.message);}}

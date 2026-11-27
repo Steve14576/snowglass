@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>snowglass · 对象与真实灰度编辑</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23ccc' d='M8 0l8 8-8 8-8-8z'/%3E%3C/svg%3E">
 <meta name="description" content="独立新版UX：左侧对象树与属性、右侧三维视口，按项继承、真实统计与可拖多点曲线。">
 <link rel="stylesheet" href="assets/base.css"><link rel="stylesheet" href="assets/editor.css">
 </head>
@@ -110,6 +111,7 @@
       </dl>
     </div>
   </div>
+  <div id="preview-render" hidden role="status" aria-live="polite"><span id="preview-render-text">正在载入真实统计…</span><button id="preview-pause" aria-pressed="false">暂停细化</button></div>
   <div id="marquee" hidden></div><div id="hover-card" hidden></div>
   <div id="progress" hidden role="status" aria-live="polite">
     <p id="progress-text">正在载入统计缓存…</p>
@@ -124,5 +126,5 @@
 </main>
 <footer class="statusbar"><span id="status" role="status">正在加载三维依赖与独立缓存……</span><span id="coverage"></span></footer>
 <dialog id="confirm-dialog"><form method="dialog"><h2 id="confirm-title"></h2><pre id="confirm-body"></pre><div class="dialog-actions"><button value="cancel">取消</button><button id="confirm-ok" value="ok">确认</button></div></form></dialog>
-<script src="assets/curve_math.js"></script><script src="assets/coordinates.js"></script><script src="assets/layout.js"></script><script src="assets/model.js"></script><script src="assets/annotation_math.js"></script><script src="assets/annotation_state.js"></script><script src="assets/annotation_view.js"></script><script src="assets/annotation_ui.js"></script><script src="assets/data.js"></script><script src="assets/checks.js"></script><script src="assets/scene.js"></script><script src="assets/tree.js"></script><script src="assets/curve_ui.js"></script><script src="assets/inspector.js"></script><script src="assets/slicing.js"></script><script src="assets/app.js"></script>
+<script src="assets/curve_math.js"></script><script src="assets/coordinates.js"></script><script src="assets/layout.js"></script><script src="assets/model.js"></script><script src="assets/annotation_math.js"></script><script src="assets/annotation_state.js"></script><script src="assets/annotation_view.js"></script><script src="assets/annotation_ui.js"></script><script src="assets/data.js"></script><script src="assets/checks.js"></script><script src="assets/scene.js"></script><script src="assets/pixel_layers.js"></script><script src="assets/progressive_snow.js"></script><script src="assets/tree.js"></script><script src="assets/curve_ui.js"></script><script src="assets/inspector.js"></script><script src="assets/slicing.js"></script><script src="assets/app.js"></script>
 </body></html>
