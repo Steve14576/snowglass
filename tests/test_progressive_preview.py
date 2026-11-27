@@ -144,7 +144,7 @@ def main():
             anchor=page.evaluate('''()=>{const s=uxEditor.scene;s.fit(['work']);s.render();
                 const p=new THREE.Vector3(0,0,0).project(s.camera);
                 return {target:s.orbit.target.toArray(),pan:s.orbit.enablePan,ndc:[p.x,p.y],distance:s.camera.position.length()};}''')
-            assert anchor['target']==[0,0,0] and anchor['pan'] is False,anchor
+            assert anchor['target']==[0,0,0] and anchor['pan'] is True,anchor
             assert abs(anchor['ndc'][0])<1e-6 and abs(anchor['ndc'][1])<1e-6,anchor
             view=page.locator('#view').bounding_box()
             page.mouse.move(view['x']+view['width']/2,view['y']+view['height']/2)
@@ -155,6 +155,21 @@ def main():
             assert zoomed['target']==[0,0,0] and zoomed['distance']<anchor['distance'],(anchor,zoomed)
             assert abs(zoomed['ndc'][0])<1e-6 and abs(zoomed['ndc'][1])<1e-6,zoomed
             cases.append({'name':'world_origin_stays_centered_when_zooming','result':{'fit':anchor,'zoomed':zoomed}})
+            # 右键拖动平移：相机与焦点同步位移、距离不变、不改变选择，也不把手柄当成拖动。
+            before_pan=page.evaluate('''()=>({camera:uxEditor.scene.camera.position.toArray(),target:uxEditor.scene.orbit.target.toArray(),
+                selected:uxEditor.selected.slice(),distance:uxEditor.scene.camera.position.distanceTo(uxEditor.scene.orbit.target)})''')
+            page.mouse.move(view['x']+view['width']*.5,view['y']+view['height']*.5)
+            page.mouse.down(button='right');page.mouse.move(view['x']+view['width']*.5+90,view['y']+view['height']*.5+45,steps=8);page.mouse.up(button='right')
+            page.wait_for_timeout(300)
+            after_pan=page.evaluate('''()=>({camera:uxEditor.scene.camera.position.toArray(),target:uxEditor.scene.orbit.target.toArray(),
+                selected:uxEditor.selected.slice(),distance:uxEditor.scene.camera.position.distanceTo(uxEditor.scene.orbit.target),gizmo:uxEditor.scene.gumball.enabled})''')
+            moved=[after_pan['camera'][i]-before_pan['camera'][i] for i in range(3)]
+            assert any(abs(v)>1e-6 for v in moved),(before_pan,after_pan)
+            assert all(abs((after_pan['target'][i]-before_pan['target'][i])-moved[i])<1e-6 for i in range(3)),(before_pan,after_pan)
+            assert abs(after_pan['distance']-before_pan['distance'])<1e-6,(before_pan,after_pan)
+            assert after_pan['selected']==before_pan['selected'] and after_pan['gizmo'] is True,(before_pan,after_pan)
+            cases.append({'name':'right_drag_pans_view_without_changing_selection','result':{'before':before_pan,'after':after_pan}})
+            page.evaluate('()=>uxEditor.scene.fit(["work"])')
             page.locator('#view-prepare').click();page.wait_for_function('uxEditor.viewMode==="prepare" && uxEditor.scene.snowMeshes.size===0')
             assert page.evaluate('()=>JSON.stringify(uxEditor.model.snapshot())')==fixed
             page.evaluate('()=>clearInterval(tickTimer)')

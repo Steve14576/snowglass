@@ -6,7 +6,7 @@
       const T=THREE;this.model=model;this.element=element;this.onSelect=onSelect;this.onHover=onHover;this.onGesture=onGesture;this.selected=[];this.exposure=1;this.scopeAll=false;this.snowMeshes=new Map();this.isolate=false;this.observation=[];
       this.renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));this.renderer.setClearColor(0x000000);element.append(this.renderer.domElement);
       this.initWorldAxes();
-      this.scene=new T.Scene();this.camera=new T.PerspectiveCamera(42,1,.001,2000);this.camera.up.set(0,0,1);this.orbit=new T.OrbitControls(this.camera,this.renderer.domElement);this.orbit.enablePan=false;this.orbit.addEventListener('change',()=>this.render());
+      this.scene=new T.Scene();this.camera=new T.PerspectiveCamera(42,1,.001,2000);this.camera.up.set(0,0,1);this.orbit=new T.OrbitControls(this.camera,this.renderer.domElement);this.orbit.addEventListener('change',()=>this.render());
       this.unit=new T.BoxGeometry(1,1,1);this.frames=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending}),5000);
       this.shells=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide}),2500);
       this.proxy=new T.InstancedMesh(this.unit,new T.MeshBasicMaterial({visible:false}),1000);
@@ -21,7 +21,11 @@
         if(Math.abs(d.determinant())<1e-12)return;model.updateGesture(()=>{for(const [id,local] of this.startLocals)model.nodes.get(id).local=local.slice();model.delta(this.selected,d,this.mode);});this.onGesture(true);});
       this.ray=new T.Raycaster();this.mouse=new T.Vector2();this.blockIds=[];this.boxMode=false;this.down=null;
       const canvas=this.renderer.domElement;
-      canvas.addEventListener('pointerdown',e=>{this.down={x:e.clientX,y:e.clientY,shift:e.shiftKey,ctrl:e.ctrlKey||e.metaKey};
+      // 右键留给平移视角：捕获阶段先关手柄，避免右键落在手柄上时误移对象；左键才参与选择与框选。
+      canvas.addEventListener('pointerdown',e=>{if(e.button===2)this.gumball.enabled=false;},{capture:true});
+      const restoreGizmo=()=>{this.gumball.enabled=true;};
+      window.addEventListener('pointerup',restoreGizmo);window.addEventListener('pointercancel',restoreGizmo);
+      canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;this.down={x:e.clientX,y:e.clientY,shift:e.shiftKey,ctrl:e.ctrlKey||e.metaKey};
         const wantBox=this.boxMode||e.shiftKey;
         if(wantBox&&!this.gumball.axis&&!this.gumball.dragging){this.orbit.enabled=false;this.boxStart={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);}});
       canvas.addEventListener('pointermove',e=>{if(this.boxStart){const r=element.getBoundingClientRect(),box=document.getElementById('marquee');box.hidden=false;box.style.left=Math.min(e.clientX,this.boxStart.x)-r.left+'px';box.style.top=Math.min(e.clientY,this.boxStart.y)-r.top+'px';box.style.width=Math.abs(e.clientX-this.boxStart.x)+'px';box.style.height=Math.abs(e.clientY-this.boxStart.y)+'px';return;}
